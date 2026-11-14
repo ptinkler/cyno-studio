@@ -55,14 +55,15 @@ def _charge(item: Mapping[str, JsonValue]) -> tuple[float, float]:
 def _item_charge(item: dict[str, JsonValue], key: str) -> float:
     """An item's dollars (`key="cost"`) or credits, plus those of the pictures it replaced.
 
-    A replaced picture (Edit / Redo on a card) moves into `versions`, and a
-    failed attempt's charge into `spent`; both were paid for, so both still
-    count towards what the chat has spent.
+    A replaced picture (Edit / Redo on a card) moves into `versions` and was
+    paid for, so it still counts. Failed generations aren't billed, so a failed
+    item counts nothing — nor do the failed attempts kept in `spent` (older
+    records stored a reported-but-unbilled Pollo price on both).
     """
     replaced = item.get("versions")
-    spent = item.get("spent")  # failed attempts it no longer shows
-    earlier = [*(replaced if isinstance(replaced, list) else []), *(spent if isinstance(spent, list) else [])]
-    charges = [_charge(item)] + [_charge(v) for v in earlier if isinstance(v, dict)]
+    earlier = replaced if isinstance(replaced, list) else []
+    live = [] if item.get("status") == "error" else [_charge(item)]
+    charges = live + [_charge(v) for v in earlier if isinstance(v, dict)]
     return sum(usd if key == "cost" else credits for usd, credits in charges)
 
 

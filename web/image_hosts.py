@@ -1,6 +1,6 @@
 """Host local source media for providers that accept only a URL.
 
-Per-user preferences select the host (litterbox, tmpfiles, or self-host) and
+Per-user preferences select the host (litterbox, uguu, tmpfiles, or self-host) and
 retention; the primary host is tried before the backup.
 """
 
@@ -23,6 +23,10 @@ log = logging.getLogger(__name__)
 
 LITTERBOX_URL = "https://litterbox.catbox.moe/resources/internals/api.php"
 TMPFILES_URL = "https://tmpfiles.org/api/v1/upload"
+UGUU_URL = "https://uguu.se/upload"
+# uguu.se: anonymous, serves the raw file at its URL, max 128 MiB, deleted after 3h.
+UGUU_MAX_BYTES = 128 * 1024 * 1024
+_UGUU_RESPONSE = TypeAdapter(dict[str, JsonValue])
 # Litterbox only offers these fixed retentions; map any requested span to the
 # nearest. Keys are minutes.
 _LITTERBOX_BUCKETS = {60: "1h", 720: "12h", 1440: "24h", 4320: "72h"}
@@ -43,7 +47,7 @@ _CACHE_MARGIN_FRAC = 0.1
 _CACHE_MARGIN_MAX_S = 300
 _URL_CACHE_MAX = 256  # bound the dict; prune expired first, then oldest
 # Hosts that ignore the requested span and keep files for a fixed time (minutes).
-_FIXED_RETENTION_MIN = {"tmpfiles": 60}
+_FIXED_RETENTION_MIN = {"tmpfiles": 60, "uguu": 180}
 
 
 class _UploadPrefs(TypedDict):
@@ -142,7 +146,7 @@ def upload_file(filepath: Path, prefs: _UploadPrefs | None = None) -> str:
     raise ValueError("All upload hosts failed — " + "; ".join(errors))
 
 
-_HOST_LABEL = {"litterbox": "Litterbox", "tmpfiles": "tmpfiles.org", "selfhost": "self-host"}
+_HOST_LABEL = {"litterbox": "Litterbox", "uguu": "uguu.se", "tmpfiles": "tmpfiles.org", "selfhost": "self-host"}
 # Fallbacks during the current submit, so the provider can show the user that
 # (and why) the backup host was used. Per thread: each chat turn runs on its own.
 _notes = threading.local()
@@ -185,7 +189,7 @@ def _served_url(host: str, stored: str, filepath: Path) -> str:
 # is checked here instead, and a host that doesn't serve it falls through to
 # the backup. Self-hosting is skipped: this instance can reach itself whatever
 # the outside world sees.
-_VERIFY_HOSTS = ("litterbox", "tmpfiles")
+_VERIFY_HOSTS = ("litterbox", "uguu", "tmpfiles")
 _VERIFY_TIMEOUT = (8, 15)
 
 
@@ -214,9 +218,39 @@ def _dispatch(host: str, filepath: Path, prefs: _UploadPrefs) -> str:
         return _upload_to_litterbox(filepath, expiry)
     if host == "tmpfiles":
         return _upload_to_tmpfiles(filepath, expiry)
+    if host == "uguu":
+        return _upload_to_uguu(filepath)
     if host == "selfhost":
         return selfhost_url(filepath, prefs.get("selfhost_base", ""), ttl_seconds=expiry * 60)
     raise ValueError(f"Unknown upload host {host!r}")  # noqa: TRY003
+
+
+def _upload_to_uguu(filepath: Path) -> str:
+    """Upload a file to uguu.se and return its direct URL.
+
+    uguu keeps files for a fixed 3 hours and rejects anything over 128 MiB, so
+    an oversized file fails here, before uploading, and falls to the backup.
+    """
+    size = filepath.stat().st_size
+    if size > UGUU_MAX_BYTES:
+        raise ValueError(f"uguu.se takes files up to 128 MiB; this one is {size / 1024 / 1024:.0f} MiB")  # noqa: TRY003
+    try:
+        with filepath.open("rb") as f:
+            resp = requests.post(UGUU_URL, files={"files[]": (filepath.name, f)}, timeout=(8, 60))
+    except requests.RequestException as exc:
+        raise ValueError(f"uguu.se upload failed — {type(exc).__name__}: {exc}") from exc  # noqa: TRY003
+    if resp.status_code != 200:
+        raise _http_failure("uguu.se", resp)
+    try:
+        data = _UGUU_RESPONSE.validate_json(resp.text)
+    except ValueError as exc:
+        raise ValueError(f"uguu.se upload failed — unexpected reply: {resp.text[:200]}") from exc  # noqa: TRY003
+    files = data.get("files")
+    first = files[0] if isinstance(files, list) and files else None
+    url = first.get("url") if isinstance(first, dict) else None
+    if data.get("success") is not True or not isinstance(url, str) or not url.startswith("https://"):
+        raise ValueError(f"uguu.se upload failed — {data.get('description') or data}")  # noqa: TRY003
+    return url
 
 
 def _http_failure(service: str, resp: requests.Response) -> ValueError:

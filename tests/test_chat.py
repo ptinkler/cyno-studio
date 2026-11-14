@@ -2914,11 +2914,11 @@ class TestPolloImageModels:
         assert item["moderated"] is True
         assert item["error"].startswith("Pollo:")
 
-    def test_a_charged_failure_keeps_its_credits_and_shows_the_verdict(self, chat, db, conv, pollo):
-        """Pollo bills a job that fails its own validation, so the credits have.
+    def test_a_failure_records_no_credits_and_shows_the_verdict(self, chat, db, conv, pollo):
+        """A failed job isn't billed, even though Pollo reports its price.
 
-        to land on the item (they're real money) and the stored response has to
-        be the verdict, not the "accepted" reply from submitting.
+        with the verdict — so no credits land on the item or in spend — and the
+        stored response is the verdict, not the "accepted" reply from submitting.
         """
         msg = db.add_chat_message(
             conv["id"],
@@ -2938,11 +2938,9 @@ class TestPolloImageModels:
         chat.polling._poll_video(conv["id"], msg.id, "pv3", "pollo:task-11")
         item = db.get_chat_message(msg.id).media[0]
         assert item["status"] == "error"
-        assert item["credits"] == 61
+        assert item.get("credits") is None
         assert item["response"]["generations"][0]["failMsg"] == "InvalidParameter Invalid video_url."
-        # and it's counted as spend, since it was charged
-        rows = db.spend_rows([conv["id"]])
-        assert [r["credits"] for r in rows] == [61]
+        assert db.spend_rows([conv["id"]]) == []
 
     def test_kling_and_qwen_models_offered_in_chat(self, chat, monkeypatch, pollo):
         """Test that kling and qwen models offered in chat."""
@@ -4215,15 +4213,15 @@ class TestEditAndRewordInPlace:
         client.post(f"/api/chat/messages/{msg.id}/media/m1/version", json={"index": 0})
         assert db.get_chat_spend(conv["id"]) == before
 
-    def test_a_failed_attempt_still_counts_after_going_back(self, client, conv, chat, db):
-        """Pollo bills a failed generation: its credits stay in the spend when the card goes back."""
+    def test_a_failed_attempt_never_counts(self, client, conv, chat, db):
+        """Failures aren't billed: an older record's failed-attempt credits stay out of spend."""
         msg = self._reply(
             db, conv, file=None, status="error", error="nope", credits=4, versions=[{"file": "img_a.png", "credits": 3}]
         )
         out = client.post(f"/api/chat/messages/{msg.id}/media/m1/version", json={"index": 0}).json()
         assert out["media"][0]["file"] == "img_a.png"
         assert out["media"][0]["status"] == "done"
-        assert db.get_chat_spend(conv["id"])[1] == 7
+        assert db.get_chat_spend(conv["id"])[1] == 3
 
     def test_no_switching_while_it_is_being_made(self, client, conv, chat, db):
         """Test that a pending card can't be switched."""
