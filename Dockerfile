@@ -35,6 +35,9 @@ COPY --from=frontend-builder /static ./web/static/
 
 # Data directory (db + assets + cache) will be mounted as a volume
 ENV POLLO_DATA_DIR=/data
+# App logs go to stdout, which Python block-buffers when it isn't a terminal:
+# without this they sit in the buffer and never reach `docker logs`.
+ENV PYTHONUNBUFFERED=1
 
 RUN groupadd -r pollo && useradd -r -g pollo pollo && \
     chmod +x entrypoint.sh && \

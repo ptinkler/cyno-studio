@@ -6,6 +6,7 @@ generation/projects/jobs subsystem was removed (auth, SPA serving, lifespan).
 import asyncio
 
 import pytest
+from fastapi.testclient import TestClient
 
 import web.api as api_mod
 from web.api import _static_file
@@ -78,3 +79,15 @@ class TestLoginThrottle:
                 headers={"X-Real-IP": f"10.0.0.{i}"},  # a different IP each attempt
             )
         assert last.status_code == 429
+
+
+def test_usage_balance_accepts_fractional_credits(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pollo reports fractional credits (e.g. 1.54); the balance route must not 500 on them."""
+
+    def balance(api_key: str) -> dict[str, float]:
+        return {"availableCredits": 1.5400000000008731, "totalCredits": 42026}
+
+    monkeypatch.setattr(api_mod, "get_credit_balance", balance)
+    r = client.get("/api/usage/balance")
+    assert r.status_code == 200
+    assert r.json()["availableCredits"] == pytest.approx(1.54)

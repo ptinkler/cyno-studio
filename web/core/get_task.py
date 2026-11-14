@@ -72,10 +72,11 @@ def _credit(value: JsonValue) -> int | None:
         return None
 
 
-def get_credit_balance(api_key: str) -> dict[str, int] | None:
+def get_credit_balance(api_key: str) -> dict[str, float] | None:
     """Fetch current credit balance from Pollo API.
 
     Returns {"availableCredits": N, "totalCredits": N} or None on failure.
+    Credits are fractional (a job can cost 51.74), so these are floats.
     """
     headers = {"x-api-key": api_key}
     url = f"{POLLO_PLATFORM_BASE}/credit/balance"

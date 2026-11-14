@@ -468,12 +468,12 @@ def _all_versions(item: Mapping[str, JsonValue]) -> tuple[list[dict[str, JsonVal
 
 
 def _spent(item: Mapping[str, JsonValue]) -> list[JsonValue]:
-    """Charges of failed attempts the card no longer shows (Pollo bills those too), so spend keeps them."""
+    """Failed-attempt charges kept from older records.
+
+    Failures aren't billed, so nothing new is added and spend ignores these.
+    """
     raw = item.get("spent")
-    spent: list[JsonValue] = list(raw) if isinstance(raw, list) else []
-    if not item.get("file") and (item.get("cost") or item.get("credits")):
-        spent.append({"cost": item.get("cost"), "credits": item.get("credits")})
-    return spent
+    return list(raw) if isinstance(raw, list) else []
 
 
 def _as_version(item: Mapping[str, JsonValue]) -> dict[str, JsonValue]:

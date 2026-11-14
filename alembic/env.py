@@ -22,8 +22,11 @@ if not config.get_main_option("sqlalchemy.url") or config.get_main_option("sqlal
 
     config.set_main_option("sqlalchemy.url", f"sqlite:///{DB_PATH}")
 
-# Set up Python logging from the .ini file
-if config.config_file_name is not None:
+# Set up Python logging from the .ini file — only for the `alembic` CLI. When
+# the app migrates itself at startup it has already configured logging, and
+# fileConfig would disable every existing logger (and reset root to WARNING on
+# stderr), silencing all app logs for the rest of the process.
+if config.config_file_name is not None and config.attributes.get("configure_logger", True):
     fileConfig(config.config_file_name)
 
 # Point Alembic at our ORM metadata for autogenerate support
