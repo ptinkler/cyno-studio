@@ -13,6 +13,7 @@ export const testSelfhost = selfhost_base => apiPost('/api/settings/uploads/test
 
 export const UPLOAD_HOSTS = [
   { id: 'litterbox', label: 'Litterbox (temp host, up to ~1GB)' },
+  { id: 'uguu', label: 'uguu.se (temp host, up to 128MB, 3 hours)' },
   { id: 'tmpfiles', label: 'tmpfiles.org (temp host)' },
   { id: 'selfhost', label: 'Self-host from this instance' },
 ]

@@ -2,7 +2,7 @@
 
 Providers like Pollo only accept a URL, so a source image/audio/video the user
 attaches must be hosted somewhere public first. This picks where: a third-party
-temp host (litterbox / tmpfiles) or self-hosting from this instance. One setting
+temp host (litterbox / uguu / tmpfiles) or self-hosting from this instance. One setting
 covers all media kinds. Stored as plain JSON on the user row (non-secret), over
 an instance-wide default from the environment.
 """
@@ -27,11 +27,11 @@ from web.users import require_user
 
 router = APIRouter(prefix="/api/settings/uploads")
 
-HOSTS = ("litterbox", "tmpfiles", "selfhost")
+HOSTS = ("litterbox", "uguu", "tmpfiles", "selfhost")
 # Litterbox only keeps files for these spans; we present them as the expiry
 # choices and map to the nearest for other hosts (self-host TTL, tmpfiles secs).
 EXPIRY_OPTIONS = (60, 720, 1440, 4320)  # 1h / 12h / 24h / 72h, in minutes
-# Hosts whose retention the user can actually choose (tmpfiles is fixed).
+# Hosts whose retention the user can actually choose (uguu 3h, tmpfiles 1h: fixed).
 EXPIRY_CONFIGURABLE = ("litterbox", "selfhost")
 
 

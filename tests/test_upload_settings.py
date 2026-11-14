@@ -251,6 +251,67 @@ class TestCacheLifetimeAndRecheck:
         assert len(calls) == 2
 
 
+class TestUguu:
+    """uguu.se: anonymous, raw-file URLs, 128 MiB cap, fixed 3h retention."""
+
+    def _reply(self, status: int, text: str) -> types.SimpleNamespace:
+        return types.SimpleNamespace(status_code=status, text=text)
+
+    def test_upload_returns_the_file_url(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that a successful upload returns uguu's direct file URL."""
+        f = tmp_path / "clip.mov"
+        f.write_bytes(b"v")
+        sent: list[str] = []
+
+        def post(url: str, **kw: object) -> types.SimpleNamespace:
+            sent.append(url)
+            return self._reply(200, '{"success": true, "files": [{"url": "https://h.uguu.se/AbCd.mov"}]}')
+
+        monkeypatch.setattr(image_hosts.requests, "post", post)
+        assert image_hosts._upload_to_uguu(f) == "https://h.uguu.se/AbCd.mov"  # pyright: ignore[reportPrivateUsage]
+        assert sent == [image_hosts.UGUU_URL]
+
+    def test_oversized_file_is_refused_before_uploading(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that a file over 128 MiB fails fast, without sending anything."""
+        f = tmp_path / "big.mov"
+        f.write_bytes(b"v")
+        monkeypatch.setattr(image_hosts, "UGUU_MAX_BYTES", 0)
+
+        def post(url: str, **kw: object) -> types.SimpleNamespace:
+            raise AssertionError("should not upload")  # noqa: TRY003
+
+        monkeypatch.setattr(image_hosts.requests, "post", post)
+        with pytest.raises(ValueError, match="128 MiB"):
+            image_hosts._upload_to_uguu(f)  # pyright: ignore[reportPrivateUsage]
+
+    def test_error_reply_is_a_failure(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that an unsuccessful reply raises, so the backup host is tried."""
+        f = tmp_path / "clip.mov"
+        f.write_bytes(b"v")
+
+        def post(url: str, **kw: object) -> types.SimpleNamespace:
+            return self._reply(200, '{"success": false, "errorcode": 400, "description": "No input file(s)"}')
+
+        monkeypatch.setattr(image_hosts.requests, "post", post)
+        with pytest.raises(ValueError, match="No input file"):
+            image_hosts._upload_to_uguu(f)  # pyright: ignore[reportPrivateUsage]
+
+    def test_cached_for_its_fixed_three_hours(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that a uguu URL isn't reused past its 3h life, whatever span is requested."""
+        image_hosts._url_cache.clear()  # pyright: ignore[reportPrivateUsage]
+        monkeypatch.setattr(image_hosts, "_served_url", _no_upload_check)
+        f = tmp_path / "clip.mov"
+        f.write_bytes(b"v")
+
+        def upload(p: Path) -> str:
+            return "https://h.uguu.se/AbCd.mov"
+
+        monkeypatch.setattr(image_hosts, "_upload_to_uguu", upload)
+        assert image_hosts.upload_file(f, _prefs("uguu", "tmpfiles", 4320)) == "https://h.uguu.se/AbCd.mov"
+        ((_, good_until),) = image_hosts._url_cache.values()  # pyright: ignore[reportPrivateUsage]
+        assert good_until <= time.time() + 3 * 60 * 60
+
+
 class TestFallbackNotice:
     """Falling back to the backup host is reported, with the primary's error."""
 

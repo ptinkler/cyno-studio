@@ -32,6 +32,7 @@ def _config(db_path: Path) -> Config:
     cfg = Config(str(_ROOT / "alembic.ini"))
     cfg.set_main_option("script_location", str(_ROOT / "alembic"))
     cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+    cfg.attributes["configure_logger"] = False  # keep the app's logging (see alembic/env.py)
     return cfg
 
 

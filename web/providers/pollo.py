@@ -25,7 +25,7 @@ from PIL import Image
 
 from web import image_hosts, keyctx, request_log
 from web.core.config import POLLO_API_TIMEOUT, POLLO_PLATFORM_BASE
-from web.core.get_task import get_task_status
+from web.core.get_task import TaskResult, get_task_status
 from web.providers import pollo_estimate
 from web.providers.openrouter import OpenRouterError
 from web.providers.pollo_engine import (
@@ -666,16 +666,16 @@ def _task_state(task_id: str) -> dict:
     if status == "cloudflare_blocked" or (status == "error" and (fail_msg or "").startswith("HTTP ")):
         return {"status": "transient", "error": f"Pollo: {fail_msg}"}
     if status in ERROR_STATUSES:
-        # Pollo bills a failed generation, so the credits come back with the
-        # verdict and the poller records them — a charge the usage page missed
-        # otherwise. The results also go back as the response, so the request
-        # view shows the failure rather than the "accepted" reply from submit.
-        return {
+        # A failed generation isn't billed, even though Pollo still reports
+        # the job's `credit` price with the verdict — so no credits are
+        # recorded. The results go back as the response, so the request view
+        # shows the failure rather than the "accepted" reply from submit.
+        failed: dict[str, JsonValue] = {
             "status": "failed",
             "error": f"Pollo: {fail_msg or 'generation failed'}",
-            "credits": sum(r[3] for r in results if r[3] is not None) or None,
             "response": _task_response(results),
         }
+        return failed
     if not all(r[0] in SUCCESS_STATUSES for r in results):
         return {"status": "in_progress"}
     urls = [r[2] for r in results if r[2]]
@@ -684,7 +684,7 @@ def _task_state(task_id: str) -> dict:
     return {"status": "completed", "urls": urls, "credits": sum(r[3] for r in results if r[3] is not None) or None}
 
 
-def _task_response(results: list) -> dict:
+def _task_response(results: list[TaskResult]) -> dict[str, JsonValue]:
     """A task's results as the plain shape Pollo sent them, for the request view."""
     return {
         "generations": [

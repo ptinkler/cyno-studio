@@ -250,7 +250,7 @@ IMMUTABLE_CACHE = {"Cache-Control": "public, max-age=31536000, immutable"}
 
 
 @app.get("/api/usage/balance")
-def api_usage_balance(_api_key: Annotated[str, Depends(require_user)]) -> dict[str, int]:
+def api_usage_balance(_api_key: Annotated[str, Depends(require_user)]) -> dict[str, float]:
     """Fetch current credit balance from the Pollo API."""
     api_key = keyctx.provider_key("pollo")
     if not api_key:
