@@ -9,7 +9,7 @@ import uuid
 from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import TypedDict
 
 from fastapi import File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
@@ -53,9 +53,10 @@ from web.chat.models import (
 from web.core import config
 from web.core.metadata import get_db, iso
 from web.core.metadata.models import ChatSpace
+from web.jsonutil import as_list, as_object, as_str
 from web.media_types import VIDEO_SUFFIXES
 from web.providers import openrouter, venice
-from web.types import JsonValue
+from web.types import Catalogue, JsonValue
 from web.uploads import read_audio_upload, read_image_upload, read_video_upload, safe_filename, store_deduped
 
 
@@ -78,7 +79,7 @@ def api_chat_status() -> dict[str, bool]:
 
 
 @router.get("/credits")
-def api_chat_credits() -> dict[str, Any]:
+def api_chat_credits() -> dict[str, float]:
     """OpenRouter balance for the chat header (Pollo's is /api/usage/balance)."""
     require_text_provider()
     try:
@@ -88,7 +89,7 @@ def api_chat_credits() -> dict[str, Any]:
 
 
 @router.get("/venice-balance")
-def api_venice_balance() -> dict[str, Any]:
+def api_venice_balance() -> dict[str, float | None]:
     """Venice balance for the chat header: USD, and the plan's bundled credits."""
     if not venice.is_configured():
         raise HTTPException(503, "No Venice API key set — add one in Settings → Keys")
@@ -96,7 +97,7 @@ def api_venice_balance() -> dict[str, Any]:
 
 
 @router.get("/models")
-def api_chat_models(refresh: bool = False) -> dict[str, Any]:
+def api_chat_models(refresh: bool = False) -> Catalogue:
     """Return the model catalogue for the configured providers."""
     # No provider gate: the catalogue lists each provider independently
     # (get_models swallows a provider's failure and an unconfigured provider
@@ -107,7 +108,7 @@ def api_chat_models(refresh: bool = False) -> dict[str, Any]:
 
 
 @router.get("/conversations")
-def api_list_conversations(q: str = "") -> dict[str, Any]:
+def api_list_conversations(q: str = "") -> dict[str, JsonValue]:
     """Pinned chats, then the most recent (`more` = older ones left out).
 
     With `q`, chats whose title or messages contain it, each with a snippet
@@ -131,7 +132,7 @@ def api_list_conversations(q: str = "") -> dict[str, Any]:
 
 
 @router.get("/conversations/thumbs")
-def api_conversation_thumbs(ids: str = "") -> dict[str, Any]:
+def api_conversation_thumbs(ids: str = "") -> dict[str, JsonValue]:
     """Newest image file per conversation id (comma-separated), for gallery cover thumbnails.
 
     Declared before /conversations/{conv_id} so "thumbs"
@@ -161,7 +162,7 @@ def _clean_kind(kind: str | None) -> str:
 
 
 @router.post("/conversations")
-def api_create_conversation(data: ConversationCreate) -> dict[str, Any]:
+def api_create_conversation(data: ConversationCreate) -> dict[str, JsonValue]:
     """Create a conversation with validated model and settings references."""
     db = get_db()
     space = _require_space(data.space_id) if data.space_id is not None else None
@@ -242,25 +243,25 @@ def _defaults_fields(data: DefaultsIn) -> dict[str, list[int]]:
 
 
 @router.get("/settings")
-def api_get_settings() -> dict[str, Any]:
+def api_get_settings() -> dict[str, JsonValue]:
     """Return the current user's global chat defaults."""
     return get_db().get_settings().to_dict()
 
 
 @router.put("/settings")
-def api_update_settings(data: DefaultsIn) -> dict[str, Any]:
+def api_update_settings(data: DefaultsIn) -> dict[str, JsonValue]:
     """Save validated global chat defaults."""
     return get_db().save_settings(**_defaults_fields(data)).to_dict()
 
 
 @router.put("/settings/title-model")
-def api_set_title_model(data: TitleModelIn) -> dict[str, Any]:
+def api_set_title_model(data: TitleModelIn) -> dict[str, JsonValue]:
     """The text model that names new chats (empty = the chat's own model)."""
     return get_db().save_settings(title_model=(data.title_model or "").strip() or None).to_dict()
 
 
 @router.get("/instructions")
-def api_list_instructions() -> dict[str, Any]:
+def api_list_instructions() -> dict[str, JsonValue]:
     """List instruction snippets and groups."""
     return {
         "instructions": [i.to_dict() for i in get_db().list_instructions()],
@@ -269,7 +270,7 @@ def api_list_instructions() -> dict[str, Any]:
 
 
 @router.post("/instructions")
-def api_create_instruction(data: InstructionIn) -> dict[str, Any]:
+def api_create_instruction(data: InstructionIn) -> dict[str, JsonValue]:
     """Create an instruction snippet."""
     item = get_db().save_instruction(name=data.name.strip(), content=data.content)
     if not item:
@@ -278,7 +279,7 @@ def api_create_instruction(data: InstructionIn) -> dict[str, Any]:
 
 
 @router.put("/instructions/{instruction_id}")
-def api_update_instruction(instruction_id: int, data: InstructionIn) -> dict[str, Any]:
+def api_update_instruction(instruction_id: int, data: InstructionIn) -> dict[str, JsonValue]:
     """Update an instruction snippet by ID."""
     item = get_db().save_instruction(instruction_id, name=data.name.strip(), content=data.content)
     if not item:
@@ -295,7 +296,7 @@ def api_delete_instruction(instruction_id: int) -> dict[str, int]:
 
 
 @router.post("/instruction-groups")
-def api_create_instruction_group(data: InstructionGroupIn) -> dict[str, Any]:
+def api_create_instruction_group(data: InstructionGroupIn) -> dict[str, JsonValue]:
     """Create a group from validated instruction snippet IDs."""
     group = get_db().save_instruction_group(name=data.name.strip(), snippet_ids=_require_instructions(data.snippet_ids))
     if not group:
@@ -304,7 +305,7 @@ def api_create_instruction_group(data: InstructionGroupIn) -> dict[str, Any]:
 
 
 @router.put("/instruction-groups/{group_id}")
-def api_update_instruction_group(group_id: int, data: InstructionGroupIn) -> dict[str, Any]:
+def api_update_instruction_group(group_id: int, data: InstructionGroupIn) -> dict[str, JsonValue]:
     """Update an instruction group by ID."""
     item = get_db().save_instruction_group(
         group_id, name=data.name.strip(), snippet_ids=_require_instructions(data.snippet_ids)
@@ -323,13 +324,13 @@ def api_delete_instruction_group(group_id: int) -> dict[str, int]:
 
 
 @router.get("/spaces")
-def api_list_spaces() -> dict[str, Any]:
+def api_list_spaces() -> dict[str, JsonValue]:
     """List the user's chat spaces."""
     return {"spaces": [s.to_dict() for s in get_db().list_spaces()]}
 
 
 @router.post("/spaces")
-def api_create_space(data: SpaceIn) -> dict[str, Any]:
+def api_create_space(data: SpaceIn) -> dict[str, JsonValue]:
     """Create a chat space with validated defaults."""
     space = get_db().save_space(None, name=data.name.strip(), **_defaults_fields(data))
     if not space:
@@ -338,7 +339,7 @@ def api_create_space(data: SpaceIn) -> dict[str, Any]:
 
 
 @router.put("/spaces/{space_id}")
-def api_update_space(space_id: int, data: SpaceIn) -> dict[str, Any]:
+def api_update_space(space_id: int, data: SpaceIn) -> dict[str, JsonValue]:
     """Update a chat space and its defaults."""
     item = get_db().save_space(space_id, name=data.name.strip(), **_defaults_fields(data))
     if not item:
@@ -354,8 +355,14 @@ def api_delete_space(space_id: int) -> dict[str, int]:
     return {"deleted": space_id}
 
 
+def _message_id(message: dict[str, JsonValue]) -> int:
+    """A shaped message's id."""
+    value = message["id"]
+    return value if isinstance(value, int) and not isinstance(value, bool) else -1
+
+
 @router.get("/conversations/{conv_id}")
-def api_get_conversation(conv_id: str) -> dict[str, Any]:
+def api_get_conversation(conv_id: str) -> dict[str, JsonValue]:
     """Return a conversation and its currently shown messages."""
     conv = require_conv(conv_id)
     db = get_db()
@@ -375,12 +382,12 @@ def api_get_conversation(conv_id: str) -> dict[str, Any]:
         forks.setdefault(f.forked_from_message_id, []).append({"id": f.id, "title": f.title})
     return {
         "conversation": {**conv.to_dict(), "forked_from": origin, "spend": spend(conv)},
-        "messages": [{**m, "forks": forks.get(m["id"], [])} for m in shown_branch(conv_id)],
+        "messages": [{**m, "forks": forks.get(_message_id(m), [])} for m in shown_branch(conv_id)],
     }
 
 
 @router.get("/spend/breakdown")
-def api_spend_breakdown(days: int = 0) -> dict[str, Any]:
+def api_spend_breakdown(days: int = 0) -> dict[str, int | list[_SpendGroup] | float]:
     """What the user's money went on: per model (and kind) over the last `days` days (0 = all time).
 
     Pollo's credits are converted to USD at its fixed rate
@@ -418,7 +425,7 @@ def api_conversation_spend(conv_id: str) -> dict[str, float | int]:
 
 
 @router.post("/conversations/{conv_id}/branch")
-def api_switch_branch(conv_id: str, data: SwitchBranch) -> dict[str, Any]:
+def api_switch_branch(conv_id: str, data: SwitchBranch) -> dict[str, JsonValue]:
     """Show the branch through `message_id`, down to its newest message."""
     require_conv(conv_id)
     require_idle(conv_id)
@@ -437,7 +444,7 @@ def api_switch_branch(conv_id: str, data: SwitchBranch) -> dict[str, Any]:
 
 
 @router.post("/conversations/{conv_id}/fork")
-def api_fork_conversation(conv_id: str, data: ForkConversation) -> dict[str, Any]:
+def api_fork_conversation(conv_id: str, data: ForkConversation) -> dict[str, JsonValue]:
     """Create a conversation branched at a prompt or reply.
 
     Copy the preceding messages, selected settings, and chat-owned characters.
@@ -542,7 +549,7 @@ class _Fork:
     def __init__(self, src: Path, dst: Path, char_map: dict[int, int]) -> None:
         self.src, self.dst, self.char_map = src, dst, char_map
 
-    def media_item(self, item: dict[str, Any]) -> dict[str, Any]:
+    def media_item(self, item: dict[str, JsonValue]) -> dict[str, JsonValue]:
         item = {**item, "id": uuid.uuid4().hex[:8]}
         if item.get("status") == "pending":
             # Its poller keeps updating the original chat only
@@ -551,17 +558,21 @@ class _Fork:
                 "status": "error",
                 "error": "Still rendering in the original chat when this one was branched",
             }
-        if item.get("file"):
-            self._link(item["file"])
-        if item.get("params"):
-            params = item["params"] = {**item["params"]}
-            if params.get("characters"):
-                params["characters"] = [self.char_map.get(i, i) for i in params["characters"]]
-            if params.get("refs"):
-                params["refs"] = [self._ref(r) for r in params["refs"]]
+        file = as_str(item.get("file"))
+        if file:
+            self._link(file)
+        params = as_object(item.get("params"))
+        if params:
+            item["params"] = params
+            if char_ids := as_list(params.get("characters")):
+                params["characters"] = [
+                    self.char_map.get(i, i) if isinstance(i, int) and not isinstance(i, bool) else i for i in char_ids
+                ]
+            if refs := as_list(params.get("refs")):
+                params["refs"] = [self._ref(r) for r in refs if isinstance(r, str)]
             for key in PARAM_FILES:
-                if params.get(key):
-                    params[key] = self._ref(params[key])
+                if value := as_str(params.get(key)):
+                    params[key] = self._ref(value)
         return item
 
     def _ref(self, ref: str) -> str:
@@ -588,27 +599,27 @@ class _Fork:
             shutil.copy2(self.src / name, self.dst / name)
 
 
-def _clean_conv_update(fields: dict) -> None:
+def _clean_conv_update(data: ConversationUpdate, fields: dict[str, JsonValue]) -> None:
     """Normalize/validate the mutable ConversationUpdate fields in place.
 
     (everything except `pinned`, which the route handles separately).
     """
     if "instruction_ids" in fields:
-        fields["instruction_ids"] = _require_instructions(fields["instruction_ids"] or [])
+        fields["instruction_ids"] = _require_instructions(data.instruction_ids or [])
     if "instruction_group_ids" in fields:
-        fields["instruction_group_ids"] = _require_instruction_groups(fields["instruction_group_ids"] or [])
-    if fields.get("space_id") is not None:
-        _require_space(fields["space_id"])
+        fields["instruction_group_ids"] = _require_instruction_groups(data.instruction_group_ids or [])
+    if data.space_id is not None:
+        _require_space(data.space_id)
     if "title" in fields:
-        fields["title"] = (fields["title"] or "").strip()[:255] or DEFAULT_TITLE
+        fields["title"] = (data.title or "").strip()[:255] or DEFAULT_TITLE
     if "kind" in fields:
-        fields["kind"] = _clean_kind(fields["kind"])
+        fields["kind"] = _clean_kind(data.kind)
     if "character_ids" in fields:
-        characters.require(fields["character_ids"], get_db())
+        characters.require(data.character_ids or [], get_db())
     if "hidden_defaults" in fields:
-        fields["hidden_defaults"] = _require_hidden_defaults(fields["hidden_defaults"])
+        fields["hidden_defaults"] = _require_hidden_defaults(data.hidden_defaults)
     if "paused_instructions" in fields:
-        fields["paused_instructions"] = _require_paused(fields["paused_instructions"])
+        fields["paused_instructions"] = _require_paused(data.paused_instructions)
 
 
 @router.patch("/conversations/{conv_id}")
@@ -616,7 +627,7 @@ def api_update_conversation(conv_id: str, data: ConversationUpdate) -> dict[str,
     """Update a conversation's mutable fields and return its saved record."""
     require_conv(conv_id)
     fields: dict[str, JsonValue] = data.model_dump(exclude_unset=True)
-    _clean_conv_update(fields)
+    _clean_conv_update(data, fields)
     if "pinned" in fields:
         # Not an edit: the chat keeps its place among the rest
         get_db().set_conversation_pinned(conv_id, bool(fields.pop("pinned")))
@@ -739,7 +750,7 @@ async def api_chat_media_preview(conv_id: str, filename: str) -> Response:
 
 
 @router.get("/request-log")
-def api_request_log(limit: int = 100) -> dict[str, Any]:
+def api_request_log(limit: int = 100) -> dict[str, JsonValue]:
     """The latest provider requests (Venice image/video calls): what was sent and what came back, newest first.
 
     See web/request_log.py.
@@ -748,7 +759,7 @@ def api_request_log(limit: int = 100) -> dict[str, Any]:
 
 
 @router.get("/library")
-def api_chat_library() -> dict[str, Any]:
+def api_chat_library() -> dict[str, JsonValue]:
     """Every generated image/video across chats, newest first.
 
     `attached`
@@ -757,7 +768,7 @@ def api_chat_library() -> dict[str, Any]:
     """
     db = get_db()
     titles = db.conversation_titles()
-    items = []
+    items: list[dict[str, JsonValue]] = []
     for msg in db.get_chat_messages_with_media():
         items.extend(
             {
@@ -782,9 +793,10 @@ def api_chat_library() -> dict[str, Any]:
                 "created_at": iso(lib.created_at),
             }
         )
-    items.sort(key=lambda i: i["created_at"], reverse=True)
+    items.sort(key=lambda i: str(i["created_at"]), reverse=True)
     for i in items:
-        i["conversation_title"] = titles.get(i["conversation_id"])
+        cid = i["conversation_id"]
+        i["conversation_title"] = titles.get(cid) if isinstance(cid, str) else None
     return {"items": items}
 
 
@@ -807,7 +819,7 @@ def api_delete_library_item(media_id: str) -> dict[str, str]:
 
 
 @router.get("/messages/{message_id}")
-def api_get_message(message_id: int) -> dict[str, Any]:
+def api_get_message(message_id: int) -> dict[str, JsonValue]:
     """Return one message with its branch siblings."""
     msg = get_db().get_chat_message(message_id)
     if not msg:
@@ -816,7 +828,7 @@ def api_get_message(message_id: int) -> dict[str, Any]:
 
 
 @router.get("/messages/{message_id}/delete-info")
-def api_delete_exchange_info(message_id: int) -> dict[str, Any]:
+def api_delete_exchange_info(message_id: int) -> dict[str, int | dict[str, int]]:
     """What deleting this prompt would also remove (other versions of it and.
 
     the messages that followed them), for the confirmation.
@@ -829,7 +841,7 @@ def api_delete_exchange_info(message_id: int) -> dict[str, Any]:
 
 
 @router.delete("/messages/{message_id}")
-def api_delete_exchange(message_id: int, delete_media: bool = False) -> dict[str, Any]:
+def api_delete_exchange(message_id: int, delete_media: bool = False) -> dict[str, JsonValue]:
     """Delete a prompt turn and return the updated conversation.
 
     Replies and alternate prompt versions are removed while later messages on

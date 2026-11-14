@@ -9,11 +9,11 @@ before any web.* module, so everything here is a plain top-level import.
 import logging
 import threading
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from http.cookies import SimpleCookie
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, cast
 
 import uvicorn
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Request
@@ -50,7 +50,7 @@ WEB_DIR = Path(__file__).parent.resolve()
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:  # noqa: ARG001 — ASGI lifespan signature
+async def lifespan(app: FastAPI) -> AsyncGenerator[None]:  # noqa: ARG001 — ASGI lifespan signature
     """Lifespan context manager for startup/shutdown events."""
     # Startup: announce the auth posture so a misconfigured deploy is obvious
     admins = admin_emails()
@@ -124,10 +124,12 @@ class UserContextMiddleware:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """Bind user keys and tenant data while handling an API request."""
-        if scope["type"] != "http" or not scope.get("path", "").startswith("/api"):
+        path = cast("str", scope.get("path", ""))
+        if scope["type"] != "http" or not path.startswith("/api"):
             return await self.app(scope, receive, send)
 
-        headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers", [])}
+        raw_headers = cast("list[tuple[bytes, bytes]]", scope.get("headers", []))
+        headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in raw_headers}
         jar = SimpleCookie()
         jar.load(headers.get("cookie", ""))
 

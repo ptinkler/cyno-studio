@@ -114,7 +114,7 @@ def is_configured() -> bool:
     return bool(get_api_key())
 
 
-NAME = "venice"
+NAME: str = "venice"
 
 
 def is_venice(model_id: str | None) -> bool:

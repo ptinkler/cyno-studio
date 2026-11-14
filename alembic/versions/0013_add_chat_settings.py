@@ -39,13 +39,13 @@ def upgrade() -> None:
     if bind.execute(sa.text("SELECT 1 FROM chat_settings WHERE id = 1")).first():
         return
     # Carry the old is_default flags into the global bucket
-    values = {}
+    values: dict[str, str] = {}
     for field, table in (
         ("default_instruction_ids_json", "chat_instructions"),
         ("default_instruction_group_ids_json", "chat_instruction_groups"),
     ):
         if insp.has_table(table) and "is_default" in {c["name"] for c in insp.get_columns(table)}:
-            ids = [r[0] for r in bind.execute(sa.text(f"SELECT id FROM {table} WHERE is_default = 1"))]
+            ids = list(bind.execute(sa.text(f"SELECT id FROM {table} WHERE is_default = 1")).scalars().all())
             if ids:
                 values[field] = json.dumps(ids)
     cols = ", ".join(["id", "updated_at", *values])

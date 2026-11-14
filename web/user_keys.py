@@ -12,7 +12,7 @@ import base64
 import hashlib
 import json
 import os
-from typing import Annotated
+from typing import Annotated, cast
 
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import APIRouter, Depends
@@ -44,17 +44,24 @@ def _encrypt(keys: dict[str, str]) -> str:
     return _fernet().encrypt(json.dumps(keys).encode()).decode()
 
 
+def _as_keys(data: object) -> dict[str, str] | None:
+    """The {provider: key} entries of a decoded JSON object, or None if it isn't one."""
+    if not isinstance(data, dict):
+        return None
+    return {str(k): v for k, v in cast("dict[object, object]", data).items() if isinstance(v, str)}
+
+
 def _decrypt(blob: str | None) -> dict[str, str]:
     if not blob:
         return {}
     try:  # plaintext JSON (dev / no-encryption)
-        data = json.loads(blob)
-        if isinstance(data, dict):
-            return data
+        keys = _as_keys(cast("object", json.loads(blob)))
     except (ValueError, TypeError):
-        pass
+        keys = None
+    if keys is not None:
+        return keys
     try:
-        return json.loads(_fernet().decrypt(blob.encode()).decode())
+        return _as_keys(cast("object", json.loads(_fernet().decrypt(blob.encode()).decode()))) or {}
     except (InvalidToken, ValueError):
         return {}  # secret rotated or corrupt: treat as unset
 
@@ -64,9 +71,9 @@ def get_user_keys(user: User) -> dict[str, str]:
     return _decrypt(getattr(user, "api_keys_json", None))
 
 
-def _masked(user: User) -> dict[str, dict[str, str | bool]]:
-    keys = get_user_keys(user)
-    out = {}
+def _masked(user: User | None) -> dict[str, dict[str, str | bool]]:
+    keys = get_user_keys(user) if user else {}
+    out: dict[str, dict[str, str | bool]] = {}
     for p in KEY_PROVIDERS:
         value = keys.get(p)
         hint = f"…{value[-4:]}" if value and len(value) >= 4 else ("set" if value else "")

@@ -90,7 +90,7 @@ def is_configured() -> bool:
     return bool(get_api_key())
 
 
-NAME = "openrouter"
+NAME: str = "openrouter"
 
 
 def _json_object(value: object) -> dict[str, JsonValue]:

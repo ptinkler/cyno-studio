@@ -19,6 +19,16 @@ from web.core.metadata import get_db
 from web.passwords import hash_password
 
 
+class _Args(argparse.Namespace):
+    """The parsed command line."""
+
+    email: str = ""
+    name: str = "Admin"
+    claim_orphans: bool = False
+    set_password: bool = False
+    password: str | None = None
+
+
 def main() -> None:
     """Create or promote an admin account from the command-line options."""
     ap = argparse.ArgumentParser(description="Create or promote the admin account.")
@@ -27,7 +37,7 @@ def main() -> None:
     ap.add_argument("--claim-orphans", action="store_true", help="assign unowned tenant rows to the admin")
     ap.add_argument("--set-password", action="store_true", help="set the admin's email+password login (prompts)")
     ap.add_argument("--password", help="password for --set-password (else prompts; avoid in shell history)")
-    args = ap.parse_args()
+    args = ap.parse_args(namespace=_Args())
 
     db = get_db()
     if args.set_password:

@@ -25,6 +25,7 @@ actually made that image, so the card shows the bare key rather than a label.
 
 import json
 from collections.abc import Sequence
+from typing import cast
 
 import sqlalchemy as sa
 from alembic import op
@@ -98,9 +99,12 @@ def rewrite(bind: Connection, to_v1: bool = False) -> int:
     for table, column in _COLUMNS:
         if table not in tables:
             continue
-        rows = bind.execute(
-            sa.text(f"SELECT rowid, {column} FROM {table} WHERE {column} LIKE :p"), {"p": f"{PREFIX}%"}
-        ).all()
+        rows = cast(
+            "list[tuple[int, str]]",
+            bind.execute(sa.text(f"SELECT rowid, {column} FROM {table} WHERE {column} LIKE :p"), {"p": f"{PREFIX}%"})
+            .tuples()
+            .all(),
+        )
         for rowid, value in rows:
             new = _renamed(value, to_v1)
             if new != value:
@@ -110,12 +114,15 @@ def rewrite(bind: Connection, to_v1: bool = False) -> int:
     for table, column, _is_list in _JSON_COLUMNS:
         if table not in tables:
             continue
-        rows = bind.execute(
-            sa.text(f"SELECT rowid, {column} FROM {table} WHERE {column} LIKE :p"), {"p": f"%{PREFIX}%"}
-        ).all()
-        for rowid, raw in rows:
+        json_rows = cast(
+            "list[tuple[int, str | None]]",
+            bind.execute(sa.text(f"SELECT rowid, {column} FROM {table} WHERE {column} LIKE :p"), {"p": f"%{PREFIX}%"})
+            .tuples()
+            .all(),
+        )
+        for rowid, raw in json_rows:
             try:
-                data = json.loads(raw)
+                data = cast("_JsonValue", json.loads(raw or ""))
             except (TypeError, ValueError):
                 continue  # not readable JSON: leave it exactly as it is
             if _walk(data, to_v1):

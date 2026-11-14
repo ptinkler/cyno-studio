@@ -419,8 +419,6 @@ def _import_space_id() -> int:
     space = next((s for s in db.list_spaces() if s.name.strip().lower() == SPACE_NAME.lower()), None)
     if space is None:
         space = db.save_space(name=SPACE_NAME)
-    if space is None:
-        raise LookupError("Could not create the ChatGPT import space")  # noqa: TRY003
     return space.id
 
 

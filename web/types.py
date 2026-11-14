@@ -5,6 +5,19 @@ from typing import NotRequired, TypedDict
 
 type JsonValue = str | int | float | bool | Sequence[JsonValue] | Mapping[str, JsonValue] | None
 
+# One shaped model in a provider's catalogue (id, name, capabilities, tags…)
+type ModelEntry = dict[str, JsonValue]
+
+
+class Catalogue(TypedDict, total=False):
+    """Every provider's models by kind, plus the providers that failed to list."""
+
+    errors: dict[str, str]
+    text: list[ModelEntry]
+    image: list[ModelEntry]
+    video: list[ModelEntry]
+    audio: list[ModelEntry]
+
 
 class ToolFunctionDelta(TypedDict, total=False):
     """The function name and partial arguments in a streamed tool call."""

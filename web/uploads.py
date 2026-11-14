@@ -61,7 +61,8 @@ def is_blank_image(data: bytes) -> bool:
         with Image.open(io.BytesIO(data)) as im:
             im = im.convert("L")
             im.thumbnail((64, 64))
-            return im.getextrema()[1] <= 4
+            _, brightest = im.getextrema()
+            return isinstance(brightest, int) and brightest <= 4
     except Exception:  # noqa: BLE001 — Pillow rejects corrupt or non-image bytes this way
         return False  # not an image Pillow reads; leave it to the caller
 

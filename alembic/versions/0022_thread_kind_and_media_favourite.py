@@ -25,6 +25,7 @@ Downgrade drops the kind column and removes the favourite flag again.
 
 import json
 from collections.abc import Sequence
+from typing import cast
 
 import sqlalchemy as sa
 from alembic import op
@@ -36,7 +37,7 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
-def _set_favourite_from_pinned(items: list) -> bool:
+def _set_favourite_from_pinned(items: list[dict[str, object]]) -> bool:
     """Mark pinned items as favourites. Returns True if anything changed."""
     changed = False
     for item in items:
@@ -62,11 +63,14 @@ def upgrade() -> None:
     # Backfill favourite=true wherever a media item is currently pinned.
     session = Session(bind=bind)
     try:
-        for mid, media_json in session.execute(
-            sa.text("SELECT id, media_json FROM chat_messages WHERE media_json LIKE '%\"pinned\"%'")
-        ).all():
+        for mid, media_json in cast(
+            "list[tuple[str, str | None]]",
+            session.execute(sa.text("SELECT id, media_json FROM chat_messages WHERE media_json LIKE '%\"pinned\"%'"))
+            .tuples()
+            .all(),
+        ):
             try:
-                items = json.loads(media_json) if media_json else []
+                items = cast("list[dict[str, object]]", json.loads(media_json)) if media_json else []
             except (json.JSONDecodeError, TypeError):
                 continue
             if _set_favourite_from_pinned(items):
@@ -74,11 +78,14 @@ def upgrade() -> None:
                     sa.text("UPDATE chat_messages SET media_json = :j WHERE id = :id"),
                     {"j": json.dumps(items), "id": mid},
                 )
-        for lid, item_json in session.execute(
-            sa.text("SELECT id, item_json FROM chat_library_items WHERE item_json LIKE '%\"pinned\"%'")
-        ).all():
+        for lid, item_json in cast(
+            "list[tuple[str, str | None]]",
+            session.execute(sa.text("SELECT id, item_json FROM chat_library_items WHERE item_json LIKE '%\"pinned\"%'"))
+            .tuples()
+            .all(),
+        ):
             try:
-                item = json.loads(item_json) if item_json else {}
+                item = cast("dict[str, object]", json.loads(item_json)) if item_json else {}
             except (json.JSONDecodeError, TypeError):
                 continue
             if item.get("pinned") and not item.get("favourite"):
@@ -100,11 +107,14 @@ def downgrade() -> None:
 
     session = Session(bind=bind)
     try:
-        for mid, media_json in session.execute(
-            sa.text("SELECT id, media_json FROM chat_messages WHERE media_json LIKE '%\"favourite\"%'")
-        ).all():
+        for mid, media_json in cast(
+            "list[tuple[str, str | None]]",
+            session.execute(sa.text("SELECT id, media_json FROM chat_messages WHERE media_json LIKE '%\"favourite\"%'"))
+            .tuples()
+            .all(),
+        ):
             try:
-                items = json.loads(media_json) if media_json else []
+                items = cast("list[dict[str, object]]", json.loads(media_json)) if media_json else []
             except (json.JSONDecodeError, TypeError):
                 continue
             changed = False

@@ -11,9 +11,9 @@ import logging
 import os
 import re
 import threading
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
-from typing import Any, TypedDict, cast
+from typing import TypedDict, cast
 
 from web import characters
 from web.chat import generation, polling
@@ -90,7 +90,7 @@ class Turn:
         conv_id: str,
         settings: TurnSettings,
         message_id: int,
-        emit: Callable[[dict[str, object]], None],
+        emit: Callable[[dict[str, JsonValue]], None],
         cancel: threading.Event,
         initial_cost: float = 0.0,
         rewrite: tuple[str, str] | None = None,
@@ -282,7 +282,7 @@ class Turn:
         self._update_media(
             item, job_id=job["id"], params={**params, **job.get("params", {})}, **exchange_fields(job.get("log"))
         )
-        polling.start_video_poller(self.conv_id, self.message_id, item["id"], job["id"])
+        polling.start_video_poller(self.conv_id, self.message_id, str(item["id"]), job["id"])
 
     # ― chat with tools ―
     def _chat(self, tools_enabled: bool) -> None:
@@ -481,7 +481,7 @@ class Turn:
         refs, dropped = self._image_refs(args, source, chars)
         ref_args = {k: args[k] for k in ("source_image", "keep_consistent", "characters") if k in args}
         self._generate_image(prompt, ratio, refs, ref_args, chars, dropped)
-        result: dict[str, Any] = {"ok": True, "result": IMAGE_TOOL_RESULT}
+        result: dict[str, JsonValue] = {"ok": True, "result": IMAGE_TOOL_RESULT}
         if chars:
             result["characters"] = [c.name for c in chars]
         pinned = self._pinned_images()
@@ -709,7 +709,7 @@ class Turn:
         prompt: str,
         aspect_ratio: str | None,
         ref_files: list[str],
-        ref_args: dict | None = None,
+        ref_args: dict[str, JsonValue] | None = None,
         chars: list[Character] | None = None,
         dropped: list[str] | None = None,
     ) -> None:
@@ -779,7 +779,7 @@ class Turn:
         chars: list[Character] | None = None,
         last_frame: str | None = None,
         attached: list[str] | None = None,
-        ref_items: list[dict] | None = None,
+        ref_items: Sequence[Mapping[str, JsonValue]] | None = None,
     ) -> None:
         if not self.s.video_model:
             raise openrouter.OpenRouterError("No video model selected")  # noqa: TRY003
@@ -816,7 +816,7 @@ class Turn:
         self._update_media(
             item, job_id=job["id"], params={**params, **job.get("params", {})}, **exchange_fields(job.get("log"))
         )
-        polling.start_video_poller(self.conv_id, self.message_id, item["id"], job["id"])
+        polling.start_video_poller(self.conv_id, self.message_id, str(item["id"]), job["id"])
 
     def _video_inputs(
         self, first_frame: str | None, last_frame: str | None, attached: list[str], chars: list[Character]

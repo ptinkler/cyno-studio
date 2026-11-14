@@ -4,6 +4,49 @@ Lengths, ratios, and resolutions live with the model endpoints in
 ``web/providers/pollo_engine/``, the single source for those values.
 """
 
+from typing import TypedDict
+
+
+class RefLimits(TypedDict, total=False):
+    """Per-type caps on reference files in the Reference-To-Video branch."""
+
+    audio: int
+    file: int
+    image: int
+    link: int
+    video: int
+
+
+class RefMode(TypedDict, total=False):
+    """A model's Reference-To-Video branch."""
+
+    types: list[str]
+    max: int
+    limits: RefLimits
+    lengths: list[int]
+    resolutions: list[str]
+    hide_options: list[str]
+    max_length_with_video: int
+    exclusive: list[str]
+    no_audio_with_video: bool
+
+
+class ModelInfo(TypedDict, total=False):
+    """Presentation and capability data for one Pollo model."""
+
+    label: str
+    type: str
+    options: list[str]
+    ref_mode: RefMode
+    hidden: str
+    video_input: bool
+    audio_input: bool
+    modes: list[str]
+    deprecated: bool
+    note: str
+    tool: str
+
+
 # "hidden": the reason a model is left out of the model pickers unless
 # "Show hidden" is on — not enabled for our key, or retired by choice. It
 # still works if picked (and stays selected where it already is).
@@ -15,7 +58,7 @@ Lengths, ratios, and resolutions live with the model endpoints in
 # branches. "hide_options" lists options the ref branch lacks (web_search
 # and image_tail never exist there). "max_length_with_video" caps duration
 # when a video ref is present; "exclusive" ref types can't be combined.
-MODEL_INFO = {
+MODEL_INFO: dict[str, ModelInfo] = {
     # https://docs.pollo.ai
     "pollo20": {
         "label": "Pollo 2.0",

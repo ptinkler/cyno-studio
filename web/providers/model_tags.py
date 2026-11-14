@@ -12,10 +12,13 @@ so nothing new has to be stored per model.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from web.types import JsonValue, ModelEntry
 
 # slug -> human label shown on the filter chips, grouped by the kind it applies
 # to. Order here is the order the chips appear in.
@@ -48,7 +51,19 @@ TAGS: dict[str, str] = {
 }
 
 
-def tags_for(kind: str, m: dict[str, Any]) -> list[str]:
+def _text(value: JsonValue) -> str:
+    """A catalogue value as text ("" when it isn't a string)."""
+    return value if isinstance(value, str) else ""
+
+
+def _strings(value: JsonValue) -> list[str]:
+    """The strings in a catalogue list value (anything else is empty)."""
+    if isinstance(value, Sequence) and not isinstance(value, str):
+        return [item for item in value if isinstance(item, str)]
+    return []
+
+
+def tags_for(kind: str, m: ModelEntry) -> list[str]:
     """The capability tags for one shaped catalogue model of `kind`."""
     out: list[str] = []
 
@@ -62,9 +77,9 @@ def tags_for(kind: str, m: dict[str, Any]) -> list[str]:
     elif kind == "image":
         _image_tags(m, add)
     elif kind == "audio":
-        add(*_AUDIO_TYPE_TAGS.get(m.get("type"), ()))
+        add(*_AUDIO_TYPE_TAGS.get(_text(m.get("type")), ()))
     elif kind == "text":
-        if "image" in (m.get("input_modalities") or []):
+        if "image" in _strings(m.get("input_modalities")):
             add("vision")
         if m.get("supports_tools"):
             add("functions")
@@ -110,20 +125,23 @@ _EDIT_TYPES = {
 _VENICE_EDIT_FAMS = {"video", "motion", "upscale", "reference"}
 
 
-def _video_tags(m: dict[str, Any], add: Callable[..., None]) -> None:
-    typ = m.get("type")  # Pollo
-    fam = m.get("family")  # Venice
-    frames = m.get("frame_images") or []
+def _video_tags(m: ModelEntry, add: Callable[..., None]) -> None:
+    typ = _text(m.get("type"))  # Pollo
+    fam = _text(m.get("family"))  # Venice
+    frames = _strings(m.get("frame_images"))
     add(*_POLLO_TYPE_TAGS.get(typ, ()))
     add(*_VENICE_FAMILY_TAGS.get(fam, ()))
     if fam == "standard":
         add("text2vid")
     if m.get("reference_images"):
         add("ref2vid")
-    refs = m.get("ref_mode") or {}  # the model's reference-to-video branch
+    ref_mode = m.get("ref_mode")
+    refs: Mapping[str, JsonValue] = (
+        ref_mode if isinstance(ref_mode, Mapping) else {}
+    )  # the model's reference-to-video branch
     if refs:
         add("ref2vid")
-    if "video" in (refs.get("types") or []):
+    if "video" in _strings(refs.get("types")):
         add("video_refs")  # takes a source video as a reference: replace/restyle part of a clip
     if "last_frame" in frames:
         add("first_last")
@@ -133,9 +151,9 @@ def _video_tags(m: dict[str, Any], add: Callable[..., None]) -> None:
 
 
 def _video_img_tags(
-    m: dict[str, Any],
-    typ: str | None,
-    fam: str | None,
+    m: ModelEntry,
+    typ: str,
+    fam: str,
     frames: list[str],
     add: Callable[..., None],
 ) -> None:
@@ -148,18 +166,18 @@ def _video_img_tags(
     if "first_frame" in frames and not special:
         add("img2vid")
     if not typ and not fam:  # OpenRouter video carries neither field
-        if "image" in (m.get("input_modalities") or []) or "first_frame" in frames:
+        if "image" in _strings(m.get("input_modalities")) or "first_frame" in frames:
             add("img2vid")
         add("text2vid")
 
 
-def _image_tags(m: dict[str, Any], add: Callable[..., None]) -> None:
+def _image_tags(m: ModelEntry, add: Callable[..., None]) -> None:
     # Image tools (face-swap, background remover, …) are their own thing and
     # don't generate from a bare prompt — a later stage sets `tool`.
     if m.get("tool"):
         add("tools")
         return
     add("text2img")
-    mods = m.get("input_modalities") or []
+    mods = _strings(m.get("input_modalities"))
     if "image" in mods or m.get("conversational") or m.get("max_refs"):
         add("image_edit")

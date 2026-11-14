@@ -13,6 +13,7 @@ import os
 import uuid
 from collections.abc import Sequence
 from datetime import datetime
+from typing import cast
 
 import sqlalchemy as sa
 from alembic import op
@@ -46,7 +47,7 @@ def _admin_id(conn: Connection) -> str:
     email = next((e.strip() for e in os.getenv("ADMIN_EMAILS", "").split(",") if e.strip()), "admin@local")
     row = conn.execute(sa.text("SELECT id FROM users WHERE email = :email"), {"email": email}).fetchone()
     if row:
-        return row[0]
+        return cast("str", row[0])
     admin_id = uuid.uuid4().hex
     conn.execute(
         sa.text(

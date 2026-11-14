@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 import web.api as api_mod
 from web import image_hosts, public_media, upload_settings
 from web.core import config
-from web.image_hosts import _UploadPrefs  # pyright: ignore[reportPrivateUsage]
+from web.upload_settings import UploadPrefs
 
 
 def _same_page(page: str) -> str:
@@ -30,7 +30,7 @@ def _no_verify(host: str, url: str, filepath: Path) -> None:
     """Skip the served-file check."""
 
 
-def _prefs(primary: str, backup: str | None, expiry_minutes: int = 60) -> _UploadPrefs:
+def _prefs(primary: str, backup: str | None, expiry_minutes: int = 60) -> UploadPrefs:
     return {"primary": primary, "backup": backup, "expiry_minutes": expiry_minutes, "selfhost_base": ""}
 
 
@@ -183,7 +183,7 @@ class TestCacheLifetimeAndRecheck:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Test that tmpfiles is cached for 60 minutes even when 24h is requested."""
-        image_hosts._url_cache.clear()  # pyright: ignore[reportPrivateUsage]
+        image_hosts.clear_url_cache()
         monkeypatch.setattr(image_hosts, "_served_url", _no_upload_check)
         f = tmp_path / "clip.mp4"
         f.write_bytes(b"v")
@@ -193,14 +193,14 @@ class TestCacheLifetimeAndRecheck:
 
         monkeypatch.setattr(image_hosts, "_upload_to_tmpfiles", upload)
         image_hosts.upload_file(f, _prefs("tmpfiles", None, 1440))
-        ((_, good_until),) = image_hosts._url_cache.values()  # pyright: ignore[reportPrivateUsage]
+        (good_until,) = image_hosts.cached_url_expiries()
         assert good_until <= time.time() + 60 * 60
 
     def test_tmpfiles_retry_reuses_upload_with_a_fresh_download_link(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """The dl/ link is signed for ~5 min: each hand-out derives a new one, without re-uploading."""
-        image_hosts._url_cache.clear()  # pyright: ignore[reportPrivateUsage]
+        image_hosts.clear_url_cache()
         monkeypatch.setattr(image_hosts, "_verify_served", _no_verify)
         f = tmp_path / "clip.mp4"
         f.write_bytes(b"v")
@@ -227,7 +227,7 @@ class TestCacheLifetimeAndRecheck:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Test that a cached upload failing the served check triggers a fresh upload."""
-        image_hosts._url_cache.clear()  # pyright: ignore[reportPrivateUsage]
+        image_hosts.clear_url_cache()
         f = tmp_path / "clip.mp4"
         f.write_bytes(b"v")
         calls: list[Path] = []
@@ -317,7 +317,7 @@ class TestFallbackNotice:
 
     def test_fallback_is_noted_with_reason(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that a backup-host upload leaves a note naming the primary's failure."""
-        image_hosts._url_cache.clear()  # pyright: ignore[reportPrivateUsage]
+        image_hosts.clear_url_cache()
         image_hosts.take_upload_notes()
         monkeypatch.setattr(image_hosts, "_served_url", _no_upload_check)
         f = tmp_path / "clip.mp4"
@@ -339,7 +339,7 @@ class TestFallbackNotice:
 
     def test_primary_success_leaves_no_note(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that using the primary host leaves no note."""
-        image_hosts._url_cache.clear()  # pyright: ignore[reportPrivateUsage]
+        image_hosts.clear_url_cache()
         image_hosts.take_upload_notes()
         monkeypatch.setattr(image_hosts, "_served_url", _no_upload_check)
         f = tmp_path / "clip.mp4"

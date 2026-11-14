@@ -23,6 +23,7 @@ import sqlite3
 import threading
 from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 from web.core import config
 
@@ -40,7 +41,7 @@ def db_path() -> Path:
     return config.ROOT_DIR / "cache" / "media-cache.sqlite"
 
 
-def _with_db[T](work: Callable[[sqlite3.Connection], T], default: T | None = None) -> T | None:
+def _with_db[T, D](work: Callable[[sqlite3.Connection], T], default: D) -> T | D:
     """Run `work` against the cache, or return `default` if it can't be used.
 
     The connection is opened per call: these happen once per process, once per
@@ -49,7 +50,7 @@ def _with_db[T](work: Callable[[sqlite3.Connection], T], default: T | None = Non
     file — is reported and shrugged off, because a cache must never break the
     request that used it.
     """
-    conn = None
+    conn: sqlite3.Connection | None = None
     try:
         path = db_path()
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -67,21 +68,27 @@ def _with_db[T](work: Callable[[sqlite3.Connection], T], default: T | None = Non
             conn.close()
 
 
+def _rows(conn: sqlite3.Connection, query: str) -> list[tuple[str, int, float | None]]:
+    """Every row of a durations query (SQLite hands rows back untyped)."""
+    return cast("list[tuple[str, int, float | None]]", conn.execute(query).fetchall())
+
+
 def durations() -> dict[str, tuple[int, float | None]]:
     """Every known length: path → (the mtime it was read at, seconds)."""
     read = "SELECT path, mtime_ns, seconds FROM durations"
-    return _with_db(lambda c: {r[0]: (r[1], r[2]) for r in c.execute(read)}, {})
+    empty: dict[str, tuple[int, float | None]] = {}
+    return _with_db(lambda c: {path: (mtime_ns, seconds) for path, mtime_ns, seconds in _rows(c, read)}, empty)
 
 
 def remember(rows: list[tuple[str, int, float | None]]) -> None:
     """Record lengths just read, one transaction for the lot."""
     if rows:
-        _with_db(lambda c: c.executemany("INSERT OR REPLACE INTO durations VALUES (?, ?, ?)", rows))
+        _with_db(lambda c: c.executemany("INSERT OR REPLACE INTO durations VALUES (?, ?, ?)", rows), None)
 
 
 def forget(path: Path | str) -> None:
     """Drop a deleted file's row, so nothing is left behind for it."""
-    _with_db(lambda c: c.execute("DELETE FROM durations WHERE path = ?", (str(path),)))
+    _with_db(lambda c: c.execute("DELETE FROM durations WHERE path = ?", (str(path),)), None)
 
 
 def sweep() -> int:
@@ -90,8 +97,8 @@ def sweep() -> int:
 
 
 def _sweep(conn: sqlite3.Connection) -> int:
-    rows = conn.execute("SELECT path, mtime_ns FROM durations").fetchall()
-    stale = [(p,) for p, mtime_ns in rows if not _still_there(p, mtime_ns)]
+    rows = _rows(conn, "SELECT path, mtime_ns, seconds FROM durations")
+    stale = [(p,) for p, mtime_ns, _seconds in rows if not _still_there(p, mtime_ns)]
     conn.executemany("DELETE FROM durations WHERE path = ?", stale)
     return len(stale)
 

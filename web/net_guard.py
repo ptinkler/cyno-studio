@@ -49,7 +49,7 @@ def assert_public_url(url: str) -> None:
     except socket.gaierror as exc:
         raise UnsafeURLError(f"Cannot resolve host {host!r}: {exc}") from exc  # noqa: TRY003
     for info in infos:
-        ip = info[4][0]
+        ip = str(info[4][0])
         if not _is_public_ip(ip):
             raise UnsafeURLError(f"Host {host!r} resolves to non-public address {ip}")  # noqa: TRY003
 

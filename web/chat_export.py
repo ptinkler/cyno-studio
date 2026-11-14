@@ -225,8 +225,6 @@ def _space_id(name: str | None, cache: dict[str, int]) -> int | None:
         space = next((s for s in db.list_spaces() if s.name.strip().lower() == key), None) or db.save_space(
             name=name.strip()
         )
-        if space is None:
-            return None
         cache[key] = space.id
     return cache[key]
 

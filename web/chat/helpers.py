@@ -7,7 +7,7 @@ the live default-inheritance resolution.
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from fastapi import HTTPException
 
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from web.chat.models import TurnSettings
-    from web.core.metadata.models import ChatConversation, ChatMessage
+    from web.core.metadata.models import ChatConversation, ChatMessage, DefaultsBucket
     from web.types import JsonValue
 
 
@@ -42,12 +42,12 @@ def conversation_dir(conv_id: str) -> Path:
     return d
 
 
-def new_media(kind: str, source: str, **fields: JsonValue) -> dict[str, Any]:
+def new_media(kind: str, source: str, **fields: JsonValue) -> dict[str, JsonValue]:
     """Build a pending media item with a stable ID and optional fields."""
     return {"id": uuid.uuid4().hex[:8], "kind": kind, "source": source, "status": "pending", "file": None, **fields}
 
 
-def saved_media(kind: str, source: str, file: str, **fields: JsonValue) -> dict[str, Any]:
+def saved_media(kind: str, source: str, file: str, **fields: JsonValue) -> dict[str, JsonValue]:
     """A media item whose file is already on disk."""
     return {**new_media(kind, source, **fields), "status": "done", "file": file}
 
@@ -63,24 +63,24 @@ def require_conv(conv_id: str) -> ChatConversation:
 def branch_to(messages: list[ChatMessage], leaf_id: int | None) -> list[ChatMessage]:
     """The branch ending at `leaf_id`, first message first."""
     by_id = {m.id: m for m in messages}
-    path = []
-    msg = by_id.get(leaf_id)
+    path: list[ChatMessage] = []
+    msg = by_id.get(leaf_id) if leaf_id is not None else None
     while msg:
         path.append(msg)
-        msg = by_id.get(msg.parent_id)
+        msg = by_id.get(msg.parent_id) if msg.parent_id is not None else None
     return path[::-1]
 
 
-def message_out(msg: ChatMessage) -> dict[str, Any]:
+def message_out(msg: ChatMessage) -> dict[str, JsonValue]:
     """A message for the UI, with its siblings for the < 1/2 > branch arrows."""
     return {**msg.to_dict(), "siblings": get_db().get_chat_sibling_ids(msg.conversation_id, msg.parent_id, msg.lane)}
 
 
-def shown_branch(conv_id: str) -> list[dict[str, Any]]:
+def shown_branch(conv_id: str) -> list[dict[str, JsonValue]]:
     """Shape the shown conversation branch and its standalone gallery exchanges."""
     db = get_db()
     messages = db.get_chat_messages(conv_id)
-    siblings: dict[tuple, list[int]] = {}
+    siblings: dict[tuple[str | None, int | None], list[int]] = {}
     for m in messages:
         siblings.setdefault((m.lane, m.parent_id), []).append(m.id)
     # The chat's branch, then the standalone gallery exchanges beside it
@@ -108,24 +108,38 @@ def _inherited(conv: ChatConversation | None) -> dict[str, list[int]]:
     hidden by this conversation.
     """
     db = get_db()
-    buckets = [db.get_settings()]
+    buckets: list[DefaultsBucket] = [db.get_settings()]
     space = db.get_space(conv.space_id) if conv and conv.space_id is not None else None
     if space:
         buckets.append(space)
     hidden = conv.hidden_defaults if conv else {}
     return {
-        k: [
-            i
-            for i in dict.fromkeys(i for b in buckets for i in getattr(b, f"default_{k}_ids"))
-            if i not in hidden.get(k, [])
-        ]
+        k: [i for i in dict.fromkeys(i for b in buckets for i in _default_ids(b, k)) if i not in hidden.get(k, [])]
         for k in KINDS
     }
 
 
+def _default_ids(bucket: DefaultsBucket, kind: str) -> list[int]:
+    """A defaults bucket's ids of one kind (character / instruction / instruction_group)."""
+    if kind == "character":
+        return bucket.default_character_ids
+    if kind == "instruction":
+        return bucket.default_instruction_ids
+    return bucket.default_instruction_group_ids
+
+
+def _own_ids(conv: ChatConversation, kind: str) -> list[int]:
+    """A conversation's own attached ids of one kind."""
+    if kind == "character":
+        return conv.character_ids
+    if kind == "instruction":
+        return conv.instruction_ids
+    return conv.instruction_group_ids
+
+
 def effective_ids(conv: ChatConversation | None, kind: str) -> list[int]:
     """A chat's `kind` ids in use: inherited from the defaults, then its own."""
-    own = getattr(conv, f"{kind}_ids") if conv else []
+    own = _own_ids(conv, kind) if conv else []
     return list(dict.fromkeys([*_inherited(conv)[kind], *own]))
 
 
@@ -168,11 +182,12 @@ def remember_settings(conv: ChatConversation, settings: TurnSettings) -> None:
 
     reopening it restores them.
     """
-    fields: dict[str, Any] = {
-        k: getattr(settings, k)
-        for k in ("text_model", "image_model", "video_model")
-        if getattr(settings, k) and getattr(settings, k) != getattr(conv, k)
+    picks = {
+        "text_model": (settings.text_model, conv.text_model),
+        "image_model": (settings.image_model, conv.image_model),
+        "video_model": (settings.video_model, conv.video_model),
     }
+    fields: dict[str, JsonValue] = {k: new for k, (new, old) in picks.items() if new and new != old}
     composer = settings.model_dump(include=REMEMBERED_SETTINGS)
     if composer != conv.settings:
         fields["settings"] = composer
@@ -190,6 +205,6 @@ def add_message_cost(message_id: int, cost: float | None) -> None:
         db.update_chat_message(message_id, cost=round((msg.cost or 0) + float(cost), 6))
 
 
-def find_media(msg: ChatMessage | None, media_id: str) -> dict[str, Any] | None:
+def find_media(msg: ChatMessage | None, media_id: str) -> dict[str, JsonValue] | None:
     """Find a media item by ID on a message, if present."""
     return next((i for i in msg.media if i.get("id") == media_id), None) if msg else None

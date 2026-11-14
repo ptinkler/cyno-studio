@@ -9,7 +9,6 @@ import threading
 import time
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TypedDict, cast
 
 import requests
 from bs4 import BeautifulSoup
@@ -17,7 +16,7 @@ from pydantic import TypeAdapter
 
 from web.public_media import selfhost_url
 from web.types import JsonValue
-from web.upload_settings import current_upload_prefs
+from web.upload_settings import UploadPrefs, current_upload_prefs
 
 log = logging.getLogger(__name__)
 
@@ -50,11 +49,16 @@ _URL_CACHE_MAX = 256  # bound the dict; prune expired first, then oldest
 _FIXED_RETENTION_MIN = {"tmpfiles": 60, "uguu": 180}
 
 
-class _UploadPrefs(TypedDict):
-    primary: str
-    backup: str | None
-    expiry_minutes: int
-    selfhost_base: str
+def clear_url_cache() -> None:
+    """Forget every remembered upload (tests, and after upload settings change)."""
+    with _url_cache_lock:
+        _url_cache.clear()
+
+
+def cached_url_expiries() -> list[float]:
+    """When each remembered upload's URL lapses (monotonic seconds)."""
+    with _url_cache_lock:
+        return [expires for _, expires in _url_cache.values()]
 
 
 def _cache_key(filepath: Path, host: str, expiry_minutes: int) -> tuple[str, int, int, str, int] | None:
@@ -102,13 +106,13 @@ def _store_url(key: tuple[str, int, int, str, int] | None, url: str, expiry_minu
         _url_cache[key] = (url, good_until)
 
 
-def upload_file(filepath: Path, prefs: _UploadPrefs | None = None) -> str:
+def upload_file(filepath: Path, prefs: UploadPrefs | None = None) -> str:
     """Upload a source file and return its public URL.
 
     Try the primary host before the backup. If omitted, ``prefs`` uses the
     current user's resolved preferences; a live cached URL is reused.
     """
-    resolved = prefs if prefs is not None else cast("_UploadPrefs", current_upload_prefs())
+    resolved = prefs if prefs is not None else current_upload_prefs()
     expiry = resolved.get("expiry_minutes", 60)
     order: list[str] = [resolved["primary"]]
     backup = resolved.get("backup")
@@ -212,7 +216,7 @@ def _verify_served(host: str, url: str, filepath: Path) -> None:
         )
 
 
-def _dispatch(host: str, filepath: Path, prefs: _UploadPrefs) -> str:
+def _dispatch(host: str, filepath: Path, prefs: UploadPrefs) -> str:
     expiry = prefs.get("expiry_minutes", 60)
     if host == "litterbox":
         return _upload_to_litterbox(filepath, expiry)
@@ -329,7 +333,8 @@ def _tmpfiles_direct_url(page_url: str) -> str:
     page.raise_for_status()
     soup = BeautifulSoup(page.text, "html.parser")
     link = soup.find("a", class_="download") or soup.find("img", id="img_preview")
-    direct_url = (link.get("href") or link.get("src")) if link else None
+    raw_url = (link.get("href") or link.get("src")) if link else None
+    direct_url = raw_url if isinstance(raw_url, str) else None
     if not direct_url:
         raise ValueError(  # noqa: TRY003
             f"tmpfiles.org upload succeeded but no direct download link found on {page_url}"

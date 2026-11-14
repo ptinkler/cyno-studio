@@ -11,6 +11,7 @@ import pytest
 
 import web.providers.pollo as pollo
 from web.chat.turn import Turn
+from web.jsonutil import as_object
 
 pytestmark = pytest.mark.no_tenant
 
@@ -108,7 +109,7 @@ def test_list_video_models_surfaces_ref_mode(provider_keys):
     """Test that list video models surfaces ref mode."""
     provider_keys["pollo"] = "K"
     by_id = {m["id"]: m for m in pollo.list_video_models()}
-    assert by_id["pollo/klingv4"]["ref_mode"]["limits"] == {"image": 10, "video": 5, "audio": 3}
-    assert by_id["pollo/klingv4flash"]["ref_mode"]["types"] == ["image", "video"]
+    assert as_object(by_id["pollo/klingv4"]["ref_mode"])["limits"] == {"image": 10, "video": 5, "audio": 3}
+    assert as_object(by_id["pollo/klingv4flash"]["ref_mode"])["types"] == ["image", "video"]
     # A non-refs model carries ref_mode: None.
     assert by_id["pollo/klingv3turbo"]["ref_mode"] is None

@@ -13,6 +13,7 @@ Downgrade is a no-op (the original parent links are not kept).
 """
 
 from collections.abc import Sequence
+from typing import cast
 
 import sqlalchemy as sa
 from alembic import op
@@ -26,14 +27,21 @@ depends_on: str | Sequence[str] | None = None
 
 def backfill(conn: Connection) -> int:
     """Backfill pure-gallery conversations and return the converted count."""
-    convs = conn.execute(sa.text("SELECT id FROM chat_conversations WHERE kind = 'gallery'")).scalars().all()
+    convs: Sequence[str] = (
+        conn.execute(sa.text("SELECT id FROM chat_conversations WHERE kind = 'gallery'")).scalars().all()
+    )
     done = 0
     for cid in convs:
-        rows = conn.execute(
-            sa.text("SELECT id, role, mode, lane FROM chat_messages WHERE conversation_id = :c"), {"c": cid}
-        ).all()
-        users = [r for r in rows if r.role == "user"]
-        if not users or any(r.lane for r in rows) or any(r.mode not in ("image", "video") for r in users):
+        rows = cast(
+            "list[tuple[str, str, str | None, str | None]]",
+            conn.execute(
+                sa.text("SELECT id, role, mode, lane FROM chat_messages WHERE conversation_id = :c"), {"c": cid}
+            )
+            .tuples()
+            .all(),
+        )
+        users = [r for r in rows if r[1] == "user"]
+        if not users or any(r[3] for r in rows) or any(r[2] not in ("image", "video") for r in users):
             continue
         conn.execute(sa.text("UPDATE chat_messages SET lane = 'gallery' WHERE conversation_id = :c"), {"c": cid})
         # Each prompt starts its own exchange; replies stay under their prompt

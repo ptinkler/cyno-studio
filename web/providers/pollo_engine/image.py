@@ -2,15 +2,48 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, NotRequired, TypedDict, cast
 
 from web.core.config import POLLO_GENERATION_BASE
-from web.providers.pollo_engine._shared import parse_aspect_ratio
+from web.providers.pollo_engine._shared import Payload, as_str, as_str_list, parse_aspect_ratio
 
 if TYPE_CHECKING:
     from web.types import JsonValue
 
-_V1_IMAGE_DEFAULTS: dict[str, Any] = {
+
+class ImageRow(TypedDict, total=False):
+    """One image model's table row: its endpoint plus overrides of the defaults."""
+
+    PROVIDER: str
+    MODEL: str
+    V1_URL: str
+    TOOL: str
+    VALID_RATIOS: tuple[str, ...]
+    VALID_RESOLUTIONS: tuple[str, ...]
+    DEFAULT_RATIO_KEYWORD: str
+    HAS_SEED: bool
+    ACCEPTS_IMAGES: bool
+    MAX_IMAGES: int
+    ASPECT_RATIO_WITH_IMAGES: bool
+
+
+class ImageCfg(TypedDict):
+    """An image model's settings once the defaults are layered under its row."""
+
+    VALID_RATIOS: tuple[str, ...]
+    VALID_RESOLUTIONS: tuple[str, ...]
+    DEFAULT_RATIO_KEYWORD: str
+    HAS_SEED: bool
+    ACCEPTS_IMAGES: bool
+    MAX_IMAGES: int
+    ASPECT_RATIO_WITH_IMAGES: bool
+    PROVIDER: NotRequired[str]
+    MODEL: NotRequired[str]
+    V1_URL: NotRequired[str]
+    TOOL: NotRequired[str]
+
+
+_V1_IMAGE_DEFAULTS: ImageRow = {
     "VALID_RATIOS": (),
     "VALID_RESOLUTIONS": (),
     "DEFAULT_RATIO_KEYWORD": "square",
@@ -20,7 +53,7 @@ _V1_IMAGE_DEFAULTS: dict[str, Any] = {
     "ASPECT_RATIO_WITH_IMAGES": True,
 }
 
-IMAGE_MODELS: dict[str, dict[str, Any]] = {
+IMAGE_MODELS: dict[str, ImageRow] = {
     "pollojourney": {
         "PROVIDER": "pollo-ai",
         "MODEL": "pollojourney-v8-2-image",
@@ -207,46 +240,47 @@ IMAGE_MODELS: dict[str, dict[str, Any]] = {
 }
 
 
-def img_cfg(model_id: str) -> dict[str, Any]:
+def img_cfg(model_id: str) -> ImageCfg:
     """Return defaults and model-specific settings for an image model."""
-    return {**_V1_IMAGE_DEFAULTS, **IMAGE_MODELS[model_id]}
+    # The defaults supply every key a row leaves out.
+    return cast("ImageCfg", {**_V1_IMAGE_DEFAULTS, **IMAGE_MODELS[model_id]})
 
 
 def image_model_url(model_id: str) -> str:
     """Return the generation endpoint for an image model."""
     c = img_cfg(model_id)
-    return c.get("V1_URL") or f"{POLLO_GENERATION_BASE}/{c['PROVIDER']}/{c['MODEL']}/image"
+    return c.get("V1_URL") or f"{POLLO_GENERATION_BASE}/{c.get('PROVIDER', '')}/{c.get('MODEL', '')}/image"
 
 
-def _tool_payload(c: dict[str, object], image_url: str | None, **kw: JsonValue) -> dict[str, Any]:
+def _tool_payload(c: ImageCfg, image_url: str | None, **kw: JsonValue) -> Payload:
     """An image tool: {image} (+ upscale's integer scale from "2x"-style values)."""
-    image = image_url or next(iter(kw.get("images") or []), None)
+    image = image_url or next(iter(as_str_list(kw.get("images"))), None)
     if not image:
         raise ValueError("This tool needs a source image")
-    attrs: dict[str, Any] = {"image": image}
-    if c["TOOL"] == "upscale":
+    attrs: dict[str, JsonValue] = {"image": image}
+    if c.get("TOOL") == "upscale":
         scale = str(kw.get("resolution") or "2x")
         attrs["scale"] = int(scale[:-1]) if scale in c["VALID_RESOLUTIONS"] else 2
     return {"input": attrs}
 
 
-def image_payload(model_id: str, *, prompt: str, image_url: str | None, **kw: JsonValue) -> dict[str, Any]:
+def image_payload(model_id: str, *, prompt: str, image_url: str | None, **kw: JsonValue) -> Payload:
     """Build the image API request body."""
     c = img_cfg(model_id)
     if c.get("TOOL"):
         return _tool_payload(c, image_url, **kw)
-    aspect_ratio = kw.get("aspect_ratio") or parse_aspect_ratio(c["DEFAULT_RATIO_KEYWORD"])
-    resolution = kw.get("resolution")
+    aspect_ratio = as_str(kw.get("aspect_ratio")) or parse_aspect_ratio(c["DEFAULT_RATIO_KEYWORD"])
+    resolution = as_str(kw.get("resolution"))
     resolution = resolution if resolution in c["VALID_RESOLUTIONS"] else None
     seed = kw.get("seed") if c["HAS_SEED"] else None
 
-    images = ([image_url] if image_url else []) + (kw.get("images") or [])
+    images = ([image_url] if image_url else []) + as_str_list(kw.get("images"))
     if not c["ACCEPTS_IMAGES"]:
         images = []
     elif c["MAX_IMAGES"]:
         images = images[: c["MAX_IMAGES"]]
 
-    attrs: dict[str, Any] = {"prompt": prompt}
+    attrs: dict[str, JsonValue] = {"prompt": prompt}
     if not images or c["ASPECT_RATIO_WITH_IMAGES"]:
         attrs["aspectRatio"] = aspect_ratio
     if images:

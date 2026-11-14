@@ -5,19 +5,26 @@ and the per-model lookups used to validate and auto-fit media params.
 
 import threading
 import time
-from typing import Any, TypedDict, cast
+from typing import TypedDict, cast
 
 from web.caches import on_keys_changed
 from web.chat.constants import MODELS_CACHE_TTL
 from web.core.metadata import current_tenant
 from web.providers import PROVIDERS, venice
 from web.providers.model_tags import tags_for
+from web.types import Catalogue, ModelEntry
+
+
+class _CacheEntry(TypedDict):
+    at: float
+    data: Catalogue
+
 
 # Each provider lists the models the REQUESTING user's key can see (an
 # unconfigured provider returns [], and "enabled for this key" differs per
 # account), so a catalogue belongs to one user: the cache holds an entry per
 # tenant, never one for the process. "" is the unauthenticated bucket.
-_models_cache: dict[str, dict[str, Any]] = {}
+_models_cache: dict[str, _CacheEntry] = {}
 _models_lock = threading.Lock()
 _MAX_CACHED_TENANTS = 32
 _NEVER = 9e18  # an "at" that can't expire (seed_models)
@@ -63,19 +70,19 @@ def _prune(now: float) -> None:
         del _models_cache[min(_models_cache, key=lambda k: _models_cache[k]["at"])]
 
 
-def cached_models() -> dict[str, Any] | None:
+def cached_models() -> Catalogue | None:
     """The current tenant's cached catalogue, or None when nothing is cached."""
-    entry = _models_cache.get(current_tenant())
+    entry = _models_cache.get(current_tenant() or "")
     return entry["data"] if entry else None
 
 
-def seed_models(data: dict[str, Any], stale: bool = False) -> None:
+def seed_models(data: Catalogue, stale: bool = False) -> None:
     """Put a ready-made catalogue in the current tenant's cache (tests).
 
     `stale` lets get_models() refetch while the per-model lookups still see it.
     """
     with _models_lock:
-        _models_cache[current_tenant()] = {"at": 0.0 if stale else _NEVER, "data": data}
+        _models_cache[current_tenant() or ""] = {"at": 0.0 if stale else _NEVER, "data": data}
 
 
 @on_keys_changed
@@ -88,31 +95,39 @@ def clear_models() -> None:
         _models_cache.clear()
 
 
-def get_models(refresh: bool = False) -> dict[str, Any]:
+def get_models(refresh: bool = False) -> Catalogue:
     """Return each provider's model catalogue, refreshing the tenant cache if requested."""
-    tenant = current_tenant()
+    tenant = current_tenant() or ""
     with _models_lock:
         entry = _models_cache.get(tenant)
         if not refresh and entry and time.time() - entry["at"] < MODELS_CACHE_TTL:
             return entry["data"]
-        data: dict[str, Any] = {"errors": {}}
+        errors: dict[str, str] = {}
+        by_kind: dict[str, list[ModelEntry]] = {}
         # Uniform dispatch: each provider lists its own models per kind (in
         # PROVIDERS order), so no provider is special-cased here.
         for kind in ("text", "image", "video", "audio"):
-            models: list = []
+            models: list[ModelEntry] = []
             for prov in PROVIDERS:
                 try:
                     models += prov.list_models(kind, refresh)
                 except Exception as e:  # noqa: BLE001 — capture provider errors independently
-                    data["errors"][f"{prov.NAME}_{kind}"] = str(e)
+                    errors[f"{prov.NAME}_{kind}"] = str(e)
             # Capability tags, derived uniformly so every provider is consistent;
             # the picker filters on these. Set once here rather than in each
             # provider's list_models (see web/providers/model_tags.py).
             for m in models:
                 m["tags"] = tags_for(kind, m)
-            data[kind] = models
+            by_kind[kind] = models
+        data = Catalogue(
+            errors=errors,
+            text=by_kind["text"],
+            image=by_kind["image"],
+            video=by_kind["video"],
+            audio=by_kind["audio"],
+        )
         # Only cache a complete result, so a transient failure isn't sticky
-        if not data["errors"]:
+        if not errors:
             now = time.time()
             _models_cache[tenant] = {"at": now, "data": data}
             _prune(now)
@@ -129,7 +144,8 @@ def model_info(kind: str, model_id: str | None) -> ModelInfo | None:
     if not model_id:
         return None
     data = cached_models()
-    info = next((m for m in data.get(kind, []) if m["id"] == model_id), None) if data else None
+    models = cast("list[ModelEntry]", cast("dict[str, object]", data).get(kind, [])) if data else []
+    info = next((m for m in models if m["id"] == model_id), None)
     if info is None and venice.is_venice(model_id) and venice.is_configured():
         try:
             return cast("ModelInfo", venice.model_info(kind, model_id))

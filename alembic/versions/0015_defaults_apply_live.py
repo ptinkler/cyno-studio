@@ -13,6 +13,7 @@ taking something out of the defaults would leave it in every older chat.
 
 import json
 from collections.abc import Sequence
+from typing import cast
 
 import sqlalchemy as sa
 from alembic import op
@@ -25,9 +26,9 @@ depends_on: str | Sequence[str] | None = None
 KINDS = ("character", "instruction", "instruction_group")
 
 
-def _ids(raw: str | None) -> list:
+def _ids(raw: str | None) -> list[str]:
     try:
-        return json.loads(raw) if raw else []
+        return cast("list[str]", json.loads(raw)) if raw else []
     except json.JSONDecodeError:
         return []
 
@@ -36,14 +37,23 @@ def upgrade() -> None:
     """Apply default instructions to existing conversations."""
     bind = op.get_bind()
     cols = ", ".join(f"default_{k}_ids_json" for k in KINDS)
-    glob = bind.execute(sa.text(f"SELECT {cols} FROM chat_settings WHERE id = 1")).first()
-    spaces = {row[0]: row[1:] for row in bind.execute(sa.text(f"SELECT id, {cols} FROM chat_spaces"))}
+    glob = cast(
+        "tuple[str | None, ...] | None",
+        bind.execute(sa.text(f"SELECT {cols} FROM chat_settings WHERE id = 1")).tuples().first(),
+    )
+    spaces = {
+        row[0]: row[1:]
+        for row in cast(
+            "list[tuple[str | None, ...]]", bind.execute(sa.text(f"SELECT id, {cols} FROM chat_spaces")).tuples().all()
+        )
+    }
     own_cols = ", ".join(f"{k}_ids_json" for k in KINDS)
-    for conv_id, space_id, *own in bind.execute(
-        sa.text(f"SELECT id, space_id, {own_cols} FROM chat_conversations")
-    ).all():
+    for conv_id, space_id, *own in cast(
+        "list[tuple[str, str | None, *tuple[str | None, ...]]]",
+        bind.execute(sa.text(f"SELECT id, space_id, {own_cols} FROM chat_conversations")).tuples().all(),
+    ):
         buckets = [b for b in (glob, spaces.get(space_id)) if b]
-        changes = {}
+        changes: dict[str, str] = {}
         for i, kind in enumerate(KINDS):
             inherited = {x for b in buckets for x in _ids(b[i])}
             ids = _ids(own[i])

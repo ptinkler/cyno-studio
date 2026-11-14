@@ -9,7 +9,7 @@ import re
 import uuid
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 from web import characters, providers, request_log
 from web.chat.catalogue import auto_ratio, model_info
@@ -495,7 +495,7 @@ def run_image_generation(
     kept = [(data, media_type) for data, media_type in images if not is_blank_image(data)]
     if images and not kept:
         raise openrouter.OpenRouterError(BLACK_IMAGE_ERROR)
-    names = []
+    names: list[str] = []
     for data, media_type in kept:
         name = f"img_{uuid.uuid4().hex[:12]}{IMAGE_EXTS.get(media_type, '.png')}"
         (conv_dir / name).write_bytes(data)
@@ -503,7 +503,7 @@ def run_image_generation(
     return names, cost, credits, {**sent, "log": request_log.take_last()}
 
 
-def submit_video_generation(conv_id: str, model: str, prompt: str, params: dict[str, Any]) -> VideoJob:
+def submit_video_generation(conv_id: str, model: str, prompt: str, params: dict[str, JsonValue]) -> VideoJob:
     """Start a video job on the model's provider.
 
     Returns the job plus
@@ -513,31 +513,47 @@ def submit_video_generation(conv_id: str, model: str, prompt: str, params: dict[
     return {**_submit_video(conv_id, model, prompt, params), "log": request_log.take_last()}
 
 
-def _submit_video(conv_id: str, model: str, prompt: str, params: dict[str, Any]) -> VideoJob:
-    frame = _ref_file(conv_id, params["first_frame"]) if params.get("first_frame") else None
+def _text_param(params: Mapping[str, JsonValue], key: str) -> str | None:
+    """A parameter's non-empty string value, else None."""
+    value = params.get(key)
+    return value if isinstance(value, str) and value else None
+
+
+def _submit_video(conv_id: str, model: str, prompt: str, params: dict[str, JsonValue]) -> VideoJob:
+    first_frame = _text_param(params, "first_frame")
+    frame = _ref_file(conv_id, first_frame) if first_frame else None
     prompt = characters.with_characters(prompt, param_characters(params))
     # An unset ratio uses the model's own auto value when it has one (matching
     # the image path); animating an image still derives the ratio from the frame.
-    aspect_ratio = params.get("aspect_ratio") or (None if frame else auto_ratio("video", model))
+    aspect_ratio = _text_param(params, "aspect_ratio") or (None if frame else auto_ratio("video", model))
     conv_dir = conversation_dir(conv_id)
+    duration = params.get("duration")
+    generate_audio = params.get("generate_audio")
+    last_frame = _text_param(params, "last_frame")
+    source_video = _text_param(params, "source_video")
+    source_audio = _text_param(params, "source_audio")
+    ref_values = params.get("refs")
+    refs = [ref for ref in ref_values if isinstance(ref, str)] if isinstance(ref_values, list) else []
+    item_values = params.get("ref_items")
+    items = [item for item in item_values if isinstance(item, Mapping)] if isinstance(item_values, list) else []
     return providers.submit_video(
         model,
         prompt,
-        duration=params.get("duration"),
+        duration=duration if isinstance(duration, int) and not isinstance(duration, bool) else None,
         aspect_ratio=aspect_ratio,
-        resolution=params.get("resolution"),
-        generate_audio=params.get("generate_audio"),
+        resolution=_text_param(params, "resolution"),
+        generate_audio=generate_audio if isinstance(generate_audio, bool) else None,
         first_frame=frame,
-        last_frame=_ref_file(conv_id, params["last_frame"]) if params.get("last_frame") else None,
-        source_video=conv_dir / params["source_video"] if params.get("source_video") else None,
-        source_audio=conv_dir / params["source_audio"] if params.get("source_audio") else None,
-        mode=params.get("mode"),
-        refs=[_ref_file(conv_id, r) for r in params.get("refs") or []],
+        last_frame=_ref_file(conv_id, last_frame) if last_frame else None,
+        source_video=conv_dir / source_video if source_video else None,
+        source_audio=conv_dir / source_audio if source_audio else None,
+        mode=_text_param(params, "mode"),
+        refs=[_ref_file(conv_id, r) for r in refs],
         # Reference-to-video: named image/video/audio refs the prompt mentions
         # as [@name] (resolve each file to a path; keep its name and type).
         ref_items=[
-            {"path": _ref_file(conv_id, r["file"]), "name": r.get("name"), "type": r.get("type")}
-            for r in params.get("ref_items") or []
+            {"path": _ref_file(conv_id, str(r.get("file") or "")), "name": r.get("name"), "type": r.get("type")}
+            for r in items
         ],
         session_id=conv_id,
     )

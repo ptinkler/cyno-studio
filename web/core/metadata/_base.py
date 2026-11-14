@@ -11,7 +11,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import TypeVar, cast
+from typing import Protocol, TypeVar, cast, overload
 
 import sqlalchemy as sa
 from sqlalchemy import create_engine, event
@@ -24,6 +24,14 @@ from web.core.metadata.models import Base
 from web.types import JsonValue
 
 ModelT = TypeVar("ModelT", bound=Base)
+
+
+class _Stamped(Protocol):
+    """A row that records when it was last changed."""
+
+    updated_at: datetime
+
+
 OrderByT = TypeVar("OrderByT")
 
 
@@ -97,6 +105,12 @@ class DBBase:
                 session.expunge(item)
             return item
 
+    @overload
+    def _save(self, model: type[ModelT], pk: None, **fields: JsonValue) -> ModelT: ...
+
+    @overload
+    def _save(self, model: type[ModelT], pk: int | str, **fields: JsonValue) -> ModelT | None: ...
+
     def _save(self, model: type[ModelT], pk: int | str | None, **fields: JsonValue) -> ModelT | None:
         """Create (pk None) or update one row; None if the pk isn't there."""
         with self._session() as session:
@@ -109,7 +123,7 @@ class DBBase:
                     return None
                 for key, value in fields.items():
                     setattr(item, key, value)
-                setattr(item, "updated_at", datetime.now().astimezone().replace(tzinfo=None))  # noqa: B010
+                cast("_Stamped", item).updated_at = datetime.now().astimezone().replace(tzinfo=None)
             session.commit()
             session.refresh(item)
             session.expunge(item)

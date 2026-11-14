@@ -9,6 +9,7 @@ import requests
 
 from web.core.cloudflare import is_cloudflare_block
 from web.core.config import POLLO_API_TIMEOUT, POLLO_PLATFORM_BASE, POLLO_TASK_BASE
+from web.jsonutil import as_int, as_object, as_objects, as_str, body_of
 from web.types import JsonValue
 
 log = logging.getLogger(__name__)
@@ -33,17 +34,22 @@ def get_task_status(task_id: str, api_key: str) -> list[TaskResult]:
     if response.status_code != 200:
         return [("error", _error_message(response), None, None)]
     try:
-        data = response.json().get("data", {})
+        data = as_object(as_object(body_of(response)).get("data"))
     except ValueError:
         return [("error", "Invalid JSON response", None, None)]
 
     # Generations come under "generations" or, in another response shape, "result"
-    generations = data.get("generations") or data.get("result") or []
+    generations = as_objects(data.get("generations")) or as_objects(data.get("result"))
     if not generations:
         log.warning("task %s: no generations in the response", task_id)
         return [("error", "No generations found.", None, None)]
-    results = [
-        (gen.get("status"), gen.get("failMsg"), gen.get("url") or gen.get("videoUrl"), _credit(gen.get("credit")))
+    results: list[TaskResult] = [
+        (
+            as_str(gen.get("status")) or "",
+            as_str(gen.get("failMsg")),
+            as_str(gen.get("url")) or as_str(gen.get("videoUrl")),
+            _credit(gen.get("credit")),
+        )
         for gen in generations
     ]
     # Only a task-level total: it goes on the first result
@@ -56,19 +62,21 @@ def get_task_status(task_id: str, api_key: str) -> list[TaskResult]:
 def _error_message(response: requests.Response) -> str:
     """The first issue Pollo reports in an error response, else the HTTP status."""
     try:
-        issues = response.json().get("data", {}).get("issues", [])
-    except (ValueError, KeyError, AttributeError):
+        issues = as_objects(as_object(as_object(body_of(response)).get("data")).get("issues"))
+    except ValueError:
         issues = []
     if issues:
-        return issues[0].get("message", "No message provided.")
+        return as_str(issues[0].get("message")) or "No message provided."
     return f"HTTP {response.status_code}"
 
 
 def _credit(value: JsonValue) -> int | None:
     """A credit count from the API (a string or an int), None if missing or unreadable."""
+    if not isinstance(value, (int, float, str)):
+        return None
     try:
-        return int(value) if value is not None else None
-    except (ValueError, TypeError):
+        return int(value)
+    except ValueError:
         return None
 
 
@@ -83,12 +91,12 @@ def get_credit_balance(api_key: str) -> dict[str, float] | None:
     try:
         response = requests.get(url, headers=headers, timeout=POLLO_API_TIMEOUT)
         if response.status_code == 200:
-            resp_json = response.json()
+            resp_json = as_object(body_of(response))
             # API wraps response in {"code":"SUCCESS","data":{...}}
-            data = resp_json.get("data", resp_json)
+            data = as_object(resp_json.get("data", resp_json))
             return {
-                "availableCredits": data.get("availableCredits", 0),
-                "totalCredits": data.get("totalCredits", 0),
+                "availableCredits": as_int(data.get("availableCredits")) or 0,
+                "totalCredits": as_int(data.get("totalCredits")) or 0,
             }
         log.warning("credit balance fetch returned HTTP %s from %s: %s", response.status_code, url, response.text[:300])
     except Exception as e:  # noqa: BLE001 — task failures must be recorded for every provider

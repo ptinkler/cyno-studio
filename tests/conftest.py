@@ -120,6 +120,7 @@ def _tenant(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> 
         name="Admin",
         password_hash=None,
         api_keys_json=None,
+        upload_prefs_json=None,
     )
 
     # Match the real 1-arg signature so a stale multi-arg call fails here too.

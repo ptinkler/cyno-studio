@@ -15,9 +15,9 @@ its media item rather than adding to the OpenRouter `cost`.
 """
 
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 from urllib.parse import urlsplit
 
 import requests
@@ -39,9 +39,9 @@ from web.providers.pollo_engine import (
 from web.providers.pollo_engine import audio_generator as get_audio_generator
 from web.providers.pollo_engine import image_generator as get_image_generator
 from web.providers.pollo_engine import video_generator as get_video_generator
-from web.providers.pollo_engine.registry import PolloGenerator
-from web.providers.pollo_models import MODEL_INFO
-from web.types import JsonValue
+from web.providers.pollo_engine.registry import ModelSpec, PolloGenerator
+from web.providers.pollo_models import MODEL_INFO, ModelInfo
+from web.types import JsonValue, ModelEntry
 
 
 class PolloError(OpenRouterError):
@@ -67,10 +67,10 @@ def is_configured() -> bool:
     return bool(keyctx.provider_key("pollo"))
 
 
-NAME = "pollo"
+NAME: str = "pollo"
 
 
-def list_models(kind: str, refresh: bool = False) -> list[dict]:
+def list_models(kind: str, refresh: bool = False) -> list[ModelEntry]:
     """List Pollo models for the uniform provider interface.
 
     Pollo has no text models; image, video and audio lists
@@ -95,7 +95,7 @@ def is_pollo_job(job_id: str | None) -> bool:
     return bool(job_id and job_id.startswith(JOB_PREFIX))
 
 
-def _catalogue(generators: dict) -> list[tuple[str, Any, dict]]:
+def _catalogue(generators: Mapping[str, ModelSpec]) -> list[tuple[str, ModelSpec, ModelInfo]]:
     """(key, spec, MODEL_INFO entry) for each model not marked deprecated."""
     if not is_configured():
         return []
@@ -103,7 +103,7 @@ def _catalogue(generators: dict) -> list[tuple[str, Any, dict]]:
     return [(key, spec, info[key]) for key, spec in generators.items() if not info.get(key, {}).get("deprecated")]
 
 
-def list_image_models() -> list[dict[str, Any]]:
+def list_image_models() -> list[ModelEntry]:
     """Pollo's image models, shaped like openrouter.list_image_models()."""
     return [
         {
@@ -124,9 +124,9 @@ def list_image_models() -> list[dict[str, Any]]:
     ]
 
 
-def list_video_models() -> list[dict[str, Any]]:
+def list_video_models() -> list[ModelEntry]:
     """Pollo's video models, shaped like openrouter.list_video_models()."""
-    out = []
+    out: list[ModelEntry] = []
     for key, spec, meta in _catalogue(VIDEO_GENERATORS):
         # Motion models work on a source video + one reference image, so it has no
         # duration/resolution/aspect ratio (the source video sets those). Extend
@@ -156,7 +156,7 @@ def list_video_models() -> list[dict[str, Any]]:
                 "audio_input": lipsync,  # takes an uploaded audio track (lip sync)
                 # reference-to-video branch (image/video/audio refs, [@name]
                 # mentions): the allowed types, total cap and per-type limits.
-                "ref_mode": meta.get("ref_mode") or None,
+                "ref_mode": _plain(ref_mode) if (ref_mode := meta.get("ref_mode")) else None,
                 "video_input": bool(meta.get("video_input")),
                 "modes": meta.get("modes") or None,
                 "generate_audio": "generate_audio" in meta.get("options", []),
@@ -167,7 +167,12 @@ def list_video_models() -> list[dict[str, Any]]:
     return out
 
 
-def list_audio_models() -> list[dict[str, Any]]:
+def _plain(value: Mapping[str, object]) -> dict[str, JsonValue]:
+    """A JSON-literal table entry (a ``TypedDict``) as a plain JSON object."""
+    return cast("dict[str, JsonValue]", dict(value))
+
+
+def list_audio_models() -> list[ModelEntry]:
     """Pollo's speech and music models. `options` says which inputs the UI offers."""
     return [
         {
@@ -179,27 +184,39 @@ def list_audio_models() -> list[dict[str, Any]]:
             "created": None,
             "hidden": meta.get("hidden") or None,
         }
-        for key, cls, meta in _catalogue(AUDIO_GENERATORS)
+        for key, _spec, meta in _catalogue(AUDIO_GENERATORS)
     ]
 
 
-def list_voices(page: int = 1, page_size: int = 50, **filters: str) -> dict[str, Any]:
+def list_voices(page: int = 1, page_size: int = 50, **filters: str) -> dict[str, JsonValue]:
     """Pollo's official TTS voices ({"voices": [...], "total"}). A free GET."""
     params = {"page": page, "pageSize": page_size, **{k: v for k, v in filters.items() if v}}
     try:
         resp = requests.get(
             f"{POLLO_PLATFORM_BASE}/config/voice/items",
             params=params,
-            headers={"x-api-key": keyctx.provider_key("pollo")},
+            headers={"x-api-key": keyctx.provider_key("pollo") or ""},
             timeout=POLLO_API_TIMEOUT,
         )
         resp.raise_for_status()
-        body = resp.json()
+        body = _json_object(cast("object", resp.json()))
     except (requests.RequestException, ValueError) as e:
         raise PolloError(f"Couldn't load Pollo's voice list: {e}") from e
     keep = ("voiceId", "voiceName", "sampleAudio", "language", "gender", "age", "voiceStyle", "accent", "engineCode")
-    voices = [{k: v.get(k) for k in keep} for v in body.get("data") or []]
+    voices: list[JsonValue] = [{k: v.get(k) for k in keep} for v in _json_objects(body.get("data"))]
     return {"voices": voices, "total": body.get("total", len(voices))}
+
+
+def _json_object(value: object) -> dict[str, JsonValue]:
+    """A decoded JSON body as an object (empty when it is anything else)."""
+    return cast("dict[str, JsonValue]", value) if isinstance(value, dict) else {}
+
+
+def _json_objects(value: JsonValue) -> list[Mapping[str, JsonValue]]:
+    """The objects in a decoded JSON list (anything else is empty)."""
+    if isinstance(value, Sequence) and not isinstance(value, str):
+        return [item for item in value if isinstance(item, Mapping)]
+    return []
 
 
 def submit_audio(
@@ -223,7 +240,7 @@ def submit_audio(
     return _job(generator, dict(generator.payload_attrs))
 
 
-def _generator_key(model_id: str, generators: dict) -> str:
+def _generator_key(model_id: str, generators: Mapping[str, ModelSpec]) -> str:
     if not is_configured():
         raise PolloError("No Pollo API key set — add one in Settings → Keys")
     key = model_id[len(PREFIX) :]
@@ -243,18 +260,20 @@ def _upload(path: Path, what: str = "image") -> str:
         raise PolloError(f"Couldn't upload the {what} for Pollo: {e}") from e
 
 
-def _upload_ref_item(item: dict) -> dict:
+def _upload_ref_item(item: Mapping[str, object]) -> dict[str, JsonValue]:
     """Upload one image, video, or audio reference and shape it for Pollo.
 
     The result has ``url``, ``name`` (when supplied), and ``type``. Upload
     URLs are cached and reused across retries.
     """
-    typ = item.get("type") or "image"
+    typ = str(item.get("type") or "image")
     path = item["path"]
+    if not isinstance(path, Path):
+        raise PolloError("A reference needs a file")
     url = _upload(path, "video") if typ == "video" else _upload(path, "audio") if typ == "audio" else _upload(path)
-    ref: dict[str, Any] = {"url": url, "type": typ}
-    if item.get("name"):
-        ref["name"] = item["name"]
+    ref: dict[str, JsonValue] = {"url": url, "type": typ}
+    if name := item.get("name"):
+        ref["name"] = str(name)
     return ref
 
 
@@ -262,12 +281,12 @@ def _submit_ref_video_job(
     key: str,
     *,
     prompt: str,
-    ref_items: list[dict],
+    ref_items: list[dict[str, object]],
     aspect_ratio: str | None,
     resolution: str | None,
     duration: int | None,
     generate_audio: bool | None,
-) -> dict:
+) -> dict[str, JsonValue]:
     """Submit a reference-to-video job using named image, video, or audio refs.
 
     The prompt can mention refs as ``[@name]``; the engine selects its refs
@@ -299,7 +318,7 @@ def generate_image(
     aspect_ratio: str | None = None,
     resolution: str | None = None,
     ref_paths: list[Path] | None = None,
-) -> tuple[list[tuple[bytes, str]], int | None, dict]:
+) -> tuple[list[tuple[bytes, str]], int | None, dict[str, JsonValue]]:
     """Generate images on Pollo and wait for the results.
 
     Returns image bytes and media types, credits, and the settings actually
@@ -324,8 +343,8 @@ def generate_image(
     task = _wait(_submit(generator))
     sent = _sent_params(generator)
     return (
-        [_download(u) for u in task["urls"]],
-        task["credits"],
+        [_download(u) for u in _task_urls(task)],
+        _task_credits(task),
         {"aspect_ratio": sent["aspect_ratio"], "resolution": sent["resolution"], **_upload_notice()},
     )
 
@@ -361,7 +380,7 @@ def _submit_source_video_job(
     duration: int | None,
     generate_audio: bool | None,
     mode: str | None,
-) -> dict | None:
+) -> dict[str, JsonValue] | None:
     """Submit a source-video job for a supported model family.
 
     Returns its job dict, or ``None`` when ``typ`` is not a source-video family
@@ -376,13 +395,13 @@ def _submit_source_video_job(
     if typ == "video_edit" and not (prompt or "").strip():
         raise PolloError("Editing needs an instruction prompt")
     # The source video goes to the host that takes larger files; both are URLs.
-    kw: dict[str, Any] = {
+    kw: dict[str, JsonValue] = {
         "api_key": keyctx.provider_key("pollo"),
         "prompt": prompt,
         "video_url": _upload(source_video, "video"),
     }
     if typ in _IMAGE_AND_VIDEO:  # the reference / face image rides along
-        kw.update(image_url=_upload(first_frame), mode=mode)
+        kw.update(image_url=_upload(first_frame) if first_frame else None, mode=mode)
     else:
         kw.update(image_url=None, resolution=resolution)
         if typ in _TAKES_MODE:  # resolution carries the one pick (scale / language); mode the rest
@@ -404,8 +423,8 @@ def submit_video(
     source_video: Path | None = None,
     source_audio: Path | None = None,
     mode: str | None = None,
-    ref_items: list[dict] | None = None,
-) -> dict:
+    ref_items: list[dict[str, object]] | None = None,
+) -> dict[str, JsonValue]:
     """Start a Pollo video job and return its id and sent settings.
 
     A first frame is uploaded first because Pollo accepts only URLs. Named
@@ -483,8 +502,8 @@ def estimate_cost(
     generate_audio: bool | None = None,
     n_images: int = 0,
     prompt: str = "",
-    audio: Mapping[str, object] | None = None,
-) -> dict | None:
+    audio: Mapping[str, JsonValue] | None = None,
+) -> dict[str, JsonValue] | None:
     """Return Pollo's credit estimate, or ``None`` when it cannot be priced.
 
     Estimates are free and use stand-in media URLs, so no files are uploaded.
@@ -557,15 +576,12 @@ def _sent_params(generator: PolloGenerator) -> dict[str, JsonValue]:
     resolution, the way it's picked.
     """
     attrs = generator.payload_attrs or {}
-    return cast(
-        "dict[str, JsonValue]",
-        {
-            "aspect_ratio": attrs.get("aspectRatio"),
-            "resolution": attrs.get("resolution") or attrs.get("mode"),
-            "duration": attrs.get("duration") or attrs.get("length"),
-            "generate_audio": attrs.get("generateAudio"),
-        },
-    )
+    return {
+        "aspect_ratio": attrs.get("aspectRatio"),
+        "resolution": attrs.get("resolution") or attrs.get("mode"),
+        "duration": attrs.get("duration") or attrs.get("length"),
+        "generate_audio": attrs.get("generateAudio"),
+    }
 
 
 def _ratio_for_image(path: Path, ratios: list[str]) -> str | None:
@@ -581,14 +597,14 @@ def _ratio_for_image(path: Path, ratios: list[str]) -> str | None:
     return closest_aspect_ratio(width, height, numeric)
 
 
-def get_video(job_id: str) -> dict:
+def get_video(job_id: str) -> dict[str, JsonValue]:
     """Return Pollo job status and result metadata in OpenRouter's shape.
 
     Transient poll failures raise, so the poller's error budget handles them.
     """
     task = _task_state(job_id[len(JOB_PREFIX) :])
     if task["status"] == "transient":
-        raise PolloError(task["error"])
+        raise PolloError(str(task["error"]))
     return task
 
 
@@ -599,7 +615,7 @@ def download_video(job_id: str, dest: Path, index: int = 0) -> None:
         raise PolloError(f"Pollo video isn't ready ({task['status']})")
     tmp = dest.with_suffix(dest.suffix + ".part")
     try:
-        with requests.get(task["urls"][index], stream=True, timeout=DOWNLOAD_TIMEOUT) as resp:
+        with requests.get(_task_urls(task)[index], stream=True, timeout=DOWNLOAD_TIMEOUT) as resp:
             resp.raise_for_status()
             with tmp.open("wb") as f:
                 f.writelines(resp.iter_content(chunk_size=1 << 16))
@@ -615,10 +631,10 @@ def _submit(generator: PolloGenerator) -> str:
         return _submit_logged(generator, outcome)
 
 
-def _payload(generator: PolloGenerator) -> dict[str, Any] | None:
+def _payload(generator: PolloGenerator) -> dict[str, JsonValue] | None:
     """What the generator will send (None if it refuses to build one)."""
     try:
-        return generator.get_payload()
+        return {"input": generator.get_payload()["input"]}
     except Exception:  # noqa: BLE001 — send_request reports the real problem
         return None
 
@@ -633,12 +649,16 @@ def _submit_logged(generator: PolloGenerator, outcome: request_log.LogOutcome) -
     outcome["status"] = resp.status_code
     outcome["response"] = request_log.response_of(resp)
     try:
-        body = resp.json()
+        body = _json_object(cast("object", resp.json()))
     except ValueError:
         raise PolloError(
             f"Pollo returned non-JSON (HTTP {resp.status_code}): {resp.text[:200]}", resp.status_code
         ) from None
-    task_id = (body.get("data") or {}).get("taskId") if isinstance(body.get("data"), dict) else None
+    data = body.get("data")
+    data = dict(data) if isinstance(data, Mapping) else {}
+    task_id = data.get("taskId")
+    if not isinstance(task_id, str):
+        task_id = None
     if not task_id and resp.status_code == 404 and body.get("message") == "Not found":
         raise PolloError(
             "Pollo: this model isn't available to your API key (404 Not found) — "
@@ -646,20 +666,19 @@ def _submit_logged(generator: PolloGenerator, outcome: request_log.LogOutcome) -
             404,
         )
     if not task_id:
-        issues = (body.get("data") or {}).get("issues") if isinstance(body.get("data"), dict) else None
-        detail = "; ".join(i.get("message", "") for i in issues or []) or body.get("message")
+        detail = "; ".join(str(i.get("message", "")) for i in _json_objects(data.get("issues"))) or body.get("message")
         raise PolloError(f"Pollo: {detail or f'request failed (HTTP {resp.status_code})'}", resp.status_code)
     return task_id
 
 
-def _task_state(task_id: str) -> dict:
+def _task_state(task_id: str) -> dict[str, JsonValue]:
     """Check a Pollo task's state and any result metadata.
 
     A ``transient`` status means retryable Cloudflare, network, or HTTP trouble,
     not a verdict on the generation.
     """
     try:
-        results = get_task_status(task_id, keyctx.provider_key("pollo"))
+        results = get_task_status(task_id, keyctx.provider_key("pollo") or "")
     except Exception as e:  # noqa: BLE001 — retry network/VPN hiccups
         return {"status": "transient", "error": f"Pollo: {e}"}
     status, fail_msg = results[0][0], results[0][1]
@@ -693,7 +712,19 @@ def _task_response(results: list[TaskResult]) -> dict[str, JsonValue]:
     }
 
 
-def _wait(task_id: str) -> dict:
+def _task_urls(task: Mapping[str, JsonValue]) -> list[str]:
+    """The result URLs of a completed task."""
+    urls = task.get("urls")
+    return [u for u in urls if isinstance(u, str)] if isinstance(urls, Sequence) and not isinstance(urls, str) else []
+
+
+def _task_credits(task: Mapping[str, JsonValue]) -> int | None:
+    """The credits a task cost, when Pollo reported any."""
+    credits = task.get("credits")
+    return credits if isinstance(credits, int) and not isinstance(credits, bool) else None
+
+
+def _wait(task_id: str) -> dict[str, JsonValue]:
     """Poll an image task until it's done (or fails)."""
     deadline = time.time() + POLL_TIMEOUT
     errors = 0
@@ -707,7 +738,7 @@ def _wait(task_id: str) -> dict:
             continue
         errors = 0
         if task["status"] == "failed":
-            raise PolloError(task["error"])
+            raise PolloError(str(task["error"]))
         if task["status"] == "completed":
             return task
     raise PolloError("Pollo: timed out waiting for the image")

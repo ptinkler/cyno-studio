@@ -1,6 +1,7 @@
 """Instruction snippets and groups, the per-user defaults bucket, and spaces."""
 
 from datetime import datetime
+from typing import overload
 
 from web.core.metadata._base import DBBase
 from web.core.metadata.models import ChatConversation, ChatInstruction, ChatInstructionGroup, ChatSettings, ChatSpace
@@ -28,6 +29,12 @@ class InstructionMixin(DBBase):
             for i in items:
                 session.expunge(i)
             return items
+
+    @overload
+    def save_instruction(self, instruction_id: None = None, **fields: JsonValue) -> ChatInstruction: ...
+
+    @overload
+    def save_instruction(self, instruction_id: int, **fields: JsonValue) -> ChatInstruction | None: ...
 
     def save_instruction(self, instruction_id: int | None = None, **fields: JsonValue) -> ChatInstruction | None:
         """Create (id None) or update a snippet."""
@@ -66,6 +73,12 @@ class InstructionMixin(DBBase):
     def get_instruction_group(self, group_id: int) -> ChatInstructionGroup | None:
         """Return a group by id, or ``None`` if it does not exist."""
         return self._get(ChatInstructionGroup, group_id)
+
+    @overload
+    def save_instruction_group(self, group_id: None = None, **fields: JsonValue) -> ChatInstructionGroup: ...
+
+    @overload
+    def save_instruction_group(self, group_id: int, **fields: JsonValue) -> ChatInstructionGroup | None: ...
 
     def save_instruction_group(self, group_id: int | None = None, **fields: JsonValue) -> ChatInstructionGroup | None:
         """Create (id None) or update a group."""
@@ -141,6 +154,12 @@ class InstructionMixin(DBBase):
     def get_space(self, space_id: int) -> ChatSpace | None:
         """Return a space by id, or ``None`` if it does not exist."""
         return self._get(ChatSpace, space_id)
+
+    @overload
+    def save_space(self, space_id: None = None, **fields: JsonValue) -> ChatSpace: ...
+
+    @overload
+    def save_space(self, space_id: int, **fields: JsonValue) -> ChatSpace | None: ...
 
     def save_space(self, space_id: int | None = None, **fields: JsonValue) -> ChatSpace | None:
         """Create (id None) or update a space."""

@@ -3,11 +3,16 @@
 catalogue attaches them to every model it assembles.
 """
 
+from typing import TYPE_CHECKING
+
 import pytest
 
 from web.chat import catalogue
 from web.core.metadata import current_tenant, reset_tenant, set_tenant
 from web.providers.model_tags import tags_for
+
+if TYPE_CHECKING:
+    from web.types import ModelEntry
 
 pytestmark = pytest.mark.no_tenant
 
@@ -17,13 +22,13 @@ class TestVideoTags:
 
     def test_pollo_img2vid_with_audio_and_tail(self):
         """Test that pollo img2vid with audio and tail."""
-        m = {"type": "img2vid", "generate_audio": True, "frame_images": ["first_frame", "last_frame"]}
+        m: ModelEntry = {"type": "img2vid", "generate_audio": True, "frame_images": ["first_frame", "last_frame"]}
         assert tags_for("video", m) == ["img2vid", "text2vid", "first_last", "audio"]
 
     def test_pollo_motion_models_are_not_img2vid(self):
         # the first_frame is a reference image, not "animate this image"
         """Test that pollo motion models are not img2vid."""
-        m = {"type": "motion", "frame_images": ["first_frame"]}
+        m: ModelEntry = {"type": "motion", "frame_images": ["first_frame"]}
         assert tags_for("video", m) == ["motion"]
 
     def test_pollo_ref_and_extend(self):
@@ -116,9 +121,9 @@ def test_catalogue_attaches_tags_to_every_model(monkeypatch):
     monkeypatch.setattr(catalogue, "PROVIDERS", (FakeProvider(),))
     try:
         data = catalogue.get_models(refresh=True)
-        assert data["video"][0]["tags"] == ["img2vid", "text2vid", "audio"]
-        assert data["image"][0]["tags"] == ["text2img", "image_edit"]
-        assert data["text"][0]["tags"] == ["functions"]
+        assert data.get("video", [])[0]["tags"] == ["img2vid", "text2vid", "audio"]
+        assert data.get("image", [])[0]["tags"] == ["text2img", "image_edit"]
+        assert data.get("text", [])[0]["tags"] == ["functions"]
     finally:
         # get_models() caches module-side; drop the fake data so it can't leak
         catalogue.clear_models()
@@ -148,7 +153,7 @@ def test_each_user_gets_their_own_catalogue(monkeypatch):
         for tenant, expected in (("no-key", []), ("has-key", ["fake/i"]), ("no-key", [])):
             token = set_tenant(tenant)
             try:
-                assert [m["id"] for m in catalogue.get_models()["image"]] == expected
+                assert [m["id"] for m in catalogue.get_models().get("image", [])] == expected
             finally:
                 reset_tenant(token)
         # The keyless user's empty list was cached, then served again from cache
@@ -159,8 +164,12 @@ def test_each_user_gets_their_own_catalogue(monkeypatch):
 
 def test_ref_mode_models_are_tagged_for_references_and_video_refs():
     """Test that ref mode models are tagged for references and video refs."""
-    video_ref = {"type": "img2vid", "frame_images": ["first_frame"], "ref_mode": {"types": ["image", "video"]}}
-    image_ref = {"type": "img2vid", "frame_images": ["first_frame"], "ref_mode": {"types": ["image"]}}
+    video_ref: ModelEntry = {
+        "type": "img2vid",
+        "frame_images": ["first_frame"],
+        "ref_mode": {"types": ["image", "video"]},
+    }
+    image_ref: ModelEntry = {"type": "img2vid", "frame_images": ["first_frame"], "ref_mode": {"types": ["image"]}}
     assert {"ref2vid", "video_refs"} <= set(tags_for("video", video_ref))
     tags = tags_for("video", image_ref)
     assert "ref2vid" in tags

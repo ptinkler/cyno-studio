@@ -27,10 +27,11 @@ job (one per enabled model, so it costs credits and takes time) to confirm.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import requests
 
@@ -44,13 +45,14 @@ from web.providers.pollo_models import MODEL_INFO
 
 if TYPE_CHECKING:
     from web.providers.pollo_engine.registry import PolloGenerator
+    from web.types import JsonValue
 
 TIMEOUT = 20
 
 
 def _models(family: str | None, all_video: bool) -> list[str]:
     """The video model keys to probe, in catalogue order."""
-    keys = []
+    keys: list[str] = []
     for key in VIDEO_GENERATORS:
         info = MODEL_INFO.get(key, {})
         if all_video or (family and info.get("type") == family):
@@ -65,7 +67,7 @@ def _build(key: str, api_key: str) -> PolloGenerator:
     """
     info = MODEL_INFO.get(key, {})
     cls = VIDEO_GENERATORS[key]
-    kw = {"api_key": api_key, "project": "probe", "prompt": "probe"}
+    kw: dict[str, JsonValue] = {"api_key": api_key, "project": "probe", "prompt": "probe"}
     # A reference/first image when the model takes one; a source video when it
     # reads one. Motion/recast models take both.
     if getattr(cls, "ACCEPTS_IMAGES", True):
@@ -104,13 +106,13 @@ def _probe_estimate(key: str, api_key: str) -> tuple[str, str]:
         payload = gen.get_payload()
     except Exception as e:  # noqa: BLE001 — probe reports model-specific body construction errors
         return "N/A", f"can't build a probe request: {e}"
-    url = getattr(gen, "estimate_url", None)
+    url = gen.estimate_url
     if not url:
         return "N/A", "no estimate endpoint for this model"
     try:
         resp = requests.post(
             url,
-            json=payload,
+            data=json.dumps(payload),
             headers={"x-api-key": api_key, "Content-Type": "application/json"},
             timeout=TIMEOUT,
         )
@@ -131,15 +133,26 @@ def _probe_live(key: str, api_key: str) -> tuple[str, str]:
     except Exception as e:  # noqa: BLE001 — display provider-specific probe failure
         return "ERR", str(e)[:140]
     try:
-        body = resp.json()
+        body = cast("JsonValue", resp.json())
     except ValueError:
         return _classify(resp.status_code, resp.text)
-    task_id = (body.get("data") or {}).get("taskId") if isinstance(body.get("data"), dict) else None
+    data = body.get("data") if isinstance(body, dict) else None
+    task_id = data.get("taskId") if isinstance(data, dict) else None
     if task_id:
         return "ENABLED", f"accepted, taskId={task_id} (a job was created — may cost credits)"
     # Only a real taskId or an enablement refusal is conclusive; a media-rejection
     # 400 means the enablement check wasn't reached (see _classify).
     return _classify(resp.status_code, resp.text)
+
+
+class _Args(argparse.Namespace):
+    """The parsed command line."""
+
+    key: str | None = None
+    family: str = "motion"
+    all_video: bool = False
+    live: bool = False
+    yes_bill_me: bool = False
 
 
 def main() -> int:
@@ -154,7 +167,7 @@ def main() -> int:
         action="store_true",
         help="required with --live: you accept that REAL, non-refundable jobs are created and billed",
     )
-    args = ap.parse_args()
+    args = ap.parse_args(namespace=_Args())
 
     if not args.key:
         ap.error("no API key — pass --key or set POLLO_API_KEY")
@@ -184,7 +197,7 @@ def main() -> int:
     print(f"Probing {len(keys)} models ({scope}) via {mode}\n")
     probe = _probe_live if args.live else _probe_estimate
 
-    results = []
+    results: list[tuple[str, str, str, str]] = []
     for key in keys:
         label = MODEL_INFO.get(key, {}).get("label") or key
         verdict, note = probe(key, args.key)

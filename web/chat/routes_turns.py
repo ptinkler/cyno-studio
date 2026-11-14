@@ -9,7 +9,7 @@ import queue
 import threading
 import uuid
 from collections.abc import Callable, Iterator, Mapping
-from typing import Any, cast
+from typing import cast
 
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
@@ -49,6 +49,7 @@ from web.chat.turn import Turn
 from web.chat.workers import ctx_thread, with_owner_keys
 from web.core.metadata import get_db, iso
 from web.core.metadata.models import ChatMessage
+from web.jsonutil import as_list, as_object, as_str
 from web.media_types import kind_of
 from web.providers import openrouter, pollo
 from web.types import JsonValue
@@ -81,7 +82,7 @@ def api_enhance_prompt(data: EnhancePrompt) -> dict[str, str | float]:
 
 
 @router.post("/estimate")
-def api_estimate(data: EstimateRequest) -> dict[str, Any]:
+def api_estimate(data: EstimateRequest) -> dict[str, JsonValue]:
     """Estimate a Pollo generation's credit cost for the composer.
 
     Returns a null estimate for other providers or when Pollo cannot price it.
@@ -107,7 +108,7 @@ def api_estimate(data: EstimateRequest) -> dict[str, Any]:
 
 
 @router.get("/audio/voices")
-def api_audio_voices(page: int = 1, page_size: int = 50, language: str = "", gender: str = "") -> dict[str, Any]:
+def api_audio_voices(page: int = 1, page_size: int = 50, language: str = "", gender: str = "") -> dict[str, JsonValue]:
     """Pollo's official TTS voices, for the speech models' voice picker."""
     if not pollo.is_configured():
         raise HTTPException(503, "No Pollo API key set — add one in Settings → Keys")
@@ -128,9 +129,11 @@ def api_cancel_message(message_id: int) -> dict[str, bool]:
 
 def _prompt_optional(settings: TurnSettings) -> bool:
     """Tools take a source file and no prompt (e.g. upscale the chat's latest video)."""
-    kind = settings.mode if settings.mode in ("image", "video") else None
-    model = {"image": settings.image_model, "video": settings.video_model}.get(kind)
-    return bool((model_info(kind, model) or {}).get("no_prompt")) if kind else False
+    if settings.mode == "image":
+        return bool((model_info("image", settings.image_model) or {}).get("no_prompt"))
+    if settings.mode == "video":
+        return bool((model_info("video", settings.video_model) or {}).get("no_prompt"))
+    return False
 
 
 @router.post("/conversations/{conv_id}/messages")
@@ -143,7 +146,7 @@ def api_send_message(conv_id: str, data: SendMessage) -> StreamingResponse:
         raise HTTPException(400, "Message is empty")
 
     conv_dir = conversation_dir(conv_id)
-    media = []
+    media: list[dict[str, JsonValue]] = []
     for name in data.attachments[:8]:
         if not (conv_dir / safe_filename(name)).is_file():
             raise HTTPException(400, f"Attachment not found: {name}")
@@ -208,7 +211,7 @@ def api_edit(conv_id: str, data: EditMessage) -> StreamingResponse:
         return _start_turn(conv_id, data, user_msg, parent_id=user_msg.id, lane=msg.lane)
 
 
-def _sse(event: dict[str, Any]) -> str:
+def _sse(event: dict[str, JsonValue]) -> str:
     return f"data: {json.dumps(event)}\n\n"
 
 
@@ -221,7 +224,7 @@ def _start_turn(
     assistant = get_db().add_chat_message(
         conv_id, "assistant", "", model=model, status="streaming", parent_id=parent_id, mode=settings.mode, lane=lane
     )
-    start = {
+    start: dict[str, JsonValue] = {
         "type": "start",
         "user_message": message_out(user_msg) if user_msg else None,
         "assistant_message": message_out(assistant),
@@ -233,7 +236,7 @@ def _stream_turn(
     conv_id: str,
     settings: TurnSettings,
     assistant_id: int,
-    start: dict[str, Any],
+    start: dict[str, JsonValue],
     initial_cost: float = 0.0,
     rewrite: tuple[str, str] | None = None,
     after: Callable[[], ChatMessage | None] | None = None,
@@ -246,7 +249,7 @@ def _stream_turn(
     `after` runs once the Turn has finished and saved; if it returns a message
     that goes out as a final "done", so the UI ends on its state.
     """
-    events: queue.Queue = queue.Queue()
+    events: queue.Queue[dict[str, JsonValue] | None] = queue.Queue()
     cancel = threading.Event()
     _cancel_events[assistant_id] = cancel
 
@@ -344,8 +347,12 @@ def api_reword(conv_id: str, data: RewordMessage) -> StreamingResponse:
             raise HTTPException(409, "Wait for the reply to finish first")
         remember_settings(conv, data)
         db.update_chat_message(message_id, content="", status="streaming", error=None)
-        start = {"type": "start", "user_message": None, "assistant_message": message_out(msg), "replaces": msg.id}
-        start["assistant_message"] = {**start["assistant_message"], "content": "", "status": "streaming"}
+        start: dict[str, JsonValue] = {
+            "type": "start",
+            "user_message": None,
+            "assistant_message": {**message_out(msg), "content": "", "status": "streaming"},
+            "replaces": msg.id,
+        }
         return _stream_turn(
             conv_id,
             settings,
@@ -364,7 +371,7 @@ class ShowTextVersion(BaseModel):
 
 
 @router.post("/messages/{message_id}/text-version")
-def api_show_text_version(message_id: int, data: ShowTextVersion) -> dict[str, Any]:
+def api_show_text_version(message_id: int, data: ShowTextVersion) -> dict[str, JsonValue]:
     """Switch a reply to one of its earlier (or later) wordings.
 
     The chosen words become the reply's text — what's shown and what the chat
@@ -396,8 +403,15 @@ class PinMedia(BaseModel):
     pinned: bool
 
 
+def _require_message(msg: ChatMessage | None) -> ChatMessage:
+    """The message, or 404 when it has gone."""
+    if msg is None:
+        raise HTTPException(404, "Message not found")
+    return msg
+
+
 @router.post("/messages/{message_id}/media/{media_id}/pin")
-def api_pin_media(message_id: int, media_id: str, data: PinMedia) -> dict[str, Any]:
+def api_pin_media(message_id: int, media_id: str, data: PinMedia) -> dict[str, JsonValue]:
     """Pin an image as a reference: it's sent with every image generated.
 
     later on this branch of the chat, until unpinned.
@@ -407,7 +421,7 @@ def api_pin_media(message_id: int, media_id: str, data: PinMedia) -> dict[str, A
     item = find_media(msg, media_id)
     if not item or item["kind"] != "image" or not item.get("file") or item.get("status", "done") != "done":
         raise HTTPException(404, "Image not found")
-    return message_out(db.update_chat_media_item(message_id, media_id, pinned=data.pinned))
+    return message_out(_require_message(db.update_chat_media_item(message_id, media_id, pinned=data.pinned)))
 
 
 class FavouriteMedia(BaseModel):
@@ -417,7 +431,7 @@ class FavouriteMedia(BaseModel):
 
 
 @router.post("/messages/{message_id}/media/{media_id}/favourite")
-def api_favourite_media(message_id: int, media_id: str, data: FavouriteMedia) -> dict[str, Any]:
+def api_favourite_media(message_id: int, media_id: str, data: FavouriteMedia) -> dict[str, JsonValue]:
     """Star/un-star a generation.
 
     Unlike pinning (which re-sends an image as a
@@ -430,7 +444,7 @@ def api_favourite_media(message_id: int, media_id: str, data: FavouriteMedia) ->
     item = find_media(msg, media_id)
     if not item or not item.get("file") or item.get("status", "done") != "done":
         raise HTTPException(404, "Generation not found")
-    return message_out(db.update_chat_media_item(message_id, media_id, favourite=data.favourite))
+    return message_out(_require_message(db.update_chat_media_item(message_id, media_id, favourite=data.favourite)))
 
 
 class RegenerateMedia(BaseModel):
@@ -482,7 +496,7 @@ def _as_version(item: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
 
 
 @router.post("/messages/{message_id}/media/{media_id}/regenerate")
-def api_regenerate_media(message_id: int, media_id: str, data: RegenerateMedia) -> dict[str, Any]:
+def api_regenerate_media(message_id: int, media_id: str, data: RegenerateMedia) -> dict[str, JsonValue]:
     """Retry or re-roll a generated image or video.
 
     The retry runs in the background while the UI polls the message.
@@ -491,9 +505,28 @@ def api_regenerate_media(message_id: int, media_id: str, data: RegenerateMedia) 
         return _regenerate_media(message_id, media_id, data)
 
 
-def _regenerate_media(message_id: int, media_id: str, data: RegenerateMedia) -> dict[str, Any]:
-    db = get_db()
-    msg = db.get_chat_message(message_id)
+_RESULT_FIELDS = ("file", "cost", "credits", "error", "job_id", "request", "response")
+# What a re-rolled copy of a finished item must not inherit from it
+_NOT_REROLLED = (
+    "file",
+    "cost",
+    "credits",
+    "error",
+    "job_id",
+    "favourite",
+    "pinned",
+    "log",
+    "versions",
+    "version_shown",
+    "spent",
+)
+
+
+def _regeneration_inputs(
+    message_id: int, media_id: str, data: RegenerateMedia
+) -> tuple[dict[str, JsonValue], str, str, dict[str, JsonValue]]:
+    """Validate a regenerate request; the item, model, prompt and params to run it with."""
+    msg = get_db().get_chat_message(message_id)
     if not msg:
         raise HTTPException(404, "Message not found")
     if msg.status == "streaming":
@@ -503,62 +536,31 @@ def _regenerate_media(message_id: int, media_id: str, data: RegenerateMedia) -> 
         raise HTTPException(404, "Media not found")
     if item.get("status") not in ("error", "done"):
         raise HTTPException(400, "Wait for the generation to finish first")
-    prompt = (data.prompt or "").strip() or item.get("prompt")
+    prompt = (data.prompt or "").strip() or as_str(item.get("prompt"))
     if not prompt:
         raise HTTPException(400, "This item has no stored prompt to retry")
-    if data.edit and not item.get("file"):
+    file = as_str(item.get("file"))
+    if data.edit and not file:
         raise HTTPException(400, "There is no picture here to edit yet")
-    model = data.model or item.get("model")
-    params = dict(item.get("params") or {})
-    if data.edit:
+    model = data.model or as_str(item.get("model"))
+    if not model:
+        raise HTTPException(400, "This item has no stored model to retry")
+    params = as_object(item.get("params"))
+    if data.edit and file:
         # The picture being edited leads the reference list; the references it
         # was itself made from are dropped, so the model edits this one image.
-        params["refs"] = [item["file"], *(r for r in params.get("refs") or [] if str(r).startswith("char:"))]
+        params["refs"] = [file, *(r for r in as_list(params.get("refs")) if str(r).startswith("char:"))]
+    return item, model, prompt, params
+
+
+def _regenerate_media(message_id: int, media_id: str, data: RegenerateMedia) -> dict[str, JsonValue]:
+    db = get_db()
+    item, model, prompt, params = _regeneration_inputs(message_id, media_id, data)
     if data.replace:
-        # Keep what it looked like before, then clear the result fields so the
-        # worker fills them in on the same item. A failed attempt has no
-        # picture to keep, so retrying one adds no version to flip back to.
-        # The new picture goes last, whichever one was showing.
-        versions, _ = _all_versions(item)
-        spent = _spent(item)
-        blank = dict.fromkeys(("file", "cost", "credits", "error", "job_id", "request", "response"))
-        item = {**item, **blank, "status": "pending", "model": model, "prompt": prompt, "params": params}
-        item.update(versions=versions, version_shown=len(versions), spent=spent)
-        msg = db.update_chat_media_item(
-            message_id,
-            media_id,
-            **{
-                k: item[k]
-                for k in (*blank, "status", "model", "prompt", "params", "versions", "version_shown", "spent")
-            },
-            moderated=False,
-        )
+        item, msg = _replace_item(message_id, media_id, item, model, prompt, params)
     elif item["status"] == "done":
-        # Re-roll just this image/video: the original stays, a new one joins the reply
-        gone = (
-            "file",
-            "cost",
-            "credits",
-            "error",
-            "job_id",
-            "favourite",
-            "pinned",
-            "log",
-            "versions",
-            "version_shown",
-            "spent",
-        )
-        item = {k: v for k, v in item.items() if k not in gone}
-        item = {
-            **item,
-            "id": uuid.uuid4().hex[:8],
-            "status": "pending",
-            "model": model,
-            "prompt": prompt,
-            "params": params,
-        }
-        media_id = item["id"]
-        msg = db.append_chat_media_item(message_id, item)
+        item, msg = _reroll_item(message_id, item, model, prompt, params)
+        media_id = str(item["id"])
     else:
         item = {**item, "prompt": prompt, "params": params, "model": model}
         msg = db.update_chat_media_item(
@@ -572,6 +574,8 @@ def _regenerate_media(message_id: int, media_id: str, data: RegenerateMedia) -> 
             prompt=prompt,
             params=params,
         )
+    if msg is None:
+        raise HTTPException(404, "Message not found")
     threading.Thread(
         target=_regenerate_worker,
         args=(msg.conversation_id, message_id, dict(item), model),
@@ -579,6 +583,62 @@ def _regenerate_media(message_id: int, media_id: str, data: RegenerateMedia) -> 
         name=f"chat-regen-{media_id}",
     ).start()
     return message_out(msg)
+
+
+def _replace_item(
+    message_id: int,
+    media_id: str,
+    item: Mapping[str, JsonValue],
+    model: str,
+    prompt: str,
+    params: dict[str, JsonValue],
+) -> tuple[dict[str, JsonValue], ChatMessage | None]:
+    """Keep what the card looked like before, then clear its result fields.
+
+    The worker fills them in on the same item. A failed attempt has no
+    picture to keep, so retrying one adds no version to flip back to.
+    The new picture goes last, whichever one was showing.
+    """
+    versions, _ = _all_versions(item)
+    spent = _spent(item)
+    blank: dict[str, JsonValue] = dict.fromkeys(_RESULT_FIELDS)
+    fresh: dict[str, JsonValue] = {
+        **item,
+        **blank,
+        "status": "pending",
+        "model": model,
+        "prompt": prompt,
+        "params": params,
+        "versions": versions,
+        "version_shown": len(versions),
+        "spent": spent,
+    }
+    msg = get_db().update_chat_media_item(
+        message_id,
+        media_id,
+        **{
+            k: fresh[k]
+            for k in (*_RESULT_FIELDS, "status", "model", "prompt", "params", "versions", "version_shown", "spent")
+        },
+        moderated=False,
+    )
+    return fresh, msg
+
+
+def _reroll_item(
+    message_id: int, item: Mapping[str, JsonValue], model: str, prompt: str, params: dict[str, JsonValue]
+) -> tuple[dict[str, JsonValue], ChatMessage | None]:
+    """Re-roll just this image/video: the original stays, a new one joins the reply."""
+    kept = {k: v for k, v in item.items() if k not in _NOT_REROLLED}
+    fresh: dict[str, JsonValue] = {
+        **kept,
+        "id": uuid.uuid4().hex[:8],
+        "status": "pending",
+        "model": model,
+        "prompt": prompt,
+        "params": params,
+    }
+    return fresh, get_db().append_chat_media_item(message_id, fresh)
 
 
 class ShowMediaVersion(BaseModel):
@@ -636,7 +696,7 @@ class ActiveQuery(BaseModel):
     known: list[int] = []
 
 
-def _gen_descriptor(msg: ChatMessage, item: dict[str, Any], title: str) -> dict[str, Any]:
+def _gen_descriptor(msg: ChatMessage, item: dict[str, JsonValue], title: str) -> dict[str, JsonValue]:
     return {
         "media_id": item["id"],
         "message_id": msg.id,
@@ -654,26 +714,27 @@ def _gen_descriptor(msg: ChatMessage, item: dict[str, Any], title: str) -> dict[
 
 
 @router.post("/generations/active")
-def api_active_generations(data: ActiveQuery) -> dict[str, list[dict[str, Any]]]:
+def api_active_generations(data: ActiveQuery) -> dict[str, list[dict[str, JsonValue]]]:
     """List pending generations and the final states of tracked messages.
 
     Results cover all of the signed-in user's conversations. `known` IDs let
     the client resolve completions that have left the pending set.
     """
     db = get_db()
-    msgs: dict[int, object] = {m.id: m for m in db.get_chat_messages_with_pending_media()}
+    msgs: dict[int, ChatMessage] = {m.id: m for m in db.get_chat_messages_with_pending_media()}
     for m in db.get_chat_messages_by_ids([i for i in data.known if i not in msgs]):
         msgs.setdefault(m.id, m)
     titles: dict[str, str] = {}
-    items: list[dict] = []
+    items: list[dict[str, JsonValue]] = []
     seen: set[str] = set()
     for m in msgs.values():
         for item in m.media:
             if item.get("source") != "generated" or item.get("kind") not in ("image", "video", "audio"):
                 continue
-            if item["id"] in seen:
+            item_id = as_str(item.get("id"))
+            if item_id is None or item_id in seen:
                 continue
-            seen.add(item["id"])
+            seen.add(item_id)
             cid = m.conversation_id
             if cid not in titles:
                 conv = db.get_conversation(cid)
