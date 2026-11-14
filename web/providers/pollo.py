@@ -210,6 +210,7 @@ def submit_audio(
     Returns the job id and settings actually sent, like ``submit_video``.
     """
     key = _generator_key(model_id, AUDIO_GENERATORS)
+    image_hosts.take_upload_notes()  # start clean: notes describe this submit only
     if MODEL_INFO.get(key, {}).get("audio_input"):
         if not source_audio:
             raise PolloError("Voice cloning needs a reference clip — upload an audio file")
@@ -306,6 +307,7 @@ def generate_image(
     """
     generators = IMAGE_GENERATORS
     key = _generator_key(model_id, generators)
+    image_hosts.take_upload_notes()  # start clean: notes describe this submit only
     if aspect_ratio not in generators[key].VALID_RATIOS:
         aspect_ratio = None  # the generator falls back to 1:1
     images = [_upload(p) for p in ref_paths or []]
@@ -324,7 +326,7 @@ def generate_image(
     return (
         [_download(u) for u in task["urls"]],
         task["credits"],
-        {"aspect_ratio": sent["aspect_ratio"], "resolution": sent["resolution"]},
+        {"aspect_ratio": sent["aspect_ratio"], "resolution": sent["resolution"], **_upload_notice()},
     )
 
 
@@ -410,6 +412,7 @@ def submit_video(
     ``ref_items`` route reference-mode models to their refs branch instead.
     """
     key = _generator_key(model_id, VIDEO_GENERATORS)
+    image_hosts.take_upload_notes()  # start clean: notes describe this submit only
     typ = MODEL_INFO.get(key, {}).get("type")
     if ref_items and MODEL_INFO.get(key, {}).get("ref_mode"):
         return _submit_ref_video_job(
@@ -533,7 +536,16 @@ def _job(generator: PolloGenerator, params: dict[str, JsonValue] | None = None) 
 
     ``params`` overrides the video/image view of them (audio reports its own).
     """
-    return {"id": JOB_PREFIX + _submit(generator), "params": params or _sent_params(generator)}
+    return {
+        "id": JOB_PREFIX + _submit(generator),
+        "params": {**(params or _sent_params(generator)), **_upload_notice()},
+    }
+
+
+def _upload_notice() -> dict[str, JsonValue]:
+    """``upload_notice`` for the media card when a backup upload host was used."""
+    notes = image_hosts.take_upload_notes()
+    return {"upload_notice": "; ".join(notes)} if notes else {}
 
 
 def _sent_params(generator: PolloGenerator) -> dict[str, JsonValue]:

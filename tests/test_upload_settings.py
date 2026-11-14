@@ -5,6 +5,7 @@ the signed self-host serving route.
 
 import time
 import types
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,6 +13,25 @@ from fastapi.testclient import TestClient
 import web.api as api_mod
 from web import image_hosts, public_media, upload_settings
 from web.core import config
+from web.image_hosts import _UploadPrefs  # pyright: ignore[reportPrivateUsage]
+
+
+def _same_page(page: str) -> str:
+    """Stand in for the tmpfiles page lookup: hand the stored URL straight back."""
+    return page
+
+
+def _no_upload_check(host: str, url: str, filepath: Path) -> str:
+    """Skip deriving and checking the served link; return the stored URL."""
+    return url
+
+
+def _no_verify(host: str, url: str, filepath: Path) -> None:
+    """Skip the served-file check."""
+
+
+def _prefs(primary: str, backup: str | None, expiry_minutes: int = 60) -> _UploadPrefs:
+    return {"primary": primary, "backup": backup, "expiry_minutes": expiry_minutes, "selfhost_base": ""}
 
 
 def _user(upload_prefs_json=None):
@@ -59,12 +79,13 @@ class TestPrefsResolution:
 
 
 @pytest.fixture
-def _no_url_check(monkeypatch):
+def _no_url_check(monkeypatch: pytest.MonkeyPatch) -> None:
     """Dispatch/cache tests stub the hosts themselves, so there's no real URL.
 
     to fetch — the served-file check is exercised in TestServedCheck.
     """
-    monkeypatch.setattr(image_hosts, "_verify_served", lambda host, url, filepath: None)
+    monkeypatch.setattr(image_hosts, "_verify_served", _no_verify)
+    monkeypatch.setattr(image_hosts, "_tmpfiles_direct_url", _same_page)
 
 
 @pytest.mark.usefixtures("_no_url_check")
@@ -155,11 +176,132 @@ class TestUploadCache:
         assert len(calls) == 2
 
 
+class TestCacheLifetimeAndRecheck:
+    """Retries reuse the upload but must never hand Pollo a dead link."""
+
+    def test_tmpfiles_cached_for_its_fixed_hour_not_the_requested_span(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that tmpfiles is cached for 60 minutes even when 24h is requested."""
+        image_hosts._url_cache.clear()  # pyright: ignore[reportPrivateUsage]
+        monkeypatch.setattr(image_hosts, "_served_url", _no_upload_check)
+        f = tmp_path / "clip.mp4"
+        f.write_bytes(b"v")
+
+        def upload(p: Path, e: int = 60) -> str:
+            return "https://tmpfiles.org/abc/x.mp4"
+
+        monkeypatch.setattr(image_hosts, "_upload_to_tmpfiles", upload)
+        image_hosts.upload_file(f, _prefs("tmpfiles", None, 1440))
+        ((_, good_until),) = image_hosts._url_cache.values()  # pyright: ignore[reportPrivateUsage]
+        assert good_until <= time.time() + 60 * 60
+
+    def test_tmpfiles_retry_reuses_upload_with_a_fresh_download_link(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The dl/ link is signed for ~5 min: each hand-out derives a new one, without re-uploading."""
+        image_hosts._url_cache.clear()  # pyright: ignore[reportPrivateUsage]
+        monkeypatch.setattr(image_hosts, "_verify_served", _no_verify)
+        f = tmp_path / "clip.mp4"
+        f.write_bytes(b"v")
+        uploads: list[Path] = []
+        pages: list[str] = []
+
+        def upload(p: Path, e: int = 60) -> str:
+            uploads.append(p)
+            return "https://tmpfiles.org/abc/x.mp4"
+
+        def direct(page: str) -> str:
+            pages.append(page)
+            return f"https://tmpfiles.org/dl/{len(pages)}.sig/abc/x.mp4"
+
+        monkeypatch.setattr(image_hosts, "_upload_to_tmpfiles", upload)
+        monkeypatch.setattr(image_hosts, "_tmpfiles_direct_url", direct)
+        prefs = _prefs("tmpfiles", None)
+        assert image_hosts.upload_file(f, prefs) == "https://tmpfiles.org/dl/1.sig/abc/x.mp4"
+        assert image_hosts.upload_file(f, prefs) == "https://tmpfiles.org/dl/2.sig/abc/x.mp4"
+        assert len(uploads) == 1  # uploaded once
+        assert pages == ["https://tmpfiles.org/abc/x.mp4"] * 2  # the stable page is what's cached
+
+    def test_cached_upload_that_stopped_serving_is_reuploaded(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that a cached upload failing the served check triggers a fresh upload."""
+        image_hosts._url_cache.clear()  # pyright: ignore[reportPrivateUsage]
+        f = tmp_path / "clip.mp4"
+        f.write_bytes(b"v")
+        calls: list[Path] = []
+        dead: set[str] = set()
+
+        def upload(p: Path, e: int = 60) -> str:
+            calls.append(p)
+            return f"https://litter/{len(calls)}.mp4"
+
+        def check(host: str, url: str, filepath: Path) -> None:
+            if url in dead:
+                raise ValueError("hosted file answered HTTP 404")  # noqa: TRY003
+
+        monkeypatch.setattr(image_hosts, "_upload_to_litterbox", upload)
+        monkeypatch.setattr(image_hosts, "_verify_served", check)
+        prefs = _prefs("litterbox", None)
+        assert image_hosts.upload_file(f, prefs) == "https://litter/1.mp4"
+        assert image_hosts.upload_file(f, prefs) == "https://litter/1.mp4"  # still live: reused
+        dead.add("https://litter/1.mp4")
+        assert image_hosts.upload_file(f, prefs) == "https://litter/2.mp4"
+        assert len(calls) == 2
+
+
+class TestFallbackNotice:
+    """Falling back to the backup host is reported, with the primary's error."""
+
+    def test_fallback_is_noted_with_reason(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that a backup-host upload leaves a note naming the primary's failure."""
+        image_hosts._url_cache.clear()  # pyright: ignore[reportPrivateUsage]
+        image_hosts.take_upload_notes()
+        monkeypatch.setattr(image_hosts, "_served_url", _no_upload_check)
+        f = tmp_path / "clip.mp4"
+        f.write_bytes(b"v")
+
+        def boom(p: Path, e: int = 60) -> str:
+            raise ValueError("Litterbox upload timed out")  # noqa: TRY003
+
+        def upload(p: Path, e: int = 60) -> str:
+            return "https://tmpfiles.org/abc/x.mp4"
+
+        monkeypatch.setattr(image_hosts, "_upload_to_litterbox", boom)
+        monkeypatch.setattr(image_hosts, "_upload_to_tmpfiles", upload)
+        image_hosts.upload_file(f, _prefs("litterbox", "tmpfiles"))
+        (note,) = image_hosts.take_upload_notes()
+        assert "tmpfiles.org" in note
+        assert "Litterbox upload timed out" in note
+        assert image_hosts.take_upload_notes() == []  # taken once
+
+    def test_primary_success_leaves_no_note(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that using the primary host leaves no note."""
+        image_hosts._url_cache.clear()  # pyright: ignore[reportPrivateUsage]
+        image_hosts.take_upload_notes()
+        monkeypatch.setattr(image_hosts, "_served_url", _no_upload_check)
+        f = tmp_path / "clip.mp4"
+        f.write_bytes(b"v")
+
+        def upload(p: Path, e: int = 60) -> str:
+            return "https://litter/x.mp4"
+
+        monkeypatch.setattr(image_hosts, "_upload_to_litterbox", upload)
+        image_hosts.upload_file(f, _prefs("litterbox", "tmpfiles"))
+        assert image_hosts.take_upload_notes() == []
+
+
 class TestServedCheck:
     """A host can take the upload and still not serve the file to a plain.
 
     client; the provider would then be charged for fetching a web page.
     """
+
+    @pytest.fixture(autouse=True)
+    def _stub_tmpfiles_page(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The tmpfiles page lookup is its own request; these tests cover only the served check."""
+        monkeypatch.setattr(image_hosts, "_tmpfiles_direct_url", _same_page)
 
     def _resp(self, status=200, content_type="video/mp4"):
         """Document the  resp test helper."""

@@ -445,6 +445,10 @@
   text-overflow: ellipsis;
 }
 
+.caption-warn {
+  color: var(--yellow);
+  cursor: help;
+}
 .caption-refs {
   cursor: default;
 }

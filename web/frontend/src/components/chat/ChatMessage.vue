@@ -577,6 +577,8 @@ const requestItem = ref(null)
                     @mouseleave="refsPeek = null"
                     >🔗 {{ refsLabel(item.params) }}</span
                   ></template
+                ><template v-if="item.params?.upload_notice">
+                  · <span class="caption-warn" :title="item.params.upload_notice">⚠ backup upload host</span></template
                 >
               </span>
               <button

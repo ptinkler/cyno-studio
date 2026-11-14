@@ -9,7 +9,7 @@ import threading
 import time
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TypedDict
+from typing import TypedDict, cast
 
 import requests
 from bs4 import BeautifulSoup
@@ -42,6 +42,8 @@ _url_cache_lock = threading.Lock()
 _CACHE_MARGIN_FRAC = 0.1
 _CACHE_MARGIN_MAX_S = 300
 _URL_CACHE_MAX = 256  # bound the dict; prune expired first, then oldest
+# Hosts that ignore the requested span and keep files for a fixed time (minutes).
+_FIXED_RETENTION_MIN = {"tmpfiles": 60}
 
 
 class _UploadPrefs(TypedDict):
@@ -75,6 +77,13 @@ def _cached_url(key: tuple[str, int, int, str, int] | None) -> str | None:
     return None
 
 
+def _drop_url(key: tuple[str, int, int, str, int] | None) -> None:
+    if key is None:
+        return
+    with _url_cache_lock:
+        _url_cache.pop(key, None)
+
+
 def _store_url(key: tuple[str, int, int, str, int] | None, url: str, expiry_minutes: int) -> None:
     if key is None:
         return
@@ -95,30 +104,78 @@ def upload_file(filepath: Path, prefs: _UploadPrefs | None = None) -> str:
     Try the primary host before the backup. If omitted, ``prefs`` uses the
     current user's resolved preferences; a live cached URL is reused.
     """
-    if prefs is None:
-        prefs = current_upload_prefs()
-    expiry = prefs.get("expiry_minutes", 60)
-    order = [prefs["primary"]]
-    if prefs.get("backup") and prefs["backup"] != prefs["primary"]:
-        order.append(prefs["backup"])
+    resolved = prefs if prefs is not None else cast("_UploadPrefs", current_upload_prefs())
+    expiry = resolved.get("expiry_minutes", 60)
+    order: list[str] = [resolved["primary"]]
+    backup = resolved.get("backup")
+    if backup and backup != resolved["primary"]:
+        order.append(backup)
     errors: list[str] = []
     for host in order:
         key = _cache_key(filepath, host, expiry)
         cached = _cached_url(key)
         if cached:
-            log.info("%s: reused still-live URL, no re-upload: %s", host, cached)
-            return cached
+            # The file is reused, never re-uploaded while it lives — but the
+            # link handed out is re-derived (tmpfiles' download links die after
+            # ~5 minutes) and re-checked, since Pollo charges for a job whose
+            # source URL it can't fetch.
+            try:
+                url = _served_url(host, cached, filepath)
+            except (ValueError, requests.RequestException) as exc:
+                log.warning("%s: cached upload no longer served (%s), re-uploading", host, exc)
+                _drop_url(key)
+            else:
+                log.info("%s: reused still-live upload, no re-upload: %s", host, url)
+                _note_fallback(order, host, errors)
+                return url
         try:
-            url = _dispatch(host, filepath, prefs)
-            _verify_served(host, url, filepath)
-            _store_url(key, url, expiry)
+            stored = _dispatch(host, filepath, resolved)
+            url = _served_url(host, stored, filepath)
+            _store_url(key, stored, min(expiry, _FIXED_RETENTION_MIN.get(host, expiry)))
             log.info("%s: uploaded %s", host, url)
-        except ValueError as exc:
+        except (ValueError, requests.RequestException) as exc:
             log.warning("%s failed (%s), trying the next host", host, exc)
-            errors.append(f"{host}: {exc}")
+            errors.append(f"{_HOST_LABEL.get(host, host)}: {exc}")
         else:
+            _note_fallback(order, host, errors)
             return url
     raise ValueError("All upload hosts failed — " + "; ".join(errors))
+
+
+_HOST_LABEL = {"litterbox": "Litterbox", "tmpfiles": "tmpfiles.org", "selfhost": "self-host"}
+# Fallbacks during the current submit, so the provider can show the user that
+# (and why) the backup host was used. Per thread: each chat turn runs on its own.
+_notes = threading.local()
+
+
+def take_upload_notes() -> list[str]:
+    """Return and clear this thread's upload notes (backup-host fallbacks)."""
+    notes = getattr(_notes, "items", [])
+    _notes.items = []
+    return notes
+
+
+def _note_fallback(order: list[str], used: str, errors: list[str]) -> None:
+    if used == order[0] or not errors:
+        return
+    note = f"Used backup host {_HOST_LABEL.get(used, used)} — " + "; ".join(errors)
+    log.warning("%s", note)
+    items = getattr(_notes, "items", [])
+    if note not in items:
+        items.append(note)
+    _notes.items = items
+
+
+def _served_url(host: str, stored: str, filepath: Path) -> str:
+    """Turn a stored upload URL into a link to hand out now, and check it's served.
+
+    tmpfiles stores its stable file-page URL; its ``dl/`` link is signed and
+    expires about 5 minutes after the page is fetched, so a fresh one is
+    derived each time.
+    """
+    url = _tmpfiles_direct_url(stored) if host == "tmpfiles" else stored
+    _verify_served(host, url, filepath)
+    return url
 
 
 # A host can accept the upload and still not serve the file to a plain HTTP
@@ -222,16 +279,17 @@ def _upload_to_tmpfiles(filepath: Path, expiry_minutes: int = 60) -> str:
     url = upload_data.get("url") if isinstance(upload_data, Mapping) else None
     if not isinstance(url, str):
         raise TypeError("tmpfiles.org upload response has no URL")  # noqa: TRY003
-    try:
-        return _tmpfiles_direct_url(url)
-    except requests.RequestException as exc:
-        raise ValueError(f"tmpfiles.org upload failed — {exc}") from exc  # noqa: TRY003
+    # The stable file page, not the dl/ link: that one expires in ~5 minutes
+    # (see _served_url, which derives a fresh one each time it's handed out).
+    return url
 
 
 def _tmpfiles_direct_url(page_url: str) -> str:
     """Extract tmpfiles.org's direct-download URL from the file page.
 
     The upload API omits the ``{timestamp}.{hash}`` segment required by ``dl/``.
+    That segment is a signed expiry ~5 minutes after the page is fetched, so the
+    link must be derived just before it's handed to a provider, never cached.
     """
     page = requests.get(page_url, timeout=(8, 30))
     page.raise_for_status()
