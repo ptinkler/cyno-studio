@@ -445,6 +445,10 @@
   text-overflow: ellipsis;
 }
 
+.caption-warn {
+  color: var(--yellow);
+  cursor: help;
+}
 .caption-refs {
   cursor: default;
 }
@@ -752,4 +756,17 @@
 .ver-nav button:disabled {
   opacity: 0.35;
   cursor: default;
+}
+
+/* ‹ text 2/3 › — the reply's wordings, apart from the pictures' own versions */
+.text-ver {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 0 6px;
+  font-size: 11px;
+  color: var(--text2);
+}
+.text-box {
+  margin: 4px 0 8px;
 }
