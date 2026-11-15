@@ -12,7 +12,7 @@ import httpx
 from web.core.cache import MISS, TTLCache
 from web.jsonutil import as_object, as_objects, as_str, body_of
 from web.providers.venice import client
-from web.providers.venice_catalogue import (
+from web.providers.venice.catalogue import (
     PREFIX,
     by_price,
     edit_model_for,
@@ -26,8 +26,8 @@ from web.providers.venice_catalogue import (
     video_entry,
     video_family,
 )
-from web.providers.venice_errors import UnknownModelError, VeniceError
-from web.providers.venice_types import (
+from web.providers.venice.errors import UnknownModelError, VeniceError
+from web.providers.venice.types import (
     Catalogue,
     Entry,
     ImageEntry,

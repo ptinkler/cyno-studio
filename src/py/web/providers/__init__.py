@@ -10,7 +10,7 @@ a model id to the module that owns it (OpenRouter is the fallback).
 from collections.abc import Iterator
 from typing import Protocol, cast
 
-from web.providers import openrouter, pollo, pollo_models, venice
+from web.providers import openrouter, pollo, venice
 from web.providers.specs import ImageRequest, StreamOptions, VideoRequest
 from web.types import ChatChunk, JsonValue, ModelEntry, VideoJob
 
@@ -116,4 +116,4 @@ def submit_video(req: VideoRequest) -> VideoJob:
 
 
 # Re-exported: importing the package registers these submodules' routes/providers.
-__all__ = ["ImageRequest", "StreamOptions", "VideoRequest", "openrouter", "pollo", "pollo_models", "venice"]
+__all__ = ["ImageRequest", "StreamOptions", "VideoRequest", "openrouter", "pollo", "venice"]

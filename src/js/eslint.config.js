@@ -23,6 +23,7 @@ export default [
       'no-console': ['error', { allow: ['warn', 'error'] }],
       'vue/no-undef-components': ['error', { ignorePatterns: ['^router-', '^RouterView$', '^RouterLink$'] }],
       'vue/no-unused-refs': 'error',
+      'vue/define-macros-order': ['error', { order: ['defineProps', 'defineEmits', 'defineModel'] }],
       // Stop the big components and composables regrowing: split before they pass this
       'max-lines': ['error', { max: 600, skipBlankLines: true, skipComments: true }],
     },

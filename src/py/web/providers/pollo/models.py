@@ -1,7 +1,7 @@
 """Labels, types, and options supported by Pollo models.
 
 Lengths, ratios, and resolutions live with the model endpoints in
-``web/providers/pollo_engine/``, the single source for those values.
+``web/providers/pollo/engine/``, the single source for those values.
 """
 
 from typing import TypedDict

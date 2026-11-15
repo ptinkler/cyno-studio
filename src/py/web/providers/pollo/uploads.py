@@ -3,7 +3,7 @@
 from collections.abc import Mapping
 from pathlib import Path
 
-from web.providers.pollo_errors import ReferenceFileRequiredError, UploadFailedError
+from web.providers.pollo.errors import ReferenceFileRequiredError, UploadFailedError
 from web.types import JsonValue
 from web.uploads import hosts as image_hosts
 

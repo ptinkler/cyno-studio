@@ -9,10 +9,10 @@ import httpx
 from web.jsonutil import as_list, as_object, body_of
 from web.providers.openrouter import IMAGE_TIMEOUT
 from web.providers.venice import client, models
-from web.providers.venice_catalogue import image_price
-from web.providers.venice_errors import ContentViolationError, EditOnlyModelError, NoImageReturnedError
-from web.providers.venice_types import ImageSettings, ImageTarget
-from web.providers.venice_video import data_url, snap
+from web.providers.venice.catalogue import image_price
+from web.providers.venice.errors import ContentViolationError, EditOnlyModelError, NoImageReturnedError
+from web.providers.venice.types import ImageSettings, ImageTarget
+from web.providers.venice.video import data_url, snap
 
 if TYPE_CHECKING:
     from web.types import JsonValue

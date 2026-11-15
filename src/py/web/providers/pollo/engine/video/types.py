@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, NotRequired, Protocol, TypedDict
 
 if TYPE_CHECKING:
-    from web.providers.pollo_engine._shared import Payload
+    from web.providers.pollo.engine._shared import Payload
     from web.types import JsonValue
 
 

@@ -249,6 +249,7 @@ export function useStudio({ models, settings, showToast }) {
     refreshBalances()
   }
   // "Edit this image" / "animate this image": attach it and switch to that mode
+  /** @param {{ file?: string, mode?: string, conversation_id?: string }} [pick] */
   function useImage({ file, mode: target, conversation_id: fromConv } = {}) {
     if (file && !addChatImage(file, fromConv)) return
     if (target) mode.value = target

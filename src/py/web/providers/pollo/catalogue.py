@@ -7,10 +7,10 @@ import requests
 from web.auth import keyctx
 from web.core.config import POLLO_API_TIMEOUT, POLLO_PLATFORM_BASE
 from web.jsonutil import as_object, as_objects, body_of
-from web.providers.pollo_engine import AUDIO_GENERATORS, IMAGE_GENERATORS, VIDEO_GENERATORS
-from web.providers.pollo_engine.registry import ModelSpec
-from web.providers.pollo_errors import ApiKeyMissingError, UnknownModelError, VoiceListError
-from web.providers.pollo_models import MODEL_INFO, ModelInfo
+from web.providers.pollo.engine import AUDIO_GENERATORS, IMAGE_GENERATORS, VIDEO_GENERATORS
+from web.providers.pollo.engine.registry import ModelSpec
+from web.providers.pollo.errors import ApiKeyMissingError, UnknownModelError, VoiceListError
+from web.providers.pollo.models import MODEL_INFO, ModelInfo
 from web.types import JsonValue, ModelEntry
 
 PREFIX = "pollo/"

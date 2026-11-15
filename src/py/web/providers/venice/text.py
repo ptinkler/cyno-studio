@@ -12,8 +12,8 @@ from web.jsonutil import as_number, as_object
 from web.providers.openrouter import CHAT_TIMEOUT
 from web.providers.specs import StreamOptions
 from web.providers.venice import client, models
-from web.providers.venice_catalogue import PREFIX, usd_or_none
-from web.providers.venice_errors import StreamDroppedError, VeniceError
+from web.providers.venice.catalogue import PREFIX, usd_or_none
+from web.providers.venice.errors import StreamDroppedError, VeniceError
 from web.types import ChatChunk, JsonValue
 
 log = logging.getLogger(__name__)

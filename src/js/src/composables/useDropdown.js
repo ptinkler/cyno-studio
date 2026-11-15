@@ -4,6 +4,7 @@ import { nextTick, onBeforeUnmount, ref } from 'vue'
 // the element holding both the button and the pop-up) and on unmount.
 // `onOpen` / `onClose` run as it opens / closes; `focus` (a template ref) is
 // focused once it's open.
+/** @param {{ onOpen?: () => void, onClose?: () => void, focus?: import('vue').Ref<HTMLElement | null> }} [hooks] */
 export function useDropdown({ onOpen, onClose, focus } = {}) {
   const open = ref(false)
   const root = ref(null)

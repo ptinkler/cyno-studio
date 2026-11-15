@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, cast
 from web.core.config import POLLO_GENERATION_BASE
 
 if TYPE_CHECKING:
-    from web.providers.pollo_engine.video.types import VideoCfg, VideoRow
+    from web.providers.pollo.engine.video.types import VideoCfg, VideoRow
 
 # Config rows (introspected from the generator classes). Fields omitted here
 # take the base defaults below.

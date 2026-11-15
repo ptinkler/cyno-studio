@@ -6,11 +6,11 @@ from PIL import Image
 
 from web.auth import keyctx
 from web.providers.pollo import catalogue, tasks, uploads
-from web.providers.pollo_engine import AUDIO_GENERATORS, IMAGE_GENERATORS, VIDEO_GENERATORS, closest_aspect_ratio
-from web.providers.pollo_engine import audio_generator as get_audio_generator
-from web.providers.pollo_engine import image_generator as get_image_generator
-from web.providers.pollo_engine import video_generator as get_video_generator
-from web.providers.pollo_errors import (
+from web.providers.pollo.engine import AUDIO_GENERATORS, IMAGE_GENERATORS, VIDEO_GENERATORS, closest_aspect_ratio
+from web.providers.pollo.engine import audio_generator as get_audio_generator
+from web.providers.pollo.engine import image_generator as get_image_generator
+from web.providers.pollo.engine import video_generator as get_video_generator
+from web.providers.pollo.errors import (
     EditInstructionRequiredError,
     LipsyncAudioFileRequiredError,
     LipsyncPortraitRequiredError,
@@ -19,7 +19,7 @@ from web.providers.pollo_errors import (
     SourceVideoRequiredError,
     VoiceCloneReferenceRequiredError,
 )
-from web.providers.pollo_models import MODEL_INFO
+from web.providers.pollo.models import MODEL_INFO
 from web.providers.specs import VideoRequest
 from web.types import JsonValue
 from web.uploads import hosts as image_hosts

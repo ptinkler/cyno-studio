@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, TypedDict, cast
 
 from web.core.config import POLLO_GENERATION_BASE
-from web.providers.pollo_engine._shared import Payload, as_float, as_int, as_str
-from web.providers.pollo_engine.errors import (
+from web.providers.pollo.engine._shared import Payload, as_float, as_int, as_str
+from web.providers.pollo.engine.errors import (
     AudioPromptRequiredError,
     AudioPromptTooLongError,
     StyleTitleMismatchError,

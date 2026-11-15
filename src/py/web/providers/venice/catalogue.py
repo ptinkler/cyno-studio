@@ -5,7 +5,7 @@ import re
 from collections.abc import Mapping
 
 from web.jsonutil import as_number, as_object, as_str
-from web.providers.venice_types import (
+from web.providers.venice.types import (
     Entry,
     ImageEntry,
     ImageTarget,

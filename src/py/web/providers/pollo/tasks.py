@@ -13,9 +13,9 @@ from web.core import request_log
 from web.core.get_task import TaskResult, get_task_status
 from web.jsonutil import as_object, as_objects, body_of
 from web.providers.pollo import catalogue, uploads
-from web.providers.pollo_engine import ERROR_STATUSES, SUCCESS_STATUSES
-from web.providers.pollo_engine.registry import PolloGenerator
-from web.providers.pollo_errors import (
+from web.providers.pollo.engine import ERROR_STATUSES, SUCCESS_STATUSES
+from web.providers.pollo.engine.registry import PolloGenerator
+from web.providers.pollo.errors import (
     DownloadFailedError,
     ImageTimeoutError,
     ModelNotEnabledError,

@@ -6,8 +6,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from web.providers.venice_catalogue import second_options
-from web.providers.venice_errors import (
+from web.providers.venice.catalogue import second_options
+from web.providers.venice.errors import (
     FirstAndLastFrameRequiredError,
     ImageToAnimateRequiredError,
     MotionImageRequiredError,
@@ -15,7 +15,7 @@ from web.providers.venice_errors import (
     SourceVideoRequiredError,
     TextToVideoOnlyError,
 )
-from web.providers.venice_types import (
+from web.providers.venice.types import (
     VideoConstraints,
     VideoEntry,
     VideoTarget,

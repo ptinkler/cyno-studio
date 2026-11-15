@@ -33,8 +33,16 @@ export const forkConversation = (convId, messageId) =>
 // Make this image/video again. `prompt` overrides the one it was made with,
 // `edit` sends the picture itself back as the reference (change this image),
 // and `replace` swaps it in place, keeping the old one as an earlier version.
-export const regenerateChatMedia = (messageId, mediaId, { model = null, prompt, edit, replace } = {}) =>
-  apiPost(`/api/chat/messages/${messageId}/media/${enc(mediaId)}/regenerate`, { model, prompt, edit, replace })
+export const regenerateChatMedia = (
+  messageId,
+  mediaId,
+  /** @type {{ model?: string | null, prompt?: string, edit?: boolean, replace?: boolean }} */ {
+    model = null,
+    prompt,
+    edit,
+    replace,
+  } = {},
+) => apiPost(`/api/chat/messages/${messageId}/media/${enc(mediaId)}/regenerate`, { model, prompt, edit, replace })
 // Show one of a reply's wordings (0 = first); its pictures are untouched
 export const showChatTextVersion = (messageId, index) =>
   apiPost(`/api/chat/messages/${messageId}/text-version`, { index })

@@ -13,7 +13,7 @@ from web.jsonutil import as_object, as_str, body_of
 from web.providers.openrouter import IMAGE_TIMEOUT
 from web.providers.specs import VideoRequest
 from web.providers.venice import client, models
-from web.providers.venice_errors import (
+from web.providers.venice.errors import (
     NoJobIdError,
     PollDroppedError,
     VeniceError,
@@ -21,7 +21,7 @@ from web.providers.venice_errors import (
     VideoDownloadFailedError,
     VideoNotReadyError,
 )
-from web.providers.venice_video import (
+from web.providers.venice.video import (
     DEFAULT_CAMERA_TRAJECTORY,
     VIDEO_INPUTS,
     VideoFrames,

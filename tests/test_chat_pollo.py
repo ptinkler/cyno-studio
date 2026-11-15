@@ -10,7 +10,7 @@ import requests
 from fastapi.testclient import TestClient
 
 import web.chat as chat_pkg
-import web.providers.pollo_engine as registry
+import web.providers.pollo.engine as registry
 from tests import jsonpath as jp
 from tests.chat_fixtures import SETTINGS, ConversationOut, png_bytes, sse_events, text_chunks, tool_chunks
 from tests.chat_support import (
@@ -35,8 +35,8 @@ from web.providers import pollo as pollo_provider
 from web.providers.pollo import submit as pollo_submit
 from web.providers.pollo import tasks as pollo_tasks
 from web.providers.pollo import uploads as pollo_uploads
-from web.providers.pollo_engine._shared import Payload
-from web.providers.pollo_engine.registry import ModelSpec, PolloGenerator
+from web.providers.pollo.engine._shared import Payload
+from web.providers.pollo.engine.registry import ModelSpec, PolloGenerator
 from web.providers.specs import CostQuery
 from web.types import JsonValue
 

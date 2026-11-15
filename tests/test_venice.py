@@ -25,7 +25,7 @@ from web.jsonutil import as_object
 from web.providers import StreamOptions, VideoRequest, openrouter
 from web.providers.venice import client as venice_client
 from web.providers.venice import jobs as venice_jobs
-from web.providers.venice_errors import VeniceError
+from web.providers.venice.errors import VeniceError
 from web.types import JsonValue, ModelEntry
 
 pytest_plugins = ["tests.chat_fixtures"]

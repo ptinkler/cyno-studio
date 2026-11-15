@@ -69,6 +69,7 @@ function dropUnsupported(opts, ratios, resolutions, durations = null) {
 // Audio option -> [the model option that offers it, how to clean the raw value]
 const num = v => (v === null || v === '' ? null : Number(v))
 const text = v => (v || '').trim() || null
+/** @type {Record<string, [string, (value: any, options: any) => any]>} field -> [the option that enables it, how to clean its value] */
 const AUDIO_FIELDS = {
   voice: ['voice', v => v || null],
   speed: ['tuning', num],

@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, NotRequired, TypedDict, cast
 
 from web.core.config import POLLO_GENERATION_BASE
-from web.providers.pollo_engine._shared import Payload, as_str, as_str_list, parse_aspect_ratio
-from web.providers.pollo_engine.errors import SourceImageRequiredError
+from web.providers.pollo.engine._shared import Payload, as_str, as_str_list, parse_aspect_ratio
+from web.providers.pollo.engine.errors import SourceImageRequiredError
 
 if TYPE_CHECKING:
     from web.types import JsonValue

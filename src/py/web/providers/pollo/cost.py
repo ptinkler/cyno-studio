@@ -3,14 +3,14 @@
 import requests
 
 from web.auth import keyctx
-from web.providers import pollo_estimate
 from web.providers.pollo import catalogue
-from web.providers.pollo_engine import AUDIO_GENERATORS, IMAGE_GENERATORS, VIDEO_GENERATORS
-from web.providers.pollo_engine import audio_generator as get_audio_generator
-from web.providers.pollo_engine import image_generator as get_image_generator
-from web.providers.pollo_engine import video_generator as get_video_generator
-from web.providers.pollo_errors import PolloError
-from web.providers.pollo_models import MODEL_INFO
+from web.providers.pollo import estimate as pollo_estimate
+from web.providers.pollo.engine import AUDIO_GENERATORS, IMAGE_GENERATORS, VIDEO_GENERATORS
+from web.providers.pollo.engine import audio_generator as get_audio_generator
+from web.providers.pollo.engine import image_generator as get_image_generator
+from web.providers.pollo.engine import video_generator as get_video_generator
+from web.providers.pollo.errors import PolloError
+from web.providers.pollo.models import MODEL_INFO
 from web.providers.specs import CostQuery
 from web.types import JsonValue
 

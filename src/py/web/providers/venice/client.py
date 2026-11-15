@@ -15,8 +15,8 @@ from web.core import request_log
 from web.core.metadata import current_tenant
 from web.jsonutil import as_object, as_str, body_of
 from web.providers.openrouter import keepalive_socket_options
-from web.providers.venice_catalogue import float_or_none
-from web.providers.venice_errors import (
+from web.providers.venice.catalogue import float_or_none
+from web.providers.venice.errors import (
     AnswerTimeoutError,
     ApiKeyMissingError,
     ConnectionDroppedError,

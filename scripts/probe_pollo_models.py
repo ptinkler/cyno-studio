@@ -5,7 +5,7 @@ Pollo gates models per key: a model shown in the picker can still answer 403
 "not enabled for API access" (or 404 "Not found") when you submit. This maps
 that out WITHOUT spending credits or uploading anything, by asking each model's
 free `.../estimate` twin — the same endpoint the composer uses to price a
-request (web/providers/pollo_estimate.py). The estimate takes the real request
+request (web/providers/pollo/estimate.py). The estimate takes the real request
 body with placeholder media URLs and returns a price without starting a job.
 
     estimate accepted (a price came back)  -> ENABLED (at least for pricing)
@@ -35,13 +35,13 @@ from typing import TYPE_CHECKING, cast
 
 import requests
 
-from web.providers.pollo_engine import VIDEO_GENERATORS
-from web.providers.pollo_engine import video_generator as get_video_generator
-from web.providers.pollo_estimate import PLACEHOLDERS
-from web.providers.pollo_models import MODEL_INFO
+from web.providers.pollo.engine import VIDEO_GENERATORS
+from web.providers.pollo.engine import video_generator as get_video_generator
+from web.providers.pollo.estimate import PLACEHOLDERS
+from web.providers.pollo.models import MODEL_INFO
 
 if TYPE_CHECKING:
-    from web.providers.pollo_engine.registry import PolloGenerator
+    from web.providers.pollo.engine.registry import PolloGenerator
     from web.types import JsonValue
 
 

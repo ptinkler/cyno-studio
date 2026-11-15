@@ -16,10 +16,10 @@ import requests
 
 from web.core.cloudflare import is_cloudflare_block
 from web.core.config import POLLO_API_TIMEOUT
-from web.providers.pollo_engine._shared import Payload, as_str
-from web.providers.pollo_engine.audio import AUDIO_MODELS, audio_model_url, audio_payload
-from web.providers.pollo_engine.audio import cfg as audio_cfg
-from web.providers.pollo_engine.errors import (
+from web.providers.pollo.engine._shared import Payload, as_str
+from web.providers.pollo.engine.audio import AUDIO_MODELS, audio_model_url, audio_payload
+from web.providers.pollo.engine.audio import cfg as audio_cfg
+from web.providers.pollo.engine.errors import (
     ApiTimeoutError,
     ApiUnreachableError,
     CloudflareBlockedError,
@@ -28,8 +28,8 @@ from web.providers.pollo_engine.errors import (
     UnsupportedImageModelError,
     UnsupportedVideoModelError,
 )
-from web.providers.pollo_engine.image import IMAGE_MODELS, image_model_url, image_payload, img_cfg
-from web.providers.pollo_engine.video import VIDEO_MODELS, cfg, video_model_url, video_payload
+from web.providers.pollo.engine.image import IMAGE_MODELS, image_model_url, image_payload, img_cfg
+from web.providers.pollo.engine.video import VIDEO_MODELS, cfg, video_model_url, video_payload
 
 if TYPE_CHECKING:
     from web.types import JsonValue
@@ -103,7 +103,7 @@ class PolloGenerator:
 
     @property
     def estimate_url(self) -> str | None:
-        """The endpoint's free price-check twin (see web/providers/pollo_estimate.py)."""
+        """The endpoint's free price-check twin (see web/providers/pollo/estimate.py)."""
         return f"{self.model_url}/estimate" if self.model_url else None
 
     def send_request(self) -> requests.Response:

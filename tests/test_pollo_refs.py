@@ -20,10 +20,10 @@ from web.jsonutil import as_object
 from web.providers import VideoRequest
 from web.providers.pollo import tasks as pollo_tasks
 from web.providers.pollo import uploads as pollo_uploads
-from web.providers.pollo_engine import PolloGenerator
+from web.providers.pollo.engine import PolloGenerator
 
 if TYPE_CHECKING:
-    from web.providers.pollo_engine._shared import Payload
+    from web.providers.pollo.engine._shared import Payload
 
 pytestmark = pytest.mark.no_tenant
 

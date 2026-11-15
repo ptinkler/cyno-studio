@@ -10,9 +10,9 @@ defineProps({
   hiddenCount: { type: Number, default: 0 },
   anyFilter: { type: Boolean, default: false },
 })
+defineEmits(['toggle-provider', 'toggle-tag', 'clear'])
 const uncensoredOnly = defineModel('uncensoredOnly', { type: Boolean, default: false })
 const showHidden = defineModel('showHidden', { type: Boolean, default: false })
-defineEmits(['toggle-provider', 'toggle-tag', 'clear'])
 </script>
 
 <template>

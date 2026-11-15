@@ -16,8 +16,6 @@ import {
 } from '../../composables/useCharacters'
 import { takeFiles } from '../../utils/files'
 
-const MAX_IMAGES = 6 // mirrors MAX_IMAGES in web/characters.py
-
 const props = defineProps({
   open: { type: Boolean, default: false },
   character: { type: Object, default: null }, // edit this one; null = create
@@ -29,6 +27,8 @@ const props = defineProps({
   showDefaults: { type: Boolean, default: false },
 })
 const emit = defineEmits(['close', 'saved', 'deleted'])
+
+const MAX_IMAGES = 6 // mirrors MAX_IMAGES in web/characters.py
 const showToast = inject('showToast', () => {})
 
 const name = ref('')

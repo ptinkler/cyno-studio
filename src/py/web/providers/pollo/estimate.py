@@ -20,8 +20,8 @@ from web.core.cloudflare import is_cloudflare_block
 from web.jsonutil import body_of
 
 if TYPE_CHECKING:
-    from web.providers.pollo_engine._shared import Payload
-    from web.providers.pollo_engine.registry import PolloGenerator
+    from web.providers.pollo.engine._shared import Payload
+    from web.providers.pollo.engine.registry import PolloGenerator
     from web.types import JsonValue
 
 log = logging.getLogger(__name__)

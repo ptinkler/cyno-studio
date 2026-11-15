@@ -38,12 +38,13 @@ jobs:
           pip install -r requirements-dev.txt
           basedpyright
 
-      - name: Frontend — ESLint and Prettier
+      - name: Frontend — ESLint, Prettier and type check
         working-directory: src/js
         run: |
           npm ci
           npm run lint
           npm run format:check
+          npm run typecheck
 
   test-python:
     runs-on: ubuntu-latest

@@ -24,8 +24,9 @@ from web.chat import helpers as chat_helpers
 from web.chat import polling as chat_polling
 from web.chat import tools as chat_tools
 from web.core.metadata import MetadataDB, reset_tenant, set_tenant
-from web.providers import ImageRequest, StreamOptions, openrouter, pollo_estimate
-from web.providers.pollo_engine._shared import Payload
+from web.providers import ImageRequest, StreamOptions, openrouter
+from web.providers.pollo import estimate as pollo_estimate
+from web.providers.pollo.engine._shared import Payload
 from web.types import ChatChunk, JsonValue
 
 pytest_plugins = ["tests.chat_fixtures"]

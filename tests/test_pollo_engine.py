@@ -15,8 +15,8 @@ import pytest
 from pydantic import TypeAdapter
 
 from tests.jsonpath import must
-from web.providers import pollo_engine as eng
-from web.providers.pollo_engine._shared import Payload
+from web.providers.pollo import engine as eng
+from web.providers.pollo.engine._shared import Payload
 from web.types import JsonValue
 
 pytestmark = pytest.mark.no_tenant

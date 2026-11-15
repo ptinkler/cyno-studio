@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
 
-from web.providers.pollo_engine._shared import Payload, as_str, parse_aspect_ratio, valid_length
-from web.providers.pollo_engine.errors import (
+from web.providers.pollo.engine._shared import Payload, as_str, parse_aspect_ratio, valid_length
+from web.providers.pollo.engine.errors import (
     EditPromptRequiredError,
     FaceImageRequiredError,
     LipsyncAudioRequiredError,
@@ -18,10 +18,10 @@ from web.providers.pollo_engine.errors import (
     UnknownBuilderError,
     VideoAction,
 )
-from web.providers.pollo_engine.video.models import cfg
+from web.providers.pollo.engine.video.models import cfg
 
 if TYPE_CHECKING:
-    from web.providers.pollo_engine.video.types import Builder, Inputs, VideoCfg
+    from web.providers.pollo.engine.video.types import Builder, Inputs, VideoCfg
     from web.types import JsonValue
 
 

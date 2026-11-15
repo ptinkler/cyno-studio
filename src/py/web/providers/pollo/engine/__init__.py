@@ -20,10 +20,10 @@ snapshot. Regenerate it only on a deliberate, reviewed change.
 
 from __future__ import annotations
 
-from web.providers.pollo_engine._shared import ERROR_STATUSES, SUCCESS_STATUSES, closest_aspect_ratio
-from web.providers.pollo_engine.audio import AUDIO_MODELS, audio_model_url, audio_payload
-from web.providers.pollo_engine.image import IMAGE_MODELS, image_model_url, image_payload
-from web.providers.pollo_engine.registry import (
+from web.providers.pollo.engine._shared import ERROR_STATUSES, SUCCESS_STATUSES, closest_aspect_ratio
+from web.providers.pollo.engine.audio import AUDIO_MODELS, audio_model_url, audio_payload
+from web.providers.pollo.engine.image import IMAGE_MODELS, image_model_url, image_payload
+from web.providers.pollo.engine.registry import (
     AUDIO_GENERATORS,
     IMAGE_GENERATORS,
     VIDEO_GENERATORS,
@@ -33,7 +33,7 @@ from web.providers.pollo_engine.registry import (
     image_generator,
     video_generator,
 )
-from web.providers.pollo_engine.video import VIDEO_MODELS, video_model_url, video_payload
+from web.providers.pollo.engine.video import VIDEO_MODELS, video_model_url, video_payload
 
 __all__ = [
     "AUDIO_GENERATORS",
