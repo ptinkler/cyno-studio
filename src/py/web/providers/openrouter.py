@@ -14,7 +14,7 @@ import json
 import os
 import socket
 import time
-from collections.abc import Callable, Generator, Iterator
+from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from http import HTTPStatus
 from pathlib import Path
@@ -25,7 +25,9 @@ import httpx
 from web.auth import keyctx
 from web.core import net_guard, request_log, sse
 from web.jsonutil import as_object, as_objects, body_of, loads
+from web.providers.specs import ImageRequest, StreamOptions, VideoRequest
 from web.types import ChatChunk, JsonValue, VideoJob
+from web.uploads.files import file_to_data_url
 
 # Overridable so a local fake can stand in during manual testing
 OPENROUTER_BASE = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1").rstrip("/")
@@ -356,12 +358,7 @@ def list_video_models() -> list[dict[str, JsonValue]]:
 
 
 def stream_chat(
-    model: str,
-    messages: list[dict[str, JsonValue]],
-    tools: list[dict[str, JsonValue]] | None = None,
-    session_id: str | None = None,
-    max_seconds: float | None = None,
-    should_stop: Callable[[], bool] | None = None,
+    model: str, messages: list[dict[str, JsonValue]], options: StreamOptions | None = None
 ) -> Iterator[ChatChunk]:
     """Yield parsed chat-completion chunks.
 
@@ -374,15 +371,16 @@ def stream_chat(
     `should_stop` is polled on every line (keep-alives included), so a
     cancel is noticed within seconds even when no tokens are flowing.
     """
+    options = options or StreamOptions()
     body: dict[str, JsonValue] = {
         "model": model,
         "messages": messages,
         "stream": True,  # usage (incl. cost) always arrives on the final chunk
     }
-    if tools:
-        body["tools"] = tools
-    if session_id:
-        body["session_id"] = session_id
+    if options.tools:
+        body["tools"] = options.tools
+    if options.session_id:
+        body["session_id"] = options.session_id
 
     with (
         request_log.logged("openrouter", "POST", "/chat/completions", body) as outcome,
@@ -395,7 +393,7 @@ def stream_chat(
             resp.read()
             outcome["response"] = request_log.response_of(resp)
             raise_for_response(resp)
-        chunks = sse.chat_chunks(resp.iter_lines(), OpenRouterError, max_seconds, should_stop)
+        chunks = sse.chat_chunks(resp.iter_lines(), OpenRouterError, options.max_seconds, options.should_stop)
         yield from request_log.chat_reply(chunks, outcome)
 
 
@@ -426,20 +424,14 @@ def _image_body(
     return body
 
 
-def generate_image(
-    model: str,
-    prompt: str,
-    aspect_ratio: str | None = None,
-    resolution: str | None = None,
-    input_images: list[str] | None = None,
-    session_id: str | None = None,
-) -> tuple[list[tuple[bytes, str]], float | None]:
+def generate_image(req: ImageRequest) -> tuple[list[tuple[bytes, str]], float | None]:
     """Generate images and return their bytes, media types, and USD cost."""
     body = _image_body(
-        model,
-        prompt,
-        {"aspect_ratio": aspect_ratio, "resolution": resolution, "session_id": session_id},
-        input_images,
+        req.model,
+        req.prompt,
+        {"aspect_ratio": req.aspect_ratio, "resolution": req.resolution, "session_id": req.session_id},
+        # The Images API takes references inline, not as URLs
+        [file_to_data_url(p) for p in req.ref_paths],
     )
     with (
         request_log.logged("openrouter", "POST", "/images", body) as outcome,
@@ -592,32 +584,28 @@ def generate_image_chat(
     return images, _cost(usage.get("cost"))
 
 
-def submit_video(
-    model: str,
-    prompt: str,
-    duration: int | None = None,
-    aspect_ratio: str | None = None,
-    resolution: str | None = None,
-    first_frame: str | None = None,
-    *,
-    generate_audio: bool | None = None,
-    session_id: str | None = None,
-) -> VideoJob:
-    """Start a video job. Returns {"id", "polling_url", "status"}."""
+def submit_video(req: VideoRequest) -> VideoJob:
+    """Start a video job. Returns {"id", "polling_url", "status"}.
+
+    Takes the model, prompt, length, shape and first frame (inline, not as a path); the other inputs of a
+    `VideoRequest` aren't offered here.
+    """
     frames: list[JsonValue] = (
-        [{"type": "image_url", "image_url": {"url": first_frame}, "frame_type": "first_frame"}] if first_frame else []
+        [{"type": "image_url", "image_url": {"url": file_to_data_url(req.first_frame)}, "frame_type": "first_frame"}]
+        if req.first_frame
+        else []
     )
     options: dict[str, JsonValue] = {
-        "duration": duration,
-        "aspect_ratio": aspect_ratio,
-        "resolution": resolution,
+        "duration": req.duration,
+        "aspect_ratio": req.aspect_ratio,
+        "resolution": req.resolution,
         "frame_images": frames,
-        "session_id": session_id,
+        "session_id": req.session_id,
     }
-    body: dict[str, JsonValue] = {"model": model, "prompt": prompt}
+    body: dict[str, JsonValue] = {"model": req.model, "prompt": req.prompt}
     body.update({k: v for k, v in options.items() if v})
-    if generate_audio is not None:
-        body["generate_audio"] = generate_audio
+    if req.generate_audio is not None:
+        body["generate_audio"] = req.generate_audio
 
     with request_log.logged("openrouter", "POST", "/videos", body) as outcome:
         with _connection_guard("video job to start"):

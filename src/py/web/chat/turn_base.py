@@ -3,6 +3,7 @@
 import logging
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from web import characters
@@ -13,12 +14,37 @@ from web.chat.generation import (
 from web.chat.helpers import branch_to, effective_ids
 from web.chat.models import TurnSettings
 from web.core.metadata import get_db
+from web.core.metadata.models import ChatMessage
 from web.types import JsonValue
 
 if TYPE_CHECKING:
     from web.core.metadata.models import Character
 
 log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class TurnLink:
+    """How a running turn talks to whoever started it: events out (`emit`), cancellation in (`cancel`)."""
+
+    emit: Callable[[dict[str, JsonValue]], None]
+    cancel: threading.Event
+
+
+@dataclass(frozen=True)
+class Reword:
+    """A reply whose words are being written again, rather than a new reply.
+
+    `spent` is what the reply already cost (its pictures, and the words being replaced), so the total stays
+    right. `rewrite` is (the reply's current words, how to change them): the chat model sees its reply and
+    the instruction, and writes it again; None = write them afresh from the conversation alone. `after` is for
+    the stream that runs the turn, not the turn: it runs once the turn has saved, and a message it returns goes
+    out as a final "done".
+    """
+
+    spent: float = 0.0
+    rewrite: tuple[str, str] | None = None
+    after: Callable[[], ChatMessage | None] | None = None
 
 
 class TurnBase:
@@ -29,21 +55,18 @@ class TurnBase:
         conv_id: str,
         settings: TurnSettings,
         message_id: int,
-        emit: Callable[[dict[str, JsonValue]], None],
-        cancel: threading.Event,
-        initial_cost: float = 0.0,
-        rewrite: tuple[str, str] | None = None,
+        link: TurnLink,
+        reword: Reword | None = None,
     ) -> None:
         """Set up the turn: which conversation, which settings, which message row.
 
-        `rewrite` is (the reply's current words, how to change them): the chat
-        model sees its reply and the instruction, and writes it again.
+        `reword` is given when only the reply's words are being generated again.
         """
         self.conv_id = conv_id
         self.s = settings
         self.message_id = message_id
-        self.emit = emit
-        self.cancel = cancel
+        self.emit = link.emit
+        self.cancel = link.cancel
         self.db = get_db()
         # Only this reply's own branch — other versions of earlier turns aren't context
         self.history = branch_to(self.db.get_chat_messages(conv_id), message_id)[:-1]
@@ -55,9 +78,9 @@ class TurnBase:
         self.content: str = ""
         # What this reply has already cost (its pictures, when only the words
         # are being generated again), so the total stays right.
-        self.cost: float = initial_cost
+        self.cost: float = reword.spent if reword else 0.0
         self.media: list[dict[str, JsonValue]] = []
-        self.rewrite = rewrite
+        self.rewrite = reword.rewrite if reword else None
         # Generation calls already run this turn: a model that repeats the
         # exact same call (same tool, same arguments) isn't charged twice
         self._calls_made: set[str] = set()

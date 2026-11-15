@@ -25,6 +25,7 @@ import json
 import threading
 import time
 from collections.abc import Generator, Iterator, Mapping
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol, TypedDict, cast
@@ -153,24 +154,27 @@ def chat_reply(chunks: Iterator[ChatChunk], outcome: LogOutcome) -> Iterator[Cha
         yield chunk
 
 
+@dataclass(frozen=True)
+class CallResult:
+    """What came of a provider call: all optional, as a call that never got an answer has none of it."""
+
+    status: int | None = None
+    seconds: float | None = None
+    error: str | None = None
+    flags: dict[str, str] | None = None
+    model: str | None = None
+    response: JsonValue = None
+
+
 def record(
-    provider: str,
-    method: str,
-    path: str,
-    request: JsonValue,
-    *,
-    status: int | None = None,
-    seconds: float | None = None,
-    error: str | None = None,
-    flags: dict[str, str] | None = None,
-    model: str | None = None,
-    response: JsonValue = None,
+    provider: str, method: str, path: str, request: JsonValue, result: CallResult | None = None
 ) -> dict[str, JsonValue]:
     """Append and return a provider-call log entry.
 
-    ``request`` and ``response`` should already be redacted. Logging failures
+    ``request`` and ``result.response`` should already be redacted. Logging failures
     are ignored so a full disk cannot fail a generation.
     """
+    result = result or CallResult()
     request_model = None
     if isinstance(request, dict):
         candidate = request.get("model") or request.get("modelId")
@@ -180,13 +184,13 @@ def record(
         "provider": provider,
         "method": method,
         "path": path,
-        "model": model or request_model,
-        "status": status,
-        "seconds": None if seconds is None else round(seconds, 1),
-        "error": error,
-        "flags": flags or None,
+        "model": result.model or request_model,
+        "status": result.status,
+        "seconds": None if result.seconds is None else round(result.seconds, 1),
+        "error": result.error,
+        "flags": result.flags or None,
         "request": request,
-        "response": _jsonable(response),
+        "response": _jsonable(result.response),
     }
     try:
         with _lock:
@@ -265,18 +269,15 @@ def logged(provider: str, method: str, path: str, body: JsonValue, model: str | 
     start = time.monotonic()
 
     def done(error: str | None = None, status: int | None = None) -> dict[str, JsonValue]:
-        entry = record(
-            provider,
-            method,
-            path,
-            shown,
+        result = CallResult(
             status=status or outcome["status"],
-            error=error,
             seconds=time.monotonic() - start,
+            error=error,
             flags=outcome["flags"],
             model=model,
             response=outcome["response"],
         )
+        entry = record(provider, method, path, shown, result)
         _last.entry = entry
         return entry
 

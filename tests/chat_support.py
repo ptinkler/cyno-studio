@@ -13,8 +13,9 @@ from tests import jsonpath as jp
 from tests.chat_fixtures import png_bytes
 from web.core.get_task import TaskResult
 from web.jsonutil import as_object
-from web.providers import openrouter
+from web.providers import ImageRequest, StreamOptions, VideoRequest, openrouter
 from web.types import ChatChunk, JsonValue, ModelEntry, VideoJob
+from web.uploads.files import file_to_data_url
 
 ROOT_DIR = Path(__file__).parent.parent.resolve()
 
@@ -37,15 +38,10 @@ class FakeStream:
         self.calls: list[StreamCall] = []
 
     def __call__(
-        self,
-        model: str,
-        messages: list[dict[str, JsonValue]],
-        tools: list[dict[str, JsonValue]] | None = None,
-        session_id: str | None = None,
-        **_kw: object,
+        self, model: str, messages: list[dict[str, JsonValue]], options: StreamOptions | None = None
     ) -> Iterator[ChatChunk]:
         """Record the call and hand back the next reply."""
-        self.calls.append(StreamCall(model, messages, tools))
+        self.calls.append(StreamCall(model, messages, options.tools if options else None))
         return iter(next(self._replies))
 
 
@@ -69,17 +65,10 @@ class FakeImages:
         self.cost = cost
         self.calls: list[ImageCall] = []
 
-    def __call__(
-        self,
-        model: str,
-        prompt: str,
-        aspect_ratio: str | None = None,
-        resolution: str | None = None,
-        input_images: list[str] | None = None,
-        session_id: str | None = None,
-    ) -> tuple[list[tuple[bytes, str]], float | None]:
+    def __call__(self, req: ImageRequest) -> tuple[list[tuple[bytes, str]], float | None]:
         """Record the request and return the pictures."""
-        self.calls.append(ImageCall(model, prompt, aspect_ratio, resolution, input_images))
+        input_images = [file_to_data_url(p) for p in req.ref_paths] or None
+        self.calls.append(ImageCall(req.model, req.prompt, req.aspect_ratio, req.resolution, input_images))
         return [(png_bytes(), "image/png")] * self.count, self.cost
 
 
@@ -91,19 +80,9 @@ class FakeVideoSubmit:
         self.job_id = job_id
         self.first_frame: str | None = None
 
-    def __call__(
-        self,
-        model: str,
-        prompt: str,
-        duration: int | None = None,
-        aspect_ratio: str | None = None,
-        resolution: str | None = None,
-        first_frame: str | None = None,
-        generate_audio: bool | None = None,
-        session_id: str | None = None,
-    ) -> VideoJob:
-        """Record the first frame and return the job."""
-        self.first_frame = first_frame
+    def __call__(self, req: VideoRequest) -> VideoJob:
+        """Record the first frame (as the inline data URL OpenRouter gets) and return the job."""
+        self.first_frame = file_to_data_url(req.first_frame) if req.first_frame else None
         return {"id": self.job_id}
 
 
@@ -150,17 +129,11 @@ class StreamSpy:
         self.tools: list[list[dict[str, JsonValue]] | None] = []
 
     def __call__(
-        self,
-        model: str,
-        messages: list[dict[str, JsonValue]],
-        tools: list[dict[str, JsonValue]] | None = None,
-        session_id: str | None = None,
-        max_seconds: float | None = None,
-        should_stop: Callable[[], bool] | None = None,
+        self, model: str, messages: list[dict[str, JsonValue]], options: StreamOptions | None = None
     ) -> Iterator[ChatChunk]:
         """Record what was sent and stream the next reply."""
         self.messages.append(messages)
-        self.tools.append(tools)
+        self.tools.append(options.tools if options else None)
         return self._next_reply()
 
 
@@ -172,18 +145,10 @@ class ImageApiSpy:
         self.prompt: str | None = None
         self.input_images: list[str] | None = None
 
-    def __call__(
-        self,
-        model: str,
-        prompt: str,
-        aspect_ratio: str | None = None,
-        resolution: str | None = None,
-        input_images: list[str] | None = None,
-        session_id: str | None = None,
-    ) -> tuple[list[tuple[bytes, str]], float | None]:
+    def __call__(self, req: ImageRequest) -> tuple[list[tuple[bytes, str]], float | None]:
         """Record the prompt and reference images, and return one picture."""
-        self.prompt = prompt
-        self.input_images = input_images
+        self.prompt = req.prompt
+        self.input_images = [file_to_data_url(p) for p in req.ref_paths] or None
         return [(png_bytes(), "image/png")], None
 
 

@@ -24,10 +24,9 @@ from web.chat.errors import (
     ToolImageRequiredError,
     VideoInputRequiredError,
 )
-from web.chat.generation import (
-    plan_refs,
-)
+from web.chat.generation import RefLimits, plan_refs
 from web.chat.helpers import message_out
+from web.chat.turn_generation import ImageSpec, VideoSpec
 from web.chat.turn_tools import ToolsTurn
 from web.chat.workers import ctx_thread
 from web.core.metadata.models import ChatMessage
@@ -100,15 +99,11 @@ class Turn(ToolsTurn):
             if media.get("kind") == "image" and isinstance((file := media.get("file")), str)
         ]
         if self._accepts_refs():
-            refs, dropped = plan_refs(
-                refs + self._pinned_images(),
-                chars,
-                self.s.image_limit,
-                after=len(refs),
-                max_refs=self._max_refs(),
-                choices=self.s.ref_choices,
+            limits = RefLimits(
+                self.s.image_limit, after=len(refs), max_refs=self._max_refs(), choices=self.s.ref_choices
             )
-        self._generate_image(prompt, self.s.image_options.aspect_ratio, refs, chars=chars, dropped=dropped)
+            refs, dropped = plan_refs(refs + self._pinned_images(), chars, limits)
+        self._generate_image(ImageSpec(prompt, self.s.image_options.aspect_ratio, refs, chars=chars, dropped=dropped))
         return None
 
     def _direct_image_tool(self, user: ChatMessage | None, prompt: str, info: ModelInfo) -> None:
@@ -124,7 +119,7 @@ class Turn(ToolsTurn):
         ]
         if not files:
             raise ToolImageRequiredError
-        self._generate_image(prompt or info.get("name") or "Image tool", None, files[:1])
+        self._generate_image(ImageSpec(prompt or info.get("name") or "Image tool", None, files[:1]))
 
     def _direct_video(self) -> None:
         user = self._last_user()
@@ -148,7 +143,7 @@ class Turn(ToolsTurn):
             raise VideoInputRequiredError
         # Attached images: the first frame, the last frame (first+last-frame
         # models) and, for reference models, all of them are references
-        self._generate_video(
+        spec = VideoSpec(
             prompt,
             self.s.video_options.duration,
             self.s.video_options.aspect_ratio,
@@ -158,6 +153,7 @@ class Turn(ToolsTurn):
             attached=frames,
             ref_items=ref_items,
         )
+        self._generate_video(spec)
 
     def _direct_audio(self) -> None:
         user = self._last_user()

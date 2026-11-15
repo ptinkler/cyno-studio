@@ -7,7 +7,7 @@ deletion.
 import json
 from collections.abc import Mapping
 from datetime import datetime
-from typing import TypedDict, cast
+from typing import TypedDict, Unpack, cast
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -75,6 +75,17 @@ class _AppendParent:
 _APPEND = _AppendParent()
 
 
+class NewMessage(TypedDict, total=False):
+    """The optional fields of `add_chat_message`."""
+
+    media: list[dict[str, JsonValue]] | None
+    model: str | None
+    status: str  # "done" unless given
+    parent_id: int | _AppendParent | None
+    mode: str | None
+    lane: str | None
+
+
 def _media_row(conv_id: str, at: datetime, item: dict[str, JsonValue]) -> SpendRow:
     model = item.get("model")
     kind = item.get("kind")
@@ -92,16 +103,7 @@ class MessageMixin(DBBase):
     """Provide message, branch, and chat-media operations."""
 
     def add_chat_message(
-        self,
-        conversation_id: str,
-        role: str,
-        content: str = "",
-        media: list[dict[str, JsonValue]] | None = None,
-        model: str | None = None,
-        status: str = "done",
-        parent_id: int | _AppendParent | None = _APPEND,
-        mode: str | None = None,
-        lane: str | None = None,
+        self, conversation_id: str, role: str, content: str = "", **fields: Unpack[NewMessage]
     ) -> ChatMessage:
         """Add a message and make it the shown branch's last message.
 
@@ -110,6 +112,9 @@ class MessageMixin(DBBase):
         A ``lane`` message starts its own standalone exchange and never joins
         or moves the shown branch.
         """
+        media = fields.get("media")
+        parent_id = fields.get("parent_id", _APPEND)
+        lane = fields.get("lane")
         with self._session() as session:
             conv = session.get(ChatConversation, conversation_id)
             if parent_id is _APPEND:
@@ -120,10 +125,10 @@ class MessageMixin(DBBase):
                 role=role,
                 content=content,
                 media_json=json.dumps(media) if media else None,
-                model=model,
-                mode=mode,
+                model=fields.get("model"),
+                mode=fields.get("mode"),
                 lane=lane,
-                status=status,
+                status=fields.get("status", "done"),
             )
             session.add(msg)
             session.flush()

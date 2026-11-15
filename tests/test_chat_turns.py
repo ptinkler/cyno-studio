@@ -24,7 +24,7 @@ from web.chat import helpers as chat_helpers
 from web.chat import polling as chat_polling
 from web.chat import tools as chat_tools
 from web.core.metadata import MetadataDB, reset_tenant, set_tenant
-from web.providers import openrouter, pollo_estimate
+from web.providers import ImageRequest, StreamOptions, openrouter, pollo_estimate
 from web.providers.pollo_engine._shared import Payload
 from web.types import ChatChunk, JsonValue
 
@@ -750,7 +750,7 @@ class TestStallProtection:
         """Test that deadline breaks a keepalive only stream."""
         monkeypatch.setattr(openrouter.http_client, "stream", stub(lambda: self._FakeStream(self._keepalives())))
         with pytest.raises(openrouter.OpenRouterError) as e:
-            list(openrouter.stream_chat("m", [], max_seconds=0.2))
+            list(openrouter.stream_chat("m", [], StreamOptions(max_seconds=0.2)))
         assert e.value.status == 504
 
     def test_stop_is_noticed_during_keepalives(self, chat: None, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -759,7 +759,7 @@ class TestStallProtection:
         stop = threading.Event()
         threading.Timer(0.1, stop.set).start()
         t0 = _t.monotonic()
-        assert list(openrouter.stream_chat("m", [], should_stop=stop.is_set)) == []
+        assert list(openrouter.stream_chat("m", [], StreamOptions(should_stop=stop.is_set))) == []
         assert _t.monotonic() - t0 < 2
 
 
@@ -873,8 +873,8 @@ class TestFollowUpRounds:
         """Test that non moderation failure keeps tools for a retry."""
         attempts: list[str] = []
 
-        def image(model: str, prompt: str, **kw: object) -> tuple[list[tuple[bytes, str]], float | None]:
-            attempts.append(prompt)
+        def image(req: ImageRequest) -> tuple[list[tuple[bytes, str]], float | None]:
+            attempts.append(req.prompt)
             if len(attempts) == 1:
                 raise UpstreamTimeoutError
             return [(png_bytes(), "image/png")], None
@@ -979,7 +979,9 @@ class TestEnhancePrompt:
     def test_rewrites_only_on_request(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that rewrites only on request."""
 
-        def fake_stream(model: str, messages: list[dict[str, JsonValue]], **kw: object) -> Iterator[ChatChunk]:
+        def fake_stream(
+            model: str, messages: list[dict[str, JsonValue]], options: StreamOptions | None = None
+        ) -> Iterator[ChatChunk]:
             assert "a cat" in text(messages[0], "content")
             yield {"choices": [{"delta": {"content": "A fluffy cat, golden hour"}}], "usage": {"cost": 0.001}}
 
@@ -1059,8 +1061,8 @@ class TestNoDoubleCharges:
         monkeypatch.setattr(openrouter, "stream_chat", stub(lambda: next(rounds)))
         made: list[str] = []
 
-        def fake_image(model: str, prompt: str, **kw: object) -> tuple[list[tuple[bytes, str]], float | None]:
-            made.append(prompt)
+        def fake_image(req: ImageRequest) -> tuple[list[tuple[bytes, str]], float | None]:
+            made.append(req.prompt)
             return [(png_bytes(), "image/png")], 0.04
 
         monkeypatch.setattr(openrouter, "generate_image", fake_image)

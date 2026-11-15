@@ -22,7 +22,7 @@ from web.chat import catalogue as chat_catalogue
 from web.core import request_log
 from web.core.metadata import MetadataDB
 from web.jsonutil import as_object
-from web.providers import openrouter
+from web.providers import StreamOptions, VideoRequest, openrouter
 from web.providers.venice_errors import VeniceError
 from web.types import JsonValue, ModelEntry
 
@@ -615,12 +615,14 @@ class TestVideo:
         venice.routes["/video/quote"] = httpx.Response(200, json={"quote": 0.42})
         venice.routes["/video/queue"] = httpx.Response(200, json={"model": "wan-3-0-text-to-video", "queue_id": "q1"})
         job = v.submit_video(
-            "venice/wan-3-0-text-to-video",
-            "waves",
-            duration=7,
-            aspect_ratio="16:9",
-            resolution="1080p",
-            generate_audio=False,
+            VideoRequest(
+                "venice/wan-3-0-text-to-video",
+                "waves",
+                duration=7,
+                aspect_ratio="16:9",
+                resolution="1080p",
+                generate_audio=False,
+            )
         )
         body = venice.body("/video/queue")
         assert body == {
@@ -644,12 +646,14 @@ class TestVideo:
         venice.routes["/video/quote"] = httpx.Response(500, json={"error": "quote down"})  # optional
         venice.routes["/video/queue"] = httpx.Response(200, json={"queue_id": "q2"})
         job = v.submit_video(
-            "venice/wan-3-0-text-to-video",
-            "she waves",
-            duration=10,
-            aspect_ratio="16:9",
-            resolution="1080p",
-            first_frame=self._frame(tmp_path),
+            VideoRequest(
+                "venice/wan-3-0-text-to-video",
+                "she waves",
+                duration=10,
+                aspect_ratio="16:9",
+                resolution="1080p",
+                first_frame=self._frame(tmp_path),
+            )
         )
         body = venice.body("/video/queue")
         assert body["model"] == "wan-3-0-image-to-video"
@@ -662,13 +666,13 @@ class TestVideo:
     def test_image_only_model_needs_a_frame(self, venice: FakeVenice) -> None:
         """Test that image only model needs a frame."""
         with pytest.raises(VeniceError, match="needs an image"):
-            v.submit_video("venice/ovi-image-to-video", "waves")
+            v.submit_video(VideoRequest("venice/ovi-image-to-video", "waves"))
 
     def test_poll_then_download(self, venice: FakeVenice, tmp_path: Path) -> None:
         """Test that poll then download."""
         venice.routes["/video/quote"] = httpx.Response(200, json={"quote": 0.3})
         venice.routes["/video/queue"] = httpx.Response(200, json={"queue_id": "q3"})
-        job = v.submit_video("venice/wan-3-0-text-to-video", "waves", duration=5)
+        job = v.submit_video(VideoRequest("venice/wan-3-0-text-to-video", "waves", duration=5))
         venice.routes["/video/retrieve"] = httpx.Response(
             200, json={"status": "PROCESSING", "average_execution_time": 1}
         )
@@ -711,7 +715,7 @@ class TestText:
             for c in v.stream_chat(
                 "venice/llama-big",
                 [{"role": "user", "content": "hello"}],
-                tools=[{"type": "function", "function": {"name": "f"}}],
+                StreamOptions(tools=[{"type": "function", "function": {"name": "f"}}]),
             )
         ]
         body = venice.body("/chat/completions")
@@ -927,7 +931,7 @@ class TestVideoFamiliesInChat:
         self._queue(venice)
         src = tmp_path / "in.mp4"
         src.write_bytes(b"MP4")
-        job = v.submit_video("venice/topaz-video-upscale", "", resolution="4x", source_video=src)
+        job = v.submit_video(VideoRequest("venice/topaz-video-upscale", "", resolution="4x", source_video=src))
         body = venice.body("/video/queue")
         assert body["upscale_factor"] == 4
         assert "resolution" not in body
@@ -936,8 +940,8 @@ class TestVideoFamiliesInChat:
     def test_missing_inputs_explain_what_is_needed(self, venice: FakeVenice, tmp_path: Path) -> None:
         """Test that missing inputs explain what is needed."""
         with pytest.raises(VeniceError, match="reference images"):
-            v.submit_video("venice/wan-3-0-reference-to-video", "x")
+            v.submit_video(VideoRequest("venice/wan-3-0-reference-to-video", "x"))
         with pytest.raises(VeniceError, match="first and a last frame"):
-            v.submit_video("venice/flux-3-first-last-frame-to-video", "x")
+            v.submit_video(VideoRequest("venice/flux-3-first-last-frame-to-video", "x"))
         with pytest.raises(VeniceError, match="works on a video"):
-            v.submit_video("venice/wan-2-7-video-to-video", "x")
+            v.submit_video(VideoRequest("venice/wan-2-7-video-to-video", "x"))

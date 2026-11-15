@@ -10,6 +10,8 @@ from web.chat.constants import (
     CONSISTENCY_REFS,
 )
 from web.chat.generation import (
+    HistoryShape,
+    RefLimits,
     characters_note,
     conversation,
     dedupe,
@@ -95,14 +97,8 @@ class HistoryTurn(TurnBase):
         note = characters_note(self.characters)
         if note:
             messages.append({"role": "system", "content": note})
-        messages += conversation(
-            self.conv_id,
-            self.history,
-            self.s.history_limit,
-            vision=vision,
-            as_tool_calls=as_tool_calls,
-            image_limit=self.s.image_limit,
-        )
+        shape = HistoryShape(self.s.history_limit, self.s.image_limit)
+        messages += conversation(self.conv_id, self.history, shape, vision=vision, as_tool_calls=as_tool_calls)
         if self.rewrite:
             previous, instruction = self.rewrite
             rewrite_turn: list[dict[str, JsonValue]] = [
@@ -145,9 +141,8 @@ class HistoryTurn(TurnBase):
         if args.get("keep_consistent") is True:
             recent = [f for f in self._latest_images(CONSISTENCY_REFS) if f not in pinned and f not in lead]
         chat_refs = dedupe(lead + pinned + recent[: max(CONSISTENCY_REFS - len(lead), 0)])
-        return plan_refs(
-            chat_refs, chars, self.s.image_limit, after=len(lead), max_refs=self._max_refs(), choices=self.s.ref_choices
-        )
+        limits = RefLimits(self.s.image_limit, after=len(lead), max_refs=self._max_refs(), choices=self.s.ref_choices)
+        return plan_refs(chat_refs, chars, limits)
 
     def _pick_characters(self, names: list[str], prompt: str) -> list[Character]:
         """Select attached characters named in the tool call or prompt.

@@ -53,8 +53,7 @@ select = [
     "PLR0911",  # at most 6 return statements per function
     "PLR0912",  # at most 12 branches per function
     "PLR0915",  # at most 50 statements per function
-    # "PLR0913" (at most 5 arguments per function) is parked until the provider APIs take request objects:
-    # 31 functions are over, see TODO.md section 3. Re-enable it as soon as they are fixed.
+    "PLR0913",  # at most 5 arguments per function: group related ones into a request object
     "PLR2004",  # no bare numbers in comparisons: name them (HTTPStatus for status codes)
     "FBT",      # flag arguments (bool) are keyword-only, so call sites read `fn(x, strict=True)`
 ]

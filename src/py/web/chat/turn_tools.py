@@ -29,10 +29,10 @@ from web.chat.tools import (
     VIDEO_TOOL_RESULT,
     with_character_arg,
 )
-from web.chat.turn_generation import GenerationTurn
+from web.chat.turn_generation import GenerationTurn, ImageSpec, VideoSpec
 from web.core.metadata.models import Character
 from web.jsonutil import loads
-from web.providers import openrouter, stream_chat
+from web.providers import StreamOptions, openrouter, stream_chat
 from web.types import ChatChunk, JsonValue, ToolCallDelta
 
 log = logging.getLogger(__name__)
@@ -165,14 +165,10 @@ class ToolsTurn(GenerationTurn):
         finish = None
         if self.content and not self.content.endswith("\n\n"):
             self._append("\n\n")
-        for chunk in stream_chat(
-            model,
-            messages,
-            tools,
-            session_id=self.conv_id,
-            max_seconds=CHAT_ROUND_SECONDS,
-            should_stop=self.cancel.is_set,
-        ):
+        options = StreamOptions(
+            tools, session_id=self.conv_id, max_seconds=CHAT_ROUND_SECONDS, should_stop=self.cancel.is_set
+        )
+        for chunk in stream_chat(model, messages, options):
             if self.cancel.is_set():
                 break
             self._add_chunk_cost(chunk)
@@ -271,7 +267,7 @@ class ToolsTurn(GenerationTurn):
         ratio = self.s.image_options.aspect_ratio or auto_ratio("image", self.s.image_model)
         refs, dropped = self._image_refs(args, source, chars)
         ref_args = {k: args[k] for k in ("source_image", "keep_consistent", "characters") if k in args}
-        self._generate_image(prompt, ratio, refs, ref_args, chars, dropped)
+        self._generate_image(ImageSpec(prompt, ratio, refs, ref_args, chars, dropped))
         result: dict[str, JsonValue] = {"ok": True, "result": IMAGE_TOOL_RESULT}
         if chars:
             result["characters"] = [c.name for c in chars]
@@ -303,7 +299,7 @@ class ToolsTurn(GenerationTurn):
             recent = self._latest_images(_FIRST_LAST_FRAMES)
             if len(recent) == _FIRST_LAST_FRAMES:
                 source, last = recent[1], recent[0]
-        self._generate_video(prompt, duration, ratio, source, chars, last_frame=last)
+        self._generate_video(VideoSpec(prompt, duration, ratio, source, chars, last_frame=last))
         return {"ok": True, "result": VIDEO_TOOL_RESULT}
 
     def _create_character(self, args: Mapping[str, JsonValue]) -> dict[str, JsonValue]:

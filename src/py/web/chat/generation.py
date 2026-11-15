@@ -8,6 +8,7 @@ import json
 import re
 import uuid
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from http import HTTPStatus
 from pathlib import Path
 from typing import cast
@@ -23,7 +24,7 @@ from web.core import request_log
 from web.core.metadata import get_db
 from web.core.metadata.models import Character, ChatMessage
 from web.jsonutil import as_object
-from web.providers import openrouter, pollo, stream_chat
+from web.providers import ImageRequest, StreamOptions, VideoRequest, openrouter, pollo, stream_chat
 from web.types import JsonValue, VideoJob
 from web.uploads.files import file_to_data_url, is_blank_image
 
@@ -49,7 +50,7 @@ def _ask(model: str, prompt: str, max_seconds: float) -> tuple[str, float]:
     """
     text, cost = "", 0.0
     messages: list[dict[str, JsonValue]] = [{"role": "user", "content": prompt}]
-    for chunk in stream_chat(model, messages, max_seconds=max_seconds):
+    for chunk in stream_chat(model, messages, StreamOptions(max_seconds=max_seconds)):
         usage = chunk.get("usage")
         chunk_cost = usage.get("cost") if usage else None
         if isinstance(chunk_cost, int | float | str) and not isinstance(chunk_cost, bool):
@@ -119,18 +120,25 @@ def characters_note(attached: list[Character]) -> str:
     return "\n\n".join(parts)
 
 
-def plan_refs(
-    chat_refs: list[str],
-    chars: list[Character],
-    image_limit: int | None,
-    after: int | None = None,
-    max_refs: int | None = None,
-    choices: RefChoices | None = None,
-) -> tuple[list[str], list[str]]:
-    """The reference images to send, and those left out because the model takes fewer (`max_refs`, None = unknown).
+@dataclass(frozen=True)
+class RefLimits:
+    """How many reference images go with a generation, and which of them.
 
-    Chat images are capped at
-    `image_limit` (None = all); character images aren't.
+    `image_limit` caps the chat images (None = all); `after` is how many of the leading chat images are
+    attachments or the edit source and so go first (None = no such lead); `max_refs` is what the model takes
+    at most (None = unknown); `choices` are the user's switches from the composer.
+    """
+
+    image_limit: int | None
+    after: int | None = None
+    max_refs: int | None = None
+    choices: RefChoices | None = None
+
+
+def plan_refs(chat_refs: list[str], chars: list[Character], limits: RefLimits) -> tuple[list[str], list[str]]:
+    """The reference images to send, and those left out because the model takes fewer (`limits.max_refs`).
+
+    Chat images are capped at `limits.image_limit`; character images aren't.
 
     They're sent in priority order, so a model that trims the list itself
     keeps the important ones too: the first `after` chat images (attachments,
@@ -138,6 +146,7 @@ def plan_refs(
     character's main image, the other chat images (pins, recent), then the
     characters' other images. Images the user switched off never go.
     """
+    image_limit, after, max_refs, choices = limits.image_limit, limits.after, limits.max_refs, limits.choices
     on: list[str] = choices.on if choices else []
     off: set[str] = set(choices.off) if choices else set()
     kept = [r for r in dedupe(chat_refs) if r not in off]
@@ -179,26 +188,33 @@ def _history_window(history: list[ChatMessage], limit: int | None) -> list[ChatM
     return window or history[-1:]
 
 
+@dataclass(frozen=True)
+class HistoryShape:
+    """How much of the chat a model sees: the last `history_limit` messages and `image_limit` images (None = all)."""
+
+    history_limit: int | None
+    image_limit: int | None = DEFAULT_IMAGE_LIMIT
+
+
 def conversation(
     conv_id: str,
     history: list[ChatMessage],
-    history_limit: int | None,
+    shape: HistoryShape,
     *,
     vision: bool,
     as_tool_calls: bool = False,
-    image_limit: int | None = DEFAULT_IMAGE_LIMIT,
 ) -> list[dict[str, JsonValue]]:
     """Convert chat history into OpenRouter messages.
 
-    Include recent images as pixels according to `image_limit` (None = all).
+    Include recent images as pixels according to `shape.image_limit`.
     Shared by the chat model and conversational image models.
 
     `as_tool_calls` (only when tools are offered — providers reject tool
     calls otherwise) records generated media as the tool calls and results
     that produced it; without it, media is summarised in bracketed notes.
     """
-    history = _history_window(history, history_limit)
-    pixels = _pixels_for(conversation_dir(conv_id), _pixel_files(history, image_limit if vision else 0))
+    history = _history_window(history, shape.history_limit)
+    pixels = _pixels_for(conversation_dir(conv_id), _pixel_files(history, shape.image_limit if vision else 0))
     messages: list[dict[str, JsonValue]] = []
     carried: list[dict[str, JsonValue]] = []
     for msg in history:
@@ -296,24 +312,31 @@ def _attach_character_images(messages: list[dict[str, JsonValue]], conv_id: str,
         messages[-1] = {**messages[-1], "content": [*content, *extra]}
 
 
+@dataclass(frozen=True)
+class ImageAsk:
+    """What is asked of an image model: the reply so far, the prompt (None in Image mode), references, characters."""
+
+    reply_text: str
+    prompt: str | None
+    refs: list[str]
+    chars: list[Character] = field(default_factory=list)
+
+
 def image_context(
     conv_id: str,
     history: list[ChatMessage],
-    history_limit: int | None,
-    reply_text: str,
-    prompt: str | None,
-    refs: list[str],
+    shape: HistoryShape,
+    ask: ImageAsk,
     instructions: str | None = None,
-    chars: list[Character] | None = None,
-    image_limit: int | None = DEFAULT_IMAGE_LIMIT,
 ) -> list[dict[str, JsonValue]]:
     """Build the conversation context sent to an image model.
 
     For tool calls, append the chat reply, prompt, and requested references.
-    In Image mode (`prompt=None`), the user's message is already last.
+    In Image mode (`ask.prompt` is None), the user's message is already last.
     """
-    messages = conversation(conv_id, history, history_limit, vision=True, image_limit=image_limit)
-    system = [s for s in (instructions, characters.describe(chars or [])) if s]
+    reply_text, prompt, refs, chars = ask.reply_text, ask.prompt, ask.refs, ask.chars
+    messages = conversation(conv_id, history, shape, vision=True)
+    system = [s for s in (instructions, characters.describe(chars)) if s]
     messages[:0] = [{"role": "system", "content": s} for s in system]
     if prompt is not None:
         messages.extend(_tool_call_turn(conv_id, reply_text, prompt, refs))
@@ -490,7 +513,7 @@ def run_image_generation(
     ratio = params.get("aspect_ratio")
     aspect_ratio = ratio if isinstance(ratio, str) else auto_ratio("image", model)
     resolution = params.get("resolution")
-    images, cost, credit_cost, sent = providers.generate_image(
+    request = ImageRequest(
         model,
         prompt,
         aspect_ratio=aspect_ratio,
@@ -499,6 +522,7 @@ def run_image_generation(
         context=context,
         session_id=conv_id,
     )
+    images, cost, credit_cost, sent = providers.generate_image(request)
     kept = [(data, media_type) for data, media_type in images if not is_blank_image(data)]
     if images and not kept:
         raise openrouter.OpenRouterError(BLACK_IMAGE_ERROR)
@@ -543,7 +567,7 @@ def _submit_video(conv_id: str, model: str, prompt: str, params: dict[str, JsonV
     refs = [ref for ref in ref_values if isinstance(ref, str)] if isinstance(ref_values, list) else []
     item_values = params.get("ref_items")
     items = [item for item in item_values if isinstance(item, Mapping)] if isinstance(item_values, list) else []
-    return providers.submit_video(
+    request = VideoRequest(
         model,
         prompt,
         duration=duration if isinstance(duration, int) and not isinstance(duration, bool) else None,
@@ -564,3 +588,4 @@ def _submit_video(conv_id: str, model: str, prompt: str, params: dict[str, JsonV
         ],
         session_id=conv_id,
     )
+    return providers.submit_video(request)

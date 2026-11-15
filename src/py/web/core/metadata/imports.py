@@ -6,6 +6,7 @@ ids and apply each chat's changes in a single transaction.
 
 import json
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 from typing import NotRequired, TypedDict
 
@@ -27,6 +28,14 @@ class ImportedMessage(TypedDict):
     parent_id: NotRequired[int | None]
     parent_import_id: NotRequired[str]
     model: NotRequired[str | None]
+
+
+@dataclass(frozen=True)
+class ImportStamp:
+    """When the source chat last changed: its own timestamp, and the local time to show in the list."""
+
+    import_updated_at: float | None
+    updated_at: datetime | None
 
 
 class ImportedMessageUpdate(TypedDict):
@@ -165,8 +174,7 @@ class ImportMixin(DBBase):
         conversation_id: str,
         rows: list[ImportedMessage],
         updates: dict[int, ImportedMessageUpdate],
-        import_updated_at: float | None,
-        updated_at: datetime | None,
+        stamp: ImportStamp,
         *,
         show: bool,
     ) -> None:
@@ -201,10 +209,10 @@ class ImportMixin(DBBase):
                 ids[row["import_id"]] = last = msg.id
             for msg_id, fields in updates.items():
                 _apply_message_update(session, msg_id, fields)
-            conv.import_updated_at = import_updated_at
+            conv.import_updated_at = stamp.import_updated_at
             if show and last is not None:
                 conv.current_leaf_id = last
-            conv.updated_at = updated_at or datetime.now().astimezone().replace(tzinfo=None)
+            conv.updated_at = stamp.updated_at or datetime.now().astimezone().replace(tzinfo=None)
             session.commit()
 
     def get_chat_import_ids(self, conversation_id: str) -> dict[str, ChatMessage]:
@@ -225,8 +233,7 @@ class ImportMixin(DBBase):
         messages: list[NativeMessage],
         library: list[NativeLibraryItem],
         leaf_import_id: str | None,
-        import_updated_at: float | None,
-        updated_at: datetime | None,
+        stamp: ImportStamp,
     ) -> tuple[int, int]:
         """Merge one chat from this app's own export, in one transaction.
 
@@ -274,7 +281,7 @@ class ImportMixin(DBBase):
             _import_library(session, conversation_id, library)
             if not carried_on and leaf_import_id in ids:
                 conv.current_leaf_id = ids[leaf_import_id]
-            conv.import_updated_at = import_updated_at
-            conv.updated_at = updated_at or datetime.now().astimezone().replace(tzinfo=None)
+            conv.import_updated_at = stamp.import_updated_at
+            conv.updated_at = stamp.updated_at or datetime.now().astimezone().replace(tzinfo=None)
             session.commit()
             return added, updated

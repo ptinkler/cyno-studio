@@ -49,6 +49,7 @@ from web.auth.users import require_user
 from web.chat import CHAT_PREVIEW_SIZE, ConversationCreate, api_create_conversation, conversation_dir
 from web.core import config
 from web.core.metadata import current_tenant, get_db
+from web.core.metadata.imports import ImportStamp
 from web.core.metadata.models import ChatConversation, ChatMessage
 from web.jsonutil import as_object, as_objects, loads
 from web.media.kinds import IMAGE_EXTS, VIDEO_EXTS
@@ -493,9 +494,8 @@ def _import_conversation(
         updated_at = changed_at
     else:
         updated_at = max(filter(None, [changed_at, conv.updated_at])) if changed else conv.updated_at
-    db.add_imported_messages(
-        imported_conv.id, merge.rows, merge.updates, _timestamp(data.get("update_time")), updated_at, show=show
-    )
+    stamp = ImportStamp(_timestamp(data.get("update_time")), updated_at)
+    db.add_imported_messages(imported_conv.id, merge.rows, merge.updates, stamp, show=show)
     if fresh:
         return "new"
     return "updated" if changed else "unchanged"

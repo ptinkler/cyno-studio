@@ -28,9 +28,9 @@ import shutil
 import tempfile
 import threading
 import time
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from http import HTTPStatus
 from pathlib import Path
 from typing import NamedTuple
@@ -44,6 +44,7 @@ from web.core.key_caches import on_keys_changed
 from web.core.metadata import current_tenant
 from web.jsonutil import as_list, as_number, as_object, as_objects, as_str, body_of
 from web.providers.openrouter import CHAT_TIMEOUT, IMAGE_TIMEOUT, keepalive_socket_options
+from web.providers.specs import StreamOptions, VideoRequest
 from web.providers.venice_catalogue import (
     PREFIX,
     by_price,
@@ -203,21 +204,24 @@ def _raise_for_response(resp: httpx.Response) -> None:
     raise RequestRejectedError(_error_message(resp), resp.status_code)
 
 
-def _request(
-    method: str,
-    path: str,
-    *,
-    timeout: httpx.Timeout = DEFAULT_TIMEOUT,
-    waiting_for: str = "response",
-    log: bool = False,
-    json_body: JsonValue = None,
-    params: dict[str, str] | None = None,
-) -> httpx.Response:
+@dataclass(frozen=True)
+class _Call:
+    """One Venice API call: what is sent, how long to wait, and what the wait is for (named in the error)."""
+
+    method: str
+    path: str
+    json_body: JsonValue = None
+    params: dict[str, str] | None = None
+    timeout: httpx.Timeout = field(default_factory=lambda: DEFAULT_TIMEOUT)  # Timeout is unhashable
+    waiting_for: str = "response"
+
+
+def _request(call: _Call, *, log: bool = False) -> httpx.Response:
     """One Venice call. `log`: record it in the request log (web/core/request_log.py)."""
     if not log:
-        return _send(method, path, timeout, waiting_for, json_body=json_body, params=params)
-    with request_log.logged("venice", method, path, json_body) as outcome:
-        resp = _send(method, path, timeout, waiting_for, check=False, json_body=json_body, params=params)
+        return _send(call)
+    with request_log.logged("venice", call.method, call.path, call.json_body) as outcome:
+        resp = _send(call, check=False)
         outcome["status"] = resp.status_code
         outcome["flags"] = {k: v for k, v in resp.headers.items() if k.startswith("x-venice-is-")}
         outcome["response"] = request_log.response_of(resp)
@@ -225,23 +229,19 @@ def _request(
     return resp
 
 
-def _send(
-    method: str,
-    path: str,
-    timeout: httpx.Timeout,
-    waiting_for: str,
-    *,
-    check: bool = True,
-    json_body: JsonValue = None,
-    params: dict[str, str] | None = None,
-) -> httpx.Response:
+def _send(call: _Call, *, check: bool = True) -> httpx.Response:
     start = time.monotonic()
     try:
         resp = _client.request(
-            method, f"{VENICE_BASE}{path}", headers=_headers(), timeout=timeout, json=json_body, params=params
+            call.method,
+            f"{VENICE_BASE}{call.path}",
+            headers=_headers(),
+            timeout=call.timeout,
+            json=call.json_body,
+            params=call.params,
         )
     except (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError, httpx.ConnectError) as e:
-        raise ConnectionDroppedError(round(time.monotonic() - start), waiting_for, e) from e
+        raise ConnectionDroppedError(round(time.monotonic() - start), call.waiting_for, e) from e
     except httpx.TimeoutException as e:
         raise AnswerTimeoutError(e) from e
     if check:  # else the caller checks, after logging the response
@@ -251,7 +251,7 @@ def _send(
 
 def _fetch_models(kind: str) -> list[Model]:
     """Venice's online models of one kind."""
-    data = as_object(body_of(_request("GET", "/models", params={"type": kind}))).get("data")
+    data = as_object(body_of(_request(_Call("GET", "/models", params={"type": kind})))).get("data")
     return [model for raw in as_objects(data) if (model := parse_model(raw)) is not None]
 
 
@@ -307,7 +307,7 @@ def _quote_video(job: _QuoteJob) -> float | None:
     if job.resolution:
         body["resolution"] = job.resolution
     try:
-        usd = _quote_of(_request("POST", "/video/quote", json_body=body))
+        usd = _quote_of(_request(_Call("POST", "/video/quote", body)))
     except VeniceError:
         usd = None
     _quotes.put(key, usd)
@@ -412,7 +412,7 @@ def get_balances() -> dict[str, float | None]:
     """
     key = _tenant()
     try:
-        data = as_object(body_of(_request("GET", "/api_keys/rate_limits")))
+        data = as_object(body_of(_request(_Call("GET", "/api_keys/rate_limits"))))
     except VeniceError:
         return {"usd": _balance.get(key), "credits": None}
     balances = as_object(as_object(data.get("data") or data).get("balances"))
@@ -423,19 +423,15 @@ def get_balances() -> dict[str, float | None]:
 
 
 def stream_chat(
-    model_id: str,
-    messages: list[dict[str, JsonValue]],
-    tools: list[dict[str, JsonValue]] | None = None,
-    session_id: str | None = None,
-    max_seconds: float | None = None,
-    should_stop: Callable[[], bool] | None = None,
+    model_id: str, messages: list[dict[str, JsonValue]], options: StreamOptions | None = None
 ) -> Iterator[ChatChunk]:
     """Yield chat-completion chunks with usage cost in USD.
 
     Cost comes from Venice's reported value or token counts and model prices.
     Venice has no session concept, so ``session_id`` only labels the request in the debug log.
     """
-    log.debug("venice chat %s (session %s)", model_id, session_id)
+    options = options or StreamOptions()
+    log.debug("venice chat %s (session %s)", model_id, options.session_id)
     body: dict[str, JsonValue] = {
         "model": model_id[len(PREFIX) :],
         "messages": messages,
@@ -443,8 +439,8 @@ def stream_chat(
         "stream_options": {"include_usage": True},
         "venice_parameters": {"include_venice_system_prompt": False},
     }
-    if tools:
-        body["tools"] = tools
+    if options.tools:
+        body["tools"] = options.tools
     start = time.monotonic()
     try:
         with (
@@ -458,7 +454,7 @@ def stream_chat(
                 resp.read()
                 outcome["response"] = request_log.response_of(resp)
             _raise_for_response(resp)
-            chunks = sse.chat_chunks(resp.iter_lines(), _stream_error, max_seconds, should_stop)
+            chunks = sse.chat_chunks(resp.iter_lines(), _stream_error, options.max_seconds, options.should_stop)
             for chunk in request_log.chat_reply(chunks, outcome):
                 usage = chunk.get("usage")
                 if usage:
@@ -542,7 +538,7 @@ def _edit_image(
         "images": [data_url(p) for p in refs],
         **size,
     }
-    resp = _request("POST", "/image/multi-edit", json_body=body, timeout=IMAGE_TIMEOUT, waiting_for="image", log=True)
+    resp = _request(_Call("POST", "/image/multi-edit", body, timeout=IMAGE_TIMEOUT, waiting_for="image"), log=True)
     _check_violation(resp)
     media_type = (resp.headers.get("content-type") or "image/png").split(";")[0].strip()
     if not media_type.startswith("image/"):
@@ -560,7 +556,7 @@ def _new_image(target: ImageTarget, prompt: str, size: dict[str, str]) -> tuple[
         "format": "png",
         **size,
     }
-    resp = _request("POST", "/image/generate", json_body=body, timeout=IMAGE_TIMEOUT, waiting_for="image", log=True)
+    resp = _request(_Call("POST", "/image/generate", body, timeout=IMAGE_TIMEOUT, waiting_for="image"), log=True)
     _check_violation(resp)
     encoded = as_list(as_object(body_of(resp)).get("images"))
     images = [(base64.b64decode(b64), "image/png") for b64 in encoded if isinstance(b64, str) and b64]
@@ -581,53 +577,36 @@ def _remember_job(job_id: str, download_url: str | None, quote: float | None) ->
         _video_quotes.put(job_id, quote)
 
 
-def submit_video(
-    model_id: str,
-    prompt: str,
-    duration: int | None = None,
-    aspect_ratio: str | None = None,
-    resolution: str | None = None,
-    *,
-    generate_audio: bool | None = None,
-    first_frame: Path | None = None,
-    last_frame: Path | None = None,
-    refs: list[Path] | None = None,
-    source_video: Path | None = None,
-) -> VideoJob:
+def submit_video(req: VideoRequest) -> VideoJob:
     """Queue a video and return its id and sent settings.
 
-    Reference models take ``refs`` (the first frame joins them if empty),
+    Reference models take ``req.refs`` (the first frame joins them if empty),
     first/last-frame models take both frames, and video models take
-    ``source_video`` (motion control also takes an image).
+    ``req.source_video`` (motion control also takes an image).
     """
-    info = _find(_get_catalogue().video, "video", model_id)
+    info = _find(_get_catalogue().video, "video", req.model)
     family = info.family
-    target = video_model(info, first_frame)
+    target = video_model(info, req.first_frame)
     c = target.constraints
-    frames = VideoFrames(first_frame, last_frame, [p for p in refs or [] if p.is_file()], source_video)
+    frames = VideoFrames(req.first_frame, req.last_frame, [p for p in req.refs if p.is_file()], req.source_video)
     inputs, sent, image_used = VIDEO_INPUTS.get(family, standard_inputs)(frames)
-    body: dict[str, JsonValue] = {"model": target.model, "prompt": prompt, **inputs}
+    body: dict[str, JsonValue] = {"model": target.model, "prompt": req.prompt, **inputs}
     if family == "angles":
         body["camera_trajectory"] = DEFAULT_CAMERA_TRAJECTORY
 
-    duration, body["duration"] = video_duration(c, duration)
-    resolution = video_resolution(body, family, c, resolution)
-    aspect_ratio = video_aspect_ratio(aspect_ratio, c, image_used=image_used)
+    duration, body["duration"] = video_duration(c, req.duration)
+    resolution = video_resolution(body, family, c, req.resolution)
+    aspect_ratio = video_aspect_ratio(req.aspect_ratio, c, image_used=image_used)
     if aspect_ratio:
         body["aspect_ratio"] = aspect_ratio
-    if c.audio_configurable and generate_audio is not None:
-        body["audio"] = generate_audio
+    if c.audio_configurable and req.generate_audio is not None:
+        body["audio"] = req.generate_audio
 
     quote = _video_quote(body)
     data = as_object(
         body_of(
             _request(
-                "POST",
-                "/video/queue",
-                json_body=body,
-                timeout=IMAGE_TIMEOUT,
-                waiting_for="video job to start",
-                log=True,
+                _Call("POST", "/video/queue", body, timeout=IMAGE_TIMEOUT, waiting_for="video job to start"), log=True
             )
         )
     )
@@ -652,9 +631,7 @@ def submit_video(
 def _video_quote(body: dict[str, JsonValue]) -> float | None:
     """What Venice says the video will cost — nice to show, not needed to generate."""
     try:
-        return _quote_of(
-            _request("POST", "/video/quote", json_body={k: v for k, v in body.items() if k in QUOTED_FIELDS})
-        )
+        return _quote_of(_request(_Call("POST", "/video/quote", {k: v for k, v in body.items() if k in QUOTED_FIELDS})))
     except VeniceError:
         return None
 

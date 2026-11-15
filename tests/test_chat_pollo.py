@@ -34,6 +34,7 @@ from web.providers import openrouter
 from web.providers import pollo as pollo_provider
 from web.providers.pollo_engine._shared import Payload
 from web.providers.pollo_engine.registry import ModelSpec, PolloGenerator
+from web.providers.specs import CostQuery
 from web.types import JsonValue
 
 pytest_plugins = ["tests.chat_fixtures"]
@@ -438,10 +439,10 @@ class TestPolloImageModels:
         kinds: list[str] = []
         options: list[dict[str, JsonValue]] = []
 
-        def fake(model: str, kind: str, *args: JsonValue, **kw: JsonValue) -> dict[str, JsonValue]:
-            _ = (model, args)
-            kinds.append(kind)
-            options.append(kw)
+        def fake(model: str, query: CostQuery) -> dict[str, JsonValue]:
+            _ = model
+            kinds.append(query.kind)
+            options.append({"prompt": query.prompt, "audio": dict(query.audio or {})})
             return {"credits": 3}
 
         monkeypatch.setattr(pollo_provider, "estimate_cost", fake)

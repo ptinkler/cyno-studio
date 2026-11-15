@@ -8,6 +8,7 @@ import hashlib
 import io
 import mimetypes
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
@@ -89,44 +90,48 @@ def _is_real_video(content: bytes) -> bool:
     return b"ftyp" in content[:64]
 
 
-async def _read_upload(
-    file: UploadFile,
-    types: dict[str, str],
-    max_bytes: int,
-    accepted: str,
-    check: Callable[[bytes], bool] | None = None,
-    kind: str = "",
-) -> tuple[bytes, str]:
-    """Validate an upload and return its bytes and storage extension.
+@dataclass(frozen=True)
+class _UploadRule:
+    """What one kind of upload must be: content types (→ saved extension), a size cap and a content check."""
 
-    ``accepted`` and ``kind`` describe the formats used in validation errors.
-    """
-    ext = types.get(file.content_type or "")
+    types: dict[str, str]
+    max_bytes: int
+    accepted: str  # the formats, as named in the "unsupported type" error
+    kind: str = ""  # what the file must be, as named in the "not a valid …" error
+    check: Callable[[bytes], bool] | None = None
+
+
+_IMAGE_RULE = _UploadRule(IMAGE_UPLOAD_TYPES, MAX_IMAGE_UPLOAD_BYTES, "PNG, JPEG, WebP or GIF", "image", _is_real_image)
+_VIDEO_RULE = _UploadRule(VIDEO_UPLOAD_TYPES, MAX_VIDEO_UPLOAD_BYTES, "MP4", "MP4 video", _is_real_video)
+_AUDIO_RULE = _UploadRule(AUDIO_UPLOAD_TYPES, MAX_AUDIO_UPLOAD_BYTES, "MP3, WAV, M4A or AAC")
+
+
+async def _read_upload(file: UploadFile, rule: _UploadRule) -> tuple[bytes, str]:
+    """Validate an upload against `rule` and return its bytes and storage extension."""
+    ext = rule.types.get(file.content_type or "")
     if not ext:
-        raise HTTPException(400, f"Unsupported file type: {file.content_type}. Use {accepted}.")
+        raise HTTPException(400, f"Unsupported file type: {file.content_type}. Use {rule.accepted}.")
     content = await file.read()
-    if len(content) > max_bytes:
-        raise HTTPException(400, f"File too large (max {max_bytes // 1024 // 1024} MB)")
-    if check and not check(content):
-        raise HTTPException(400, f"File is not a valid {kind}")
+    if len(content) > rule.max_bytes:
+        raise HTTPException(400, f"File too large (max {rule.max_bytes // 1024 // 1024} MB)")
+    if rule.check and not rule.check(content):
+        raise HTTPException(400, f"File is not a valid {rule.kind}")
     return content, ext
 
 
 async def read_image_upload(file: UploadFile) -> tuple[bytes, str]:
     """Validate and read an image upload."""
-    return await _read_upload(
-        file, IMAGE_UPLOAD_TYPES, MAX_IMAGE_UPLOAD_BYTES, "PNG, JPEG, WebP or GIF", _is_real_image, "image"
-    )
+    return await _read_upload(file, _IMAGE_RULE)
 
 
 async def read_video_upload(file: UploadFile) -> tuple[bytes, str]:
     """Validate and read an MP4 upload."""
-    return await _read_upload(file, VIDEO_UPLOAD_TYPES, MAX_VIDEO_UPLOAD_BYTES, "MP4", _is_real_video, "MP4 video")
+    return await _read_upload(file, _VIDEO_RULE)
 
 
 async def read_audio_upload(file: UploadFile) -> tuple[bytes, str]:
     """Read an audio upload with an accepted content type and size."""
-    return await _read_upload(file, AUDIO_UPLOAD_TYPES, MAX_AUDIO_UPLOAD_BYTES, "MP3, WAV, M4A or AAC")
+    return await _read_upload(file, _AUDIO_RULE)
 
 
 def file_to_data_url(path: Path) -> str:

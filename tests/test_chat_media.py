@@ -24,8 +24,9 @@ from web.chat import catalogue as chat_catalogue
 from web.chat import generation as chat_generation
 from web.chat import polling as chat_polling
 from web.core.metadata import ChatMessage, MetadataDB
-from web.providers import openrouter
+from web.providers import ImageRequest, VideoRequest, openrouter
 from web.types import ChatChunk, JsonValue, VideoJob
+from web.uploads.files import file_to_data_url
 
 pytest_plugins = ["tests.chat_fixtures"]
 
@@ -565,8 +566,8 @@ class TestModerationAndRegenerate:
         monkeypatch.setattr(chat_polling, "start_video_poller", started)
         got: dict[str, JsonValue] = {}
 
-        def fake_submit(model: str, _prompt: str, **kw: JsonValue) -> VideoJob:
-            got.update(model=model, **kw)
+        def fake_submit(req: VideoRequest) -> VideoJob:
+            got.update(model=req.model, duration=req.duration)
             return {"id": "gen-vid-9"}
 
         monkeypatch.setattr(openrouter, "submit_video", fake_submit)
@@ -1047,8 +1048,8 @@ class TestEditAndRewordInPlace:
         monkeypatch.setattr(threading, "Thread", Inline)
 
     def _capture(self, monkeypatch: pytest.MonkeyPatch, got: dict[str, JsonValue]) -> None:
-        def fake_image(model: str, prompt: str, **kw: JsonValue) -> tuple[list[tuple[bytes, str]], float | None]:
-            got.update(model=model, prompt=prompt, **kw)
+        def fake_image(req: ImageRequest) -> tuple[list[tuple[bytes, str]], float | None]:
+            got.update(model=req.model, prompt=req.prompt, input_images=[file_to_data_url(p) for p in req.ref_paths])
             return [(png_bytes(), "image/png")], 0.03
 
         monkeypatch.setattr(openrouter, "generate_image", fake_image)
@@ -1395,8 +1396,8 @@ class TestRetryAFailedPicture:
         self._inline(monkeypatch)
         got: dict[str, str] = {}
 
-        def fake_image(model: str, prompt: str, **kw: object) -> tuple[list[tuple[bytes, str]], float | None]:
-            got.update(prompt=prompt)
+        def fake_image(req: ImageRequest) -> tuple[list[tuple[bytes, str]], float | None]:
+            got.update(prompt=req.prompt)
             return [(png_bytes(), "image/png")], 0.01
 
         monkeypatch.setattr(openrouter, "generate_image", fake_image)

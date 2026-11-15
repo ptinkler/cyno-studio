@@ -64,6 +64,7 @@ from web.providers.pollo_errors import (
     VoiceListError,
 )
 from web.providers.pollo_models import MODEL_INFO, ModelInfo
+from web.providers.specs import CostQuery, VideoRequest
 from web.types import JsonValue, ModelEntry
 from web.uploads import hosts as image_hosts
 
@@ -280,22 +281,14 @@ def _upload_ref_item(item: Mapping[str, object]) -> dict[str, JsonValue]:
     return ref
 
 
-def _submit_ref_video_job(
-    key: str,
-    *,
-    prompt: str,
-    ref_items: list[dict[str, object]],
-    aspect_ratio: str | None,
-    resolution: str | None,
-    duration: int | None,
-    generate_audio: bool | None,
-) -> dict[str, JsonValue]:
+def _submit_ref_video_job(key: str, req: VideoRequest) -> dict[str, JsonValue]:
     """Submit a reference-to-video job using named image, video, or audio refs.
 
     The prompt can mention refs as ``[@name]``; the engine selects its refs
     payload branch whenever ``refs`` is present.
     """
-    refs = [_upload_ref_item(ri) for ri in ref_items]
+    refs = [_upload_ref_item(ri) for ri in req.ref_items]
+    generate_audio = req.generate_audio
     # Some models (Kling 3.0 Omni) can't generate a soundtrack when a video ref
     # is present — Pollo rejects generateAudio:true in that case.
     no_audio = MODEL_INFO.get(key, {}).get("ref_mode", {}).get("no_audio_with_video")
@@ -304,12 +297,12 @@ def _submit_ref_video_job(
     generator = get_video_generator(
         key,
         api_key=keyctx.provider_key("pollo"),
-        prompt=prompt,
+        prompt=req.prompt,
         image_url=None,
         refs=refs,
-        aspect_ratio=aspect_ratio,
-        resolution=resolution,
-        length=duration,
+        aspect_ratio=req.aspect_ratio,
+        resolution=req.resolution,
+        length=req.duration,
         generate_audio=generate_audio,
     )
     return _job(generator)
@@ -383,38 +376,19 @@ def _check_source_inputs(typ: str, prompt: str, source_video: Path | None, first
     return source_video
 
 
-def _source_video_options(
-    typ: str,
-    *,
-    first_frame: Path | None,
-    resolution: str | None,
-    duration: int | None,
-    generate_audio: bool | None,
-    mode: str | None,
-) -> dict[str, JsonValue]:
+def _source_video_options(typ: str, req: VideoRequest) -> dict[str, JsonValue]:
     """The family-specific generator arguments of a source-video job."""
     if typ in _IMAGE_AND_VIDEO:  # the reference / face image rides along
-        return {"image_url": _upload(first_frame) if first_frame else None, "mode": mode}
-    kw: dict[str, JsonValue] = {"image_url": None, "resolution": resolution}
+        return {"image_url": _upload(req.first_frame) if req.first_frame else None, "mode": req.mode}
+    kw: dict[str, JsonValue] = {"image_url": None, "resolution": req.resolution}
     if typ in _TAKES_MODE:  # resolution carries the one pick (scale / language); mode the rest
-        kw["mode"] = mode
+        kw["mode"] = req.mode
     if typ == "extend":  # extend lets the user pick added duration + audio
-        kw.update(length=duration, generate_audio=generate_audio)
+        kw.update(length=req.duration, generate_audio=req.generate_audio)
     return kw
 
 
-def _submit_source_video_job(
-    key: str,
-    typ: str | None,
-    *,
-    prompt: str,
-    source_video: Path | None,
-    first_frame: Path | None,
-    resolution: str | None,
-    duration: int | None,
-    generate_audio: bool | None,
-    mode: str | None,
-) -> dict[str, JsonValue] | None:
+def _submit_source_video_job(key: str, typ: str | None, req: VideoRequest) -> dict[str, JsonValue] | None:
     """Submit a source-video job for a supported model family.
 
     Returns its job dict, or ``None`` when ``typ`` is not a source-video family
@@ -422,20 +396,13 @@ def _submit_source_video_job(
     """
     if typ not in (*_IMAGE_AND_VIDEO, *_VIDEO_ONLY):
         return None
-    source = _check_source_inputs(typ, prompt, source_video, first_frame)
+    source = _check_source_inputs(typ, req.prompt, req.source_video, req.first_frame)
     # The source video goes to the host that takes larger files; both are URLs.
     kw: dict[str, JsonValue] = {
         "api_key": keyctx.provider_key("pollo"),
-        "prompt": prompt,
+        "prompt": req.prompt,
         "video_url": _upload(source, "video"),
-        **_source_video_options(
-            typ,
-            first_frame=first_frame,
-            resolution=resolution,
-            duration=duration,
-            generate_audio=generate_audio,
-            mode=mode,
-        ),
+        **_source_video_options(typ, req),
     }
     generator = get_video_generator(key, **kw)
     return _job(generator)
@@ -476,91 +443,50 @@ def _video_ratio(key: str, aspect_ratio: str | None, first_frame: Path | None) -
     return None
 
 
-def submit_video(
-    model_id: str,
-    prompt: str,
-    duration: int | None = None,
-    aspect_ratio: str | None = None,
-    resolution: str | None = None,
-    *,
-    generate_audio: bool | None = None,
-    first_frame: Path | None = None,
-    source_video: Path | None = None,
-    source_audio: Path | None = None,
-    mode: str | None = None,
-    ref_items: list[dict[str, object]] | None = None,
-) -> dict[str, JsonValue]:
+def submit_video(req: VideoRequest) -> dict[str, JsonValue]:
     """Start a Pollo video job and return its id and sent settings.
 
     A first frame is uploaded first because Pollo accepts only URLs. Named
-    ``ref_items`` route reference-mode models to their refs branch instead.
+    ``req.ref_items`` route reference-mode models to their refs branch instead.
     """
-    key = _generator_key(model_id, VIDEO_GENERATORS)
+    key = _generator_key(req.model, VIDEO_GENERATORS)
     image_hosts.take_upload_notes()  # start clean: notes describe this submit only
     typ = MODEL_INFO.get(key, {}).get("type")
-    if ref_items and MODEL_INFO.get(key, {}).get("ref_mode"):
-        return _submit_ref_video_job(
-            key,
-            prompt=prompt,
-            ref_items=ref_items,
-            aspect_ratio=aspect_ratio,
-            resolution=resolution,
-            duration=duration,
-            generate_audio=generate_audio,
-        )
+    if req.ref_items and MODEL_INFO.get(key, {}).get("ref_mode"):
+        return _submit_ref_video_job(key, req)
     if typ == "lipsync":
-        return _submit_lipsync_job(key, prompt, first_frame, source_audio, resolution)
-    job = _submit_source_video_job(
-        key,
-        typ,
-        prompt=prompt,
-        source_video=source_video,
-        first_frame=first_frame,
-        resolution=resolution,
-        duration=duration,
-        generate_audio=generate_audio,
-        mode=mode,
-    )
+        return _submit_lipsync_job(key, req.prompt, req.first_frame, req.source_audio, req.resolution)
+    job = _submit_source_video_job(key, typ, req)
     if job is not None:
         return job
     generator = get_video_generator(
         key,
         api_key=keyctx.provider_key("pollo"),
-        prompt=prompt,
-        image_url=_upload(first_frame) if first_frame else None,
-        aspect_ratio=_video_ratio(key, aspect_ratio, first_frame),
-        resolution=resolution,
-        length=duration,
-        generate_audio=generate_audio,
+        prompt=req.prompt,
+        image_url=_upload(req.first_frame) if req.first_frame else None,
+        aspect_ratio=_video_ratio(key, req.aspect_ratio, req.first_frame),
+        resolution=req.resolution,
+        length=req.duration,
+        generate_audio=req.generate_audio,
     )
     return _job(generator)
 
 
-def estimate_cost(
-    model_id: str,
-    kind: str,
-    duration: int | None = None,
-    aspect_ratio: str | None = None,
-    resolution: str | None = None,
-    *,
-    generate_audio: bool | None = None,
-    n_images: int = 0,
-    prompt: str = "",
-    audio: Mapping[str, JsonValue] | None = None,
-) -> dict[str, JsonValue] | None:
+def estimate_cost(model_id: str, query: CostQuery) -> dict[str, JsonValue] | None:
     """Return Pollo's credit estimate, or ``None`` when it cannot be priced.
 
     Estimates are free and use stand-in media URLs, so no files are uploaded.
     """
+    kind, aspect_ratio, resolution, n_images = query.kind, query.aspect_ratio, query.resolution, query.n_images
     try:
         if kind == "audio":
             key = _generator_key(model_id, AUDIO_GENERATORS)
             generator = get_audio_generator(
                 key,
                 api_key=keyctx.provider_key("pollo"),
-                prompt=prompt or "estimate",
+                prompt=query.prompt or "estimate",
                 voice_ref_url=pollo_estimate.PLACEHOLDERS["audio"],
-                **(audio or {}),
+                **(query.audio or {}),
             )
         elif kind == "image":
             generators = IMAGE_GENERATORS
@@ -586,8 +512,8 @@ def estimate_cost(
                 video_url=pollo_estimate.PLACEHOLDERS["video"] if MODEL_INFO.get(key, {}).get("video_input") else None,
                 aspect_ratio=aspect_ratio if aspect_ratio in ratios else None,
                 resolution=resolution,
-                length=duration,
-                generate_audio=generate_audio,
+                length=query.duration,
+                generate_audio=query.generate_audio,
             )
         return pollo_estimate.estimate(generator)
     except (PolloError, ValueError, TypeError, requests.RequestException):  # estimates must not block the composer

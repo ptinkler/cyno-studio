@@ -20,6 +20,7 @@ the library never breaks what used it.
 
 import io
 import zipfile
+from dataclasses import dataclass
 from typing import Annotated, Literal, TypedDict
 
 from anyio import to_thread
@@ -65,23 +66,35 @@ async def api_media_thumb(media_id: str) -> FileResponse:
     return await thumb_response(path)
 
 
+@dataclass
+class MediaFilter:
+    """The list's filters, as query parameters (FastAPI builds this from them)."""
+
+    kind: str = "all"
+    source: str = "all"
+    origin: str = "all"
+    q: str = ""
+
+    @property
+    def active(self) -> bool:
+        """Whether any filter narrows the list."""
+        return self.kind != "all" or self.source != "all" or self.origin != "all" or bool(self.q.strip())
+
+
 @router.get("", response_model=None)
 def api_list_media(
+    filters: Annotated[MediaFilter, Depends()],
     offset: int = 0,
     limit: int = 0,  # 0 = everything from `offset` on (the default — the whole library)
-    kind: str = "all",
-    source: str = "all",
-    origin: str = "all",
-    q: str = "",
 ) -> MediaPage:
     """Return a filtered page of media, newest first.
 
     ``total`` is the number of matching items before paging.
     """
     items = all_items()
-    ql = q.strip().lower()
-    if kind != "all" or source != "all" or origin != "all" or ql:
-        items = [i for i in items if item_matches(i, kind, source, origin, ql)]
+    if filters.active:
+        ql = filters.q.strip().lower()
+        items = [i for i in items if item_matches(i, filters.kind, filters.source, filters.origin, ql)]
     total = len(items)
     items = items[offset : offset + limit] if limit else items[offset:]
     fill_durations(items)

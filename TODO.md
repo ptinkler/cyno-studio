@@ -28,15 +28,9 @@ Status as of 2026-11-15. Measured numbers are from running the tools, not estima
 
 ## 3. Stricter lint rules
 
-Adopted and enforced: `A`, `PLW`, `PLR0911`, `PLR0912`, `PLR0915`, `PLR2004` (magic numbers: HTTP statuses are `http.HTTPStatus`, the rest are named constants) and `FBT` (flag arguments are keyword-only). Test-only ignores for `PLR0913`, `PLR2004` and `FBT` are approved and documented in `pyproject.toml`.
+Adopted and enforced: `A`, `PLW`, `PLR0911`, `PLR0912`, `PLR0915`, `PLR2004` (magic numbers: HTTP statuses are `http.HTTPStatus`, the rest are named constants) and `FBT` (flag arguments are keyword-only). `PLR0913` is enforced too. Test-only ignores for `PLR0913`, `PLR2004` and `FBT` are approved and documented in `pyproject.toml`.
 
-- [ ] `PLR0913` (at most 5 arguments) is parked in `pyproject.toml`: 31 non-test functions are over. They group into a few bundles, which is the fix rather than keyword-only tricks:
-  - video submission options (`submit_video` in `providers/__init__.py`, `pollo.py`, `venice.py`, `openrouter.py`, plus the `_submit_*` helpers and `turn_generation._generate_video`): a `VideoRequest` dataclass;
-  - image generation (`generate_image` x3, `turn_generation._generate_image`): an `ImageRequest`;
-  - `stream_chat` x3: a `StreamOptions` (tools, session id, time cap, stop callback);
-  - history shaping in `chat/generation.py` (`conversation`, `image_context`, `plan_refs`);
-  - the rest one by one (`add_chat_message` has 155 test call sites: `**fields` like the other `update_*` methods; `request_log.record`; the two import methods; `estimate_cost`; `Turn.__init__`).
-  Re-enable the rule when they are done.
+- [x] `PLR0913` (at most 5 arguments) is enforced for non-test code. The 31 violations were fixed with request objects, not keyword-only tricks: `providers/specs.py` holds `ImageRequest`, `VideoRequest`, `StreamOptions` and `CostQuery` (every provider takes the same object and uses the fields it knows); `chat/generation.py` has `HistoryShape`, `RefLimits` and `ImageAsk`; `turn_generation.py` has `ImageSpec` and `VideoSpec`; `turn_base.py` has `TurnLink` and `Reword`; `request_log.CallResult`; `imports.ImportStamp`; `add_chat_message` takes typed `**fields` (`NewMessage`); Venice's `_Call`; uploads' `_UploadRule`; `MediaFilter` for the media list query.
 - Not recommended: `EM` (128) and `CPY` (133) are noise for this repo.
 
 ## 4. Split the oversized modules

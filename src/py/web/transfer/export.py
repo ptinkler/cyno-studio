@@ -38,6 +38,7 @@ from starlette.background import BackgroundTask
 from web.auth.users import require_user
 from web.chat import ConversationCreate, api_create_conversation, conversation_dir
 from web.core.metadata import get_db, iso
+from web.core.metadata.imports import ImportStamp
 from web.core.metadata.models import ChatConversation
 from web.types import JsonValue
 from web.uploads.files import safe_filename
@@ -370,7 +371,11 @@ class _Importer:
         self.written += _copy_files(self.zf, src_id, target.id, self.stats)
         leaf = data.get("current_leaf_id")
         added, changed = get_db().add_native_import(
-            target.id, rows, _library(data), str(leaf) if isinstance(leaf, int) else None, stamp, updated
+            target.id,
+            rows,
+            _library(data),
+            str(leaf) if isinstance(leaf, int) else None,
+            ImportStamp(stamp, updated),
         )
         if conv is None:
             return "new"

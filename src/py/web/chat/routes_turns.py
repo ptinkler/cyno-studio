@@ -32,11 +32,13 @@ from web.chat.helpers import (
 )
 from web.chat.models import EditMessage, EnhancePrompt, EstimateRequest, RetryMessage, SendMessage, TurnSettings
 from web.chat.turn import Turn
+from web.chat.turn_base import Reword, TurnLink
 from web.chat.workers import ctx_thread
 from web.core.metadata import get_db
 from web.core.metadata.models import ChatMessage
 from web.media.kinds import kind_of
 from web.providers import openrouter, pollo
+from web.providers.specs import CostQuery
 from web.types import JsonValue
 from web.uploads.files import safe_filename
 
@@ -75,14 +77,16 @@ def api_estimate(data: EstimateRequest) -> dict[str, JsonValue]:
     return {
         "estimate": pollo.estimate_cost(
             data.model,
-            data.kind if data.kind in ("video", "audio") else "image",
-            duration,
-            ratio,
-            resolution,
-            generate_audio=data.generate_audio,
-            n_images=data.n_images,
-            prompt=data.prompt,
-            audio=audio_params(data.audio_options),
+            CostQuery(
+                data.kind if data.kind in ("video", "audio") else "image",
+                duration,
+                ratio,
+                resolution,
+                generate_audio=data.generate_audio,
+                n_images=data.n_images,
+                prompt=data.prompt,
+                audio=audio_params(data.audio_options),
+            ),
         )
     }
 
@@ -217,16 +221,14 @@ def _stream_turn(
     settings: TurnSettings,
     assistant_id: int,
     start: dict[str, JsonValue],
-    initial_cost: float = 0.0,
-    rewrite: tuple[str, str] | None = None,
-    after: Callable[[], ChatMessage | None] | None = None,
+    reword: Reword | None = None,
 ) -> StreamingResponse:
     """Run a Turn against `assistant_id` and stream its events as SSE.
 
     Used
     both for a brand-new reply and for generating an existing one again.
 
-    `after` runs once the Turn has finished and saved; if it returns a message
+    A `reword` has an `after` that runs once the Turn has finished and saved; if it returns a message
     that goes out as a final "done", so the UI ends on its state.
     """
     events: queue.Queue[dict[str, JsonValue] | None] = queue.Queue()
@@ -235,8 +237,8 @@ def _stream_turn(
 
     def worker() -> None:
         try:
-            Turn(conv_id, settings, assistant_id, events.put, cancel, initial_cost=initial_cost, rewrite=rewrite).run()
-            if after and (msg := after()):
+            Turn(conv_id, settings, assistant_id, TurnLink(events.put, cancel), reword).run()
+            if reword and reword.after and (msg := reword.after()):
                 events.put({"type": "done", "message": message_out(msg)})
         finally:
             _cancel_events.pop(assistant_id, None)
@@ -348,15 +350,8 @@ def api_reword(conv_id: str, data: RewordMessage) -> StreamingResponse:
             "assistant_message": {**message_out(msg), "content": "", "status": "streaming"},
             "replaces": msg.id,
         }
-        return _stream_turn(
-            conv_id,
-            settings,
-            message_id,
-            start,
-            initial_cost=spent,
-            rewrite=(previous, instruction) if instruction else None,
-            after=after,
-        )
+        reword = Reword(spent, (previous, instruction) if instruction else None, after)
+        return _stream_turn(conv_id, settings, message_id, start, reword)
 
 
 class ShowTextVersion(BaseModel):

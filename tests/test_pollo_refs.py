@@ -17,6 +17,7 @@ from web.chat.catalogue import RefMode
 from web.chat.turn import Turn
 from web.core.metadata.models import ChatMessage
 from web.jsonutil import as_object
+from web.providers import VideoRequest
 from web.providers.pollo_engine import PolloGenerator
 
 if TYPE_CHECKING:
@@ -92,13 +93,15 @@ class TestSubmitRefBranch:
 
         monkeypatch.setattr(pollo, "submit_task", fake_submit)
         job = pollo.submit_video(
-            "pollo/klingv4",
-            "replace [@video1] with [@image1]",
-            duration=5,
-            ref_items=[
-                {"path": Path("/x/v.mp4"), "name": "video1", "type": "video"},
-                {"path": Path("/x/i.png"), "name": "image1", "type": "image"},
-            ],
+            VideoRequest(
+                "pollo/klingv4",
+                "replace [@video1] with [@image1]",
+                duration=5,
+                ref_items=[
+                    {"path": Path("/x/v.mp4"), "name": "video1", "type": "video"},
+                    {"path": Path("/x/i.png"), "name": "image1", "type": "image"},
+                ],
+            )
         )
         assert job["id"] == "pollo:task1"
         refs = rows(captured["p"]["input"], "refs")
@@ -119,7 +122,7 @@ class TestSubmitRefBranch:
             return "task2"
 
         monkeypatch.setattr(pollo, "submit_task", fake_submit)
-        job = pollo.submit_video("pollo/klingv4", "a fox runs", duration=5, ref_items=[])
+        job = pollo.submit_video(VideoRequest("pollo/klingv4", "a fox runs", duration=5, ref_items=[]))
         assert job["id"] == "pollo:task2"
 
 
