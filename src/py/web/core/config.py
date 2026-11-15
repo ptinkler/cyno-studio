@@ -10,7 +10,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Project root (the pollo-api directory)
-_PROJECT_ROOT = Path(__file__).parent.parent.parent
+_PROJECT_ROOT = Path(__file__).resolve().parents[4]  # src/py/web/core/config.py
 
 # The one .env load for the whole app, by absolute path (so it doesn't depend
 # on the working directory) and WITHOUT override: a variable already in the

@@ -1,6 +1,6 @@
 """HTTP routes for chat settings, conversations, and media.
 
-Turn, media-generation, and SSE routes are defined in `routes_turns.py`.
+Turn and SSE routes are in `routes_turns.py`; media-card actions in `routes_media_items.py`.
 """
 
 import shutil

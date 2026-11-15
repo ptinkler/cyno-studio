@@ -13,7 +13,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../static',
+    outDir: '../py/web/static',
     emptyOutDir: true,
   },
   test: {

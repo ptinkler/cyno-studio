@@ -3,7 +3,8 @@
 [tool.ruff]
 target-version = "py313"
 line-length = 120
-extend-exclude = ["data", "web/frontend", "web/static"]
+extend-exclude = ["data", "src/js", "src/py/web/static"]
+src = [".", "src/py"]  # import roots: the repo root (tests, scripts) and the Python source root (web)
 
 [tool.ruff.lint]
 select = [
@@ -121,6 +122,7 @@ line-ending = "lf"
 # Strict type checking with no baseline: every diagnostic fails lint.
 [tool.basedpyright]
 typeCheckingMode = "strict"
+extraPaths = ["src/py"]
 reportExplicitAny = "error"
 reportAny = "error"
 reportUnknownVariableType = "error"

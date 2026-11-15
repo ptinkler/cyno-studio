@@ -31,11 +31,12 @@ This package is pure wiring. The pieces live in their own modules:
     routes          conversations: CRUD, branches, forks, spend, messages
     routes_settings status, defaults, custom instructions, spaces
     routes_media    attachments, served media files, the library, the request log
-    routes_turns    the SSE turn routes + pin/favourite/regenerate media routes
+    routes_media_items pin / favourite / regenerate / versions of media cards, active generations
+    routes_turns    the SSE turn routes (send, retry, edit, reword) and prompt helpers
 """
 
 # Importing the route modules registers their endpoints on the shared router.
-from web.chat import routes, routes_media, routes_settings, routes_turns
+from web.chat import routes, routes_media, routes_media_items, routes_settings, routes_turns
 from web.chat.constants import CHAT_PREVIEW_SIZE, IMAGE_EXTS
 from web.chat.deps import router
 from web.chat.helpers import conversation_dir
@@ -54,6 +55,7 @@ __all__ = [
     # imported for their route-registration side effect
     "routes",
     "routes_media",
+    "routes_media_items",
     "routes_settings",
     "routes_turns",
     "startup_resume_chat",

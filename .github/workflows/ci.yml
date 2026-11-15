@@ -39,7 +39,7 @@ jobs:
           basedpyright
 
       - name: Frontend — ESLint and Prettier
-        working-directory: web/frontend
+        working-directory: src/js
         run: |
           npm ci
           npm run lint
@@ -76,11 +76,11 @@ jobs:
           node-version: 24
 
       - name: Install deps
-        working-directory: web/frontend
+        working-directory: src/js
         run: npm install
 
       - name: Run frontend tests
-        working-directory: web/frontend
+        working-directory: src/js
         run: npm test
 
   build-and-push:

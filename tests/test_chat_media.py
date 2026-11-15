@@ -584,7 +584,7 @@ class TestModerationAndRegenerate:
         """Test that finished item is rerolled as a new item beside it."""
         msg = self._failed_image(db, conv, status="done", file="x.png")
         self._run_worker_inline(chat, monkeypatch)
-        monkeypatch.setattr(chat_pkg.routes_turns, "_regenerate_worker", stub(lambda: None))
+        monkeypatch.setattr(chat_pkg.routes_media_items, "_regenerate_worker", stub(lambda: None))
         r = client.post(f"/api/chat/messages/{msg.id}/media/m1/regenerate", json={})
         assert r.status_code == 200
         old, new = jp.must(db.get_chat_message(msg.id)).media

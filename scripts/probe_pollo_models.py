@@ -35,8 +35,8 @@ from typing import TYPE_CHECKING, cast
 
 import requests
 
-# Run from the repo root so `web` imports resolve.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# `web` lives in src/py, which isn't on the path when run from the repo root.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src" / "py"))
 
 from web.providers.pollo_engine import VIDEO_GENERATORS
 from web.providers.pollo_engine import video_generator as get_video_generator

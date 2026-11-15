@@ -9,7 +9,7 @@ the public spec):
      source of truth for a model's FEATURES — whether it has a reference-to-
      video branch, the refs cap, allowed ref types, durations, resolutions,
      ratios. This script extracts those and diffs them against our registry
-     (web/providers/pollo_engine/video/models.py VIDEO_MODELS + pollo_models.MODEL_INFO)
+     (src/py/web/providers/pollo_engine/video/models.py VIDEO_MODELS + pollo_models.MODEL_INFO)
      so you never hand-find a model's feature set again.
 
   2. ENABLED ON YOUR KEY?  (--key / POLLO_API_KEY) The free estimate probe
@@ -253,8 +253,9 @@ def _enablement(keys: list[str], api_key: str) -> dict[str, str]:
 # `no_audio_with_video` — are merged around, never overwritten.
 REMOVE: Final = _Remove.REMOVE
 _REPO = Path(__file__).resolve().parent.parent  # repo root
-MODELS_FILE = _REPO / "web" / "providers" / "pollo_models.py"
-ENGINE_FILE = _REPO / "web" / "providers" / "pollo_engine" / "video" / "models.py"
+_PY = _REPO / "src" / "py"
+MODELS_FILE = _PY / "web" / "providers" / "pollo_models.py"
+ENGINE_FILE = _PY / "web" / "providers" / "pollo_engine" / "video" / "models.py"
 # A hide we may clear is one justified by enablement; a deliberate hide is kept.
 _ENABLEMENT_HIDE = re.compile(r"enabled|403|404|unavailable|access", re.IGNORECASE)
 

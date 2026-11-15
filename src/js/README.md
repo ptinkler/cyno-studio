@@ -92,7 +92,7 @@ python web/api.py
 Run the Vue frontend in another terminal:
 
 ```bash
-cd web/frontend
+cd src/js
 npm run dev
 ```
 

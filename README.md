@@ -94,7 +94,7 @@ WIREGUARD_ADDRESSES=...
 
 ```bash
 python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
-cd web/frontend && npm install && cd -
+cd src/js && npm install && cd -
 make dev        # API on :5000, Vite dev server on :5173
 make test       # pytest + vitest
 make lint       # what CI checks
@@ -108,7 +108,7 @@ Code standards, enforced in CI:
   pyupgrade, simplifications, and a cyclomatic complexity limit of 10) and formatting. 120-column lines.
   Settings in `pyproject.toml`.
 - **Frontend** — ESLint (`eslint:recommended` + `plugin:vue/recommended`, complexity limit 12) and Prettier
-  (no semicolons, single quotes, 120 columns). Settings in `web/frontend/eslint.config.js` and `.prettierrc.json`.
+  (no semicolons, single quotes, 120 columns). Settings in `src/js/eslint.config.js` and `.prettierrc.json`.
 - **Line endings** — LF everywhere (`.gitattributes`, `.editorconfig`).
 
 ## Data
