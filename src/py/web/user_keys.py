@@ -22,6 +22,7 @@ from web import caches
 from web.auth import user_secret
 from web.core.metadata import User, get_db
 from web.dev_login import store_keys_plaintext
+from web.jsonutil import loads
 from web.users import require_user
 
 KEY_PROVIDERS = ("pollo", "venice", "openrouter")
@@ -56,13 +57,13 @@ def _decrypt(blob: str | None) -> dict[str, str]:
     if not blob:
         return {}
     try:  # plaintext JSON (dev / no-encryption)
-        keys = _as_keys(cast("object", json.loads(blob)))
+        keys = _as_keys(loads(blob))
     except (ValueError, TypeError):
         keys = None
     if keys is not None:
         return keys
     try:
-        return _as_keys(cast("object", json.loads(fernet().decrypt(blob.encode()).decode()))) or {}
+        return _as_keys(loads(fernet().decrypt(blob.encode()).decode())) or {}
     except (InvalidToken, ValueError):
         return {}  # secret rotated or corrupt: treat as unset
 

@@ -4,7 +4,7 @@ import re
 import uuid
 from datetime import datetime
 
-from web.core.metadata._base import DBBase
+from web.core.metadata._base import DBBase, set_fields
 from web.core.metadata.models import ChatConversation, ChatImportSkip, ChatLibraryItem, ChatMessage
 from web.core.metadata.tenant import reset_tenant, set_tenant
 from web.types import JsonValue
@@ -145,9 +145,7 @@ class ConversationMixin(DBBase):
             conv = session.get(ChatConversation, conv_id)
             if not conv:
                 return None
-            for key, value in fields.items():
-                if hasattr(conv, key):
-                    setattr(conv, key, value)
+            set_fields(conv, fields)
             conv.updated_at = datetime.now().astimezone().replace(tzinfo=None)
             session.commit()
             session.refresh(conv)

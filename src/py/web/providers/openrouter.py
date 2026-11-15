@@ -22,6 +22,7 @@ from typing import cast
 import httpx
 
 from web import keyctx, net_guard, request_log, sse
+from web.jsonutil import as_object, as_objects, body_of, loads
 from web.types import ChatChunk, JsonValue, VideoJob
 
 # Overridable so a local fake can stand in during manual testing
@@ -141,19 +142,6 @@ def is_configured() -> bool:
 NAME: str = "openrouter"
 
 
-def _json_object(value: object) -> dict[str, JsonValue]:
-    if not isinstance(value, dict):
-        return {}
-    return cast("dict[str, JsonValue]", value)
-
-
-def _json_objects(value: object) -> list[dict[str, JsonValue]]:
-    if not isinstance(value, list):
-        return []
-    items = cast("list[object]", value)
-    return [cast("dict[str, JsonValue]", item) for item in items if isinstance(item, dict)]
-
-
 def _strings(value: JsonValue) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -194,18 +182,18 @@ def raise_for_response(resp: httpx.Response) -> None:
     if resp.status_code < 400:
         return
     try:
-        body = cast("object", resp.json())
+        body = body_of(resp)
         if not isinstance(body, dict):
             message = resp.text[:500]
         else:
-            body_obj = _json_object(cast("object", body))
+            body_obj = as_object(body)
             err = body_obj.get("error") or {}
-            err_obj = _json_object(cast("object", err))
+            err_obj = as_object(err)
             error_message = err_obj.get("message")
             message = error_message if isinstance(error_message, str) else str(err)
             # Provider errors carry the upstream message in metadata.raw and
             # the upstream's name in metadata.provider_name.
-            meta = _json_object(err_obj.get("metadata") or {}) if isinstance(err, dict) else {}
+            meta = as_object(err_obj.get("metadata")) if isinstance(err, dict) else {}
             raw = meta.get("raw")
             if isinstance(raw, str) and raw not in message:
                 message = f"{message}: {raw[:300]}"
@@ -222,10 +210,10 @@ def _get(path: str, params: dict[str, str] | None = None) -> dict[str, JsonValue
         f"{OPENROUTER_BASE}{path}", headers=request_headers(), params=params, timeout=DEFAULT_TIMEOUT
     )
     raise_for_response(resp)
-    data = cast("object", resp.json())
+    data = body_of(resp)
     if not isinstance(data, dict):
         raise InvalidJsonObjectError
-    return cast("dict[str, JsonValue]", data)
+    return as_object(data)
 
 
 def get_credits() -> dict[str, float]:
@@ -233,7 +221,7 @@ def get_credits() -> dict[str, float]:
 
     This is distinct from GET /key, which reports only this key's spending limit.
     """
-    data = _json_object(cast("object", _get("/credits").get("data") or {}))
+    data = as_object(_get("/credits").get("data"))
     total_value, used_value = data.get("total_credits"), data.get("total_usage")
     total = float(total_value) if isinstance(total_value, int | float | str) else 0.0
     used = float(used_value) if isinstance(used_value, int | float | str) else 0.0
@@ -242,14 +230,14 @@ def get_credits() -> dict[str, float]:
 
 def list_text_models() -> list[dict[str, JsonValue]]:
     """Return OpenRouter text models and their supported capabilities."""
-    data = _json_objects(_get("/models", {"output_modalities": "text"}).get("data", []))
+    data = as_objects(_get("/models", {"output_modalities": "text"}).get("data", []))
     models: list[dict[str, JsonValue]] = []
     for m in data:
         model_id = m.get("id")
         if not isinstance(model_id, str):
             continue
-        arch = _json_object(m.get("architecture") or {})
-        pricing = _json_object(m.get("pricing") or {})
+        arch = as_object(m.get("architecture"))
+        pricing = as_object(m.get("pricing"))
         params = _strings(m.get("supported_parameters") or [])
         models.append(
             {
@@ -269,19 +257,19 @@ def list_text_models() -> list[dict[str, JsonValue]]:
 def _image_api_models() -> list[dict[str, JsonValue]]:
     """The dedicated image-API models (not yet marked conversational)."""
     models: list[dict[str, JsonValue]] = []
-    for m in _json_objects(_get("/images/models").get("data", [])):
+    for m in as_objects(_get("/images/models").get("data", [])):
         model_id = m.get("id")
         if not isinstance(model_id, str):
             continue
-        arch = _json_object(m.get("architecture") or {})
-        params = _json_object(m.get("supported_parameters") or {})
+        arch = as_object(m.get("architecture"))
+        params = as_object(m.get("supported_parameters"))
         models.append(
             {
                 "id": model_id,
                 "name": m.get("name") or model_id,
                 "input_modalities": arch.get("input_modalities") or ["text"],
-                "aspect_ratios": _json_object(params.get("aspect_ratio") or {}).get("values"),
-                "resolutions": _json_object(params.get("resolution") or {}).get("values"),
+                "aspect_ratios": as_object(params.get("aspect_ratio")).get("values"),
+                "resolutions": as_object(params.get("resolution")).get("values"),
                 "created": m.get("created"),
                 "conversational": False,
             }
@@ -294,7 +282,7 @@ def _chat_image_model_id(m: dict[str, JsonValue]) -> str | None:
     model_id = m.get("id")
     if not isinstance(model_id, str):
         return None
-    arch = _json_object(m.get("architecture") or {})
+    arch = as_object(m.get("architecture"))
     if not {"text", "image"} <= set(_strings(arch.get("output_modalities") or [])):
         return None
     if model_id.startswith("openrouter/"):
@@ -304,7 +292,7 @@ def _chat_image_model_id(m: dict[str, JsonValue]) -> str | None:
 
 def _conversational_entry(m: dict[str, JsonValue], model_id: str) -> dict[str, JsonValue]:
     """A catalogue row for a chat model that is only reachable through /chat/completions."""
-    arch = _json_object(m.get("architecture") or {})
+    arch = as_object(m.get("architecture"))
     return {
         "id": model_id,
         "name": m.get("name") or model_id,
@@ -324,7 +312,7 @@ def list_image_models() -> list[dict[str, JsonValue]]:
     """
     models = _image_api_models()
     by_id = {str(m["id"]): m for m in models}
-    for m in _json_objects(_get("/models", {"output_modalities": "image"}).get("data", [])):
+    for m in as_objects(_get("/models", {"output_modalities": "image"}).get("data", [])):
         model_id = _chat_image_model_id(m)
         if model_id is None:
             continue
@@ -337,7 +325,7 @@ def list_image_models() -> list[dict[str, JsonValue]]:
 
 def list_video_models() -> list[dict[str, JsonValue]]:
     """Return OpenRouter video models that can generate videos from prompts."""
-    data = _json_objects(_get("/videos/models").get("data", []))
+    data = as_objects(_get("/videos/models").get("data", []))
     models: list[dict[str, JsonValue]] = []
     for m in data:
         # Upscalers share this catalogue but can't generate from a prompt
@@ -462,7 +450,7 @@ def generate_image(
         if "text/event-stream" not in resp.headers.get("content-type", ""):
             resp.read()  # a provider that doesn't stream answers with plain JSON
             outcome["response"] = request_log.response_of(resp)
-            return _images_from_json(_json_object(cast("object", resp.json())))
+            return _images_from_json(as_object(body_of(resp)))
         images, cost = _images_from_stream(resp.iter_lines())
         outcome["response"] = {"images": [t for _, t in images], "cost": cost}
         return images, cost
@@ -470,7 +458,7 @@ def generate_image(
 
 def _images_from_json(data: dict[str, JsonValue]) -> tuple[list[tuple[bytes, str]], float | None]:
     images: list[tuple[bytes, str]] = []
-    for item in _json_objects(data.get("data", [])):
+    for item in as_objects(data.get("data", [])):
         encoded = item.get("b64_json")
         if not isinstance(encoded, str):
             continue
@@ -478,7 +466,7 @@ def _images_from_json(data: dict[str, JsonValue]) -> tuple[list[tuple[bytes, str
         images.append((base64.b64decode(encoded), media_type if isinstance(media_type, str) else "image/png"))
     if not images:
         raise NoImagesError
-    usage = _json_object(cast("object", data.get("usage") or {}))
+    usage = as_object(data.get("usage"))
     return images, _cost(usage.get("cost"))
 
 
@@ -497,7 +485,7 @@ def _stream_events(lines: Iterator[str]) -> Iterator[tuple[str, dict[str, JsonVa
         if payload == "[DONE]":
             return
         try:
-            yield event, _json_object(cast("object", json.loads(payload)))
+            yield event, as_object(loads(payload))
         except json.JSONDecodeError:
             continue
 
@@ -524,14 +512,14 @@ def _completed_image(chunk: dict[str, JsonValue], event: str) -> tuple[tuple[byt
     err = chunk.get("error")
     if kind == "error" or err:
         detail = err or chunk
-        message = _json_object(cast("object", detail)).get("message")
+        message = as_object(detail).get("message")
         raise OpenRouterError(message if isinstance(message, str) else str(detail) or "Image generation failed")
     encoded = chunk.get("b64_json")
     if not kind.endswith("completed") or not isinstance(encoded, str):
         return None, None
     media_type = chunk.get("media_type")
     image = (base64.b64decode(encoded), media_type if isinstance(media_type, str) else "image/png")
-    usage = _json_object(cast("object", chunk.get("usage") or {}))
+    usage = as_object(chunk.get("usage"))
     return image, _cost(usage.get("cost"))
 
 
@@ -542,13 +530,13 @@ def _fetch_image(url: str) -> tuple[bytes, str]:
     except net_guard.UnsafeURLError as exc:
         raise UnsafeImageUrlError(exc) from exc
     r.raise_for_status()
-    content_type = cast("object", r.headers.get("content-type", "image/png"))
-    return r.content, content_type.split(";")[0] if isinstance(content_type, str) else "image/png"
+    content_type = r.headers.get("content-type") or "image/png"
+    return r.content, content_type.split(";")[0]
 
 
 def _chat_image(part: dict[str, JsonValue]) -> tuple[bytes, str] | None:
     """The image a chat response part carries (a data: URL or a link), or None."""
-    image_url = _json_object(cast("object", part.get("image_url") or {}))
+    image_url = as_object(part.get("image_url"))
     url_value = image_url.get("url")
     url = url_value if isinstance(url_value, str) else ""
     if url.startswith("data:"):
@@ -587,14 +575,14 @@ def generate_image_chat(
         outcome["status"] = resp.status_code
         outcome["response"] = request_log.response_of(resp)
         raise_for_response(resp)
-    data = _json_object(cast("object", resp.json()))
-    choices = _json_objects(data.get("choices") or [])
-    message = _json_object(cast("object", choices[0].get("message") or {})) if choices else {}
-    found = (_chat_image(part) for part in _json_objects(message.get("images") or []))
+    data = as_object(body_of(resp))
+    choices = as_objects(data.get("choices") or [])
+    message = as_object(choices[0].get("message")) if choices else {}
+    found = (_chat_image(part) for part in as_objects(message.get("images") or []))
     images = [image for image in found if image]
     if not images:
         raise _no_image_error(message)
-    usage = _json_object(cast("object", data.get("usage") or {}))
+    usage = as_object(data.get("usage"))
     return images, _cost(usage.get("cost"))
 
 
@@ -632,7 +620,7 @@ def submit_video(
         outcome["status"] = resp.status_code
         outcome["response"] = request_log.response_of(resp)
         raise_for_response(resp)
-    result = _json_object(cast("object", resp.json()))
+    result = as_object(body_of(resp))
     job_id = result.get("id")
     if not isinstance(job_id, str):
         raise InvalidVideoJobError

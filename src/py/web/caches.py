@@ -28,9 +28,9 @@ def on_keys_changed(fn: Callable[[], None]) -> Callable[[], None]:
 
 
 def keys_changed() -> None:
-    """Drop every registered cache. One failing must not stop the others, or.
+    """Drop every registered cache.
 
-    block the key from being saved.
+    One failing must not stop the others, or block the key from being saved.
     """
     for fn in _clearers:
         try:

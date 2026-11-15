@@ -270,9 +270,9 @@ def _turns(data: Mapping[str, JsonValue], library: list[Mapping[str, JsonValue]]
 
 
 def _place_generated(turns: list[_Turn], library: list[Mapping[str, JsonValue]]) -> None:
-    """Generated images, which the export doesn't link to a message: each goes.
+    """Place generated images, which the export doesn't link to a message.
 
-    on the reply to the latest prompt sent before it was made.
+    Each goes on the reply to the latest prompt sent before it was made.
     """
     shown = {f for t in turns for f in t.uploads} | {g["id"] for t in turns for g in t.generated}
     for f in sorted(library, key=lambda file: str(file.get("created_at") or "")):
@@ -362,9 +362,9 @@ def _when(ts: float | None) -> datetime | None:
 
 
 class _Merge:
-    """What one chat's import adds to it: new messages (`rows`, each after.
+    """What one chat's import adds to it.
 
-    the one before on the exported branch) and changes to replies imported
+    New messages (`rows`, each after the one before on the exported branch) and changes to replies imported
     before (`updates`).
     """
 
@@ -583,10 +583,9 @@ def _run_native(zf: zipfile.ZipFile, stats: _ImportStats) -> _ImportStats:
 
 
 def _warm_thumbnails(paths: list[Path]) -> None:
-    """Make the new images' grid thumbnails and chat previews now, one at a.
+    """Make the new images' grid thumbnails and chat previews now, one at a time in the background.
 
-    time in the background, so opening the chats and Media page later
-    doesn't wait for hundreds of them to be made.
+    So opening the chats and the Media page later doesn't wait for hundreds of them to be made.
     """
     for path in paths:
         for size in (media.THUMB_SIZE, CHAT_PREVIEW_SIZE):

@@ -68,3 +68,19 @@ Backend line counts (functions at module level):
 - [ ] Drop the legacy `POLLO_DATA_DIR` fallback (`src/py/web/core/config.py`, its tests, `tests/conftest.py`) and the `${POLLO_HOST_DATA_DIR}` fallback in `docker-compose.yml`.
 - [ ] Drop the "Renamed from pollo-api" note in `README.md` (the old-project cleanup line in `synology-boot.sh` is already gone).
 - [ ] Delete the old GHCR packages `ghcr.io/ptinkler/pollo-api` and `pollo-nginx` (GitHub profile -> Packages) and the old images on the NAS.
+
+## 8. Code inspection (hacks, workarounds, suppressions)
+
+Done 2026-11-15:
+- Suppressions: only three exist in the code (`# noqa: S106` in `oauth.py`, `# fmt: skip` in one test, one `eslint-disable` in `ChatMessage.vue`), each now with its reason beside it. The blanket `reportUnusedFunction = "none"` relaxation was removed: it was hiding dead code (`_aspect_from_image` and `_image_dimensions`, now deleted).
+- About 75 docstrings were cut mid-sentence by an earlier automated "first line must end in a period" pass (`caches.py`, `polling.py`, `helpers.py`, many tests...); they now read properly.
+- `request_log`: exception-to-log-entry link goes through `entry_of(error)` instead of `__dict__` writes and `getattr` + `cast` at the call sites.
+- Metadata layer: one `set_fields()` replaces three different `setattr` loops (some silently dropped unknown names, some set stray attributes); an unknown field is now an error.
+- `openrouter.py` uses the shared `jsonutil` helpers (`as_object`, `body_of`, new `loads`) instead of private copies and 14 casts; `cast(` count in `src/py` went 88 -> 64.
+- `vpn.py` catches `requests.RequestException`, not bare `Exception`; the scripts no longer rely on a `sys.path` hack (run them with `make audit-models` / `make probe-models`).
+
+Open:
+- [ ] `ensure_schema` (`core/metadata/schema.py`) logs a failed migration and lets the server start on a half-migrated database (`test_schema.py` pins this). Decide whether startup should fail fast instead.
+- [ ] 64 `cast(` calls remain in `src/py` (most in `chatgpt_import.py`, `chat/turn.py`, `request_log.py`): mostly JSON narrowing that the `jsonutil` helpers could replace.
+- [ ] Legacy kept around: the single-attachment instruction column in `core/metadata/models.py` ("superseded by instruction_ids_json") and the `/api/usage` credits route used by `useApi.js`. Remove once nothing reads them.
+- [ ] `GenerationGrid.vue` and `MediaGrid.vue` each retry a failed image with a cache-busting query string; different enough that they were left separate.

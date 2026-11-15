@@ -66,9 +66,9 @@ class TestKeys:
 
 
 class TestLogin:
-    """Admins are created via the CLI (web.provision_admin), not the app — there.
+    """Admins are created via the CLI (web.provision_admin), not the app — there is no register endpoint.
 
-    is no register endpoint. Login verifies against that CLI-set password.
+    Login verifies against that CLI-set password.
     """
 
     def test_no_register_endpoint(self, client: TestClient) -> None:

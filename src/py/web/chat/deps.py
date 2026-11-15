@@ -1,6 +1,6 @@
-"""The chat API router, shared by the route modules and the engine so every.
+"""The chat API router, shared by the route modules and the engine.
 
-chat endpoint hangs off one APIRouter with the sign-in dependency.
+Every chat endpoint hangs off one APIRouter with the sign-in dependency.
 """
 
 import threading

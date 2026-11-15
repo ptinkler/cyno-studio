@@ -1,7 +1,7 @@
-"""Background video polling: start a poller thread for a submitted job, poll it.
+"""Background video polling.
 
-to completion (downloading the finished file), and resume unfinished jobs +
-warm missing thumbnails at startup.
+Starts a poller thread for a submitted job and polls it to completion (downloading the finished file), and at
+startup resumes unfinished jobs and warms missing thumbnails.
 """
 
 import logging
@@ -36,9 +36,10 @@ class _VideoProvider(Protocol):
 
 
 def _result_name(kind: str | None, job: Mapping[str, JsonValue]) -> str:
-    """A fresh file name; the extension follows the result's URL (tools return.
+    """A fresh file name for a finished job's result.
 
-    .webm / .mov, speech may be .wav), else .mp3 for audio and .mp4 for video.
+    The extension follows the result's URL (tools return .webm / .mov, speech may be .wav), else .mp3 for audio
+    and .mp4 for video.
     """
     audio = kind == "audio"
     urls = job.get("urls")

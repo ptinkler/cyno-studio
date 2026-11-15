@@ -19,11 +19,11 @@ the public spec):
 
 Usage:
     # Feature diff only (fetches the ~10 MB spec, or pass a saved copy):
-    python scripts/audit_pollo_models.py
-    python scripts/audit_pollo_models.py --spec /path/to/openapi.json
+    PYTHONPATH=src/py python -m scripts.audit_pollo_models
+    PYTHONPATH=src/py python -m scripts.audit_pollo_models --spec /path/to/openapi.json
 
     # Add the live availability column:
-    python scripts/audit_pollo_models.py --key sk-...
+    PYTHONPATH=src/py python -m scripts.audit_pollo_models --key sk-...
 
 Output per model: docs? | enabled? | refs(cap/types) | mismatches vs our config.
 """

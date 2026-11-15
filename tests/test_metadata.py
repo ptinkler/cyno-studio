@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 
 import web.core.config as config_mod
-from web.core.metadata import MetadataDB, _base, get_db, manager
+from web.core.metadata import ChatConversation, MetadataDB, _base, get_db, manager
+from web.core.metadata._base import UnknownFieldError, set_fields
 
 
 @pytest.fixture
@@ -33,10 +34,10 @@ class TestGlobalDB:
 
 @pytest.mark.parametrize("tz", ["UTC", "Europe/London", "America/New_York"])
 def test_timestamps_carry_the_servers_utc_offset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tz: str) -> None:
-    """Stored timestamps are naive server-local time. Serialised without an.
+    """Stored timestamps are naive server-local time.
 
-    offset, a browser in another timezone misreads them (a UTC server and a
-    UTC+1 browser showed a 1:20 render as 61:20).
+    Serialised without an offset, a browser in another timezone misreads them (a UTC server and a UTC+1
+    browser showed a 1:20 render as 61:20).
     """
     monkeypatch.setenv("TZ", tz)
     time.tzset()
@@ -51,3 +52,24 @@ def test_timestamps_carry_the_servers_utc_offset(tmp_path: Path, monkeypatch: py
     finally:
         monkeypatch.undo()
         time.tzset()
+
+
+class TestSetFields:
+    """Row updates name fields explicitly: a misspelt or non-field name must fail, not vanish."""
+
+    def test_sets_columns_and_property_setters(self) -> None:
+        """Test that a column and a property with a setter are both set."""
+        conv = ChatConversation()
+        set_fields(conv, {"title": "Hello", "instruction_ids": [3, 4]})
+        assert conv.title == "Hello"
+        assert conv.instruction_ids == [3, 4]
+
+    def test_unknown_field_is_an_error(self) -> None:
+        """Test that an unknown name raises instead of being silently dropped."""
+        with pytest.raises(UnknownFieldError, match="ChatConversation has no field 'titel'"):
+            set_fields(ChatConversation(), {"titel": "typo"})
+
+    def test_a_method_name_is_not_a_field(self) -> None:
+        """Test that a name that is a method, not a field, is rejected (hasattr alone would let it through)."""
+        with pytest.raises(UnknownFieldError):
+            set_fields(ChatConversation(), {"to_dict": 1})

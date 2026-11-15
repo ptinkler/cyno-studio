@@ -8,13 +8,9 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, TypedDict
 
-from PIL import Image
-
 from web.providers.pollo_engine.errors import NotANumberError, NotAWholeNumberError
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from web.types import JsonValue
 
 
@@ -49,11 +45,8 @@ def valid_length(length_str: str, valid: tuple[int, ...], default: int) -> int:
     return length
 
 
-def _image_dimensions(image_path: str | Path) -> tuple[int, int]:
-    return Image.open(image_path).size
-
-
-def _closest_ratio(width: int, height: int, ratios: tuple[str, ...]) -> str:
+def closest_aspect_ratio(width: int, height: int, ratios: tuple[str, ...]) -> str:
+    """The ratio in `ratios` closest to width/height."""
     actual = width / height
     return min(ratios, key=lambda r: abs(_ratio_value(r) - actual))
 
@@ -62,22 +55,6 @@ def _ratio_value(ratio: str) -> float:
     """A "W:H" ratio as a number."""
     w, h = (int(part) for part in ratio.split(":"))
     return w / h
-
-
-def closest_aspect_ratio(width: int, height: int, ratios: tuple[str, ...]) -> str:
-    """The ratio in `ratios` closest to width/height (public: used by pollo.py)."""
-    return _closest_ratio(width, height, ratios)
-
-
-def _aspect_from_image(
-    image_path: str | Path | None,
-    valid_ratios: tuple[str, ...],
-    skip_nonnumeric: bool,
-) -> str | None:
-    ratios = tuple(r for r in valid_ratios if ":" in r) if skip_nonnumeric else valid_ratios
-    if not ratios or not image_path:
-        return None
-    return _closest_ratio(*_image_dimensions(image_path), ratios)
 
 
 def as_str(value: JsonValue) -> str | None:

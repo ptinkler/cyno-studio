@@ -11,7 +11,7 @@ from typing import NotRequired, TypedDict
 
 from sqlalchemy.orm import Session
 
-from web.core.metadata._base import DBBase
+from web.core.metadata._base import DBBase, set_fields
 from web.core.metadata.models import ChatConversation, ChatImportSkip, ChatLibraryItem, ChatMessage
 from web.types import JsonValue
 
@@ -137,8 +137,7 @@ def _refresh_message(prev: ChatMessage, fields: dict[str, JsonValue]) -> bool:
     """Set any changed column on an already-imported message; True if something changed."""
     if not any(getattr(prev, k) != v for k, v in fields.items()):
         return False
-    for k, v in fields.items():
-        setattr(prev, k, v)
+    set_fields(prev, fields)
     return True
 
 

@@ -329,10 +329,10 @@ def _media_character_ids(params: dict[str, JsonValue]) -> set[int]:
 
 
 class _Fork:
-    """Copies media items into a branched chat: files are linked into its.
+    """Copies media items into a branched chat.
 
-    folder under the same names (Media shows each pair once) and references
-    to copied characters point at the copies, so regenerating works there.
+    Files are linked into its folder under the same names (Media shows each pair once), and references to copied
+    characters point at the copies, so regenerating works there.
     """
 
     def __init__(self, src: Path, dst: Path, char_map: dict[int, int]) -> None:
@@ -405,9 +405,9 @@ def _validate_conv_references(data: ConversationUpdate, fields: dict[str, JsonVa
 
 
 def _clean_conv_update(data: ConversationUpdate, fields: dict[str, JsonValue]) -> None:
-    """Normalize/validate the mutable ConversationUpdate fields in place.
+    """Normalize and validate the mutable ConversationUpdate fields in place.
 
-    (everything except `pinned`, which the route handles separately).
+    This is everything except `pinned`, which the route handles separately.
     """
     _validate_conv_references(data, fields)
     if "title" in fields:
@@ -475,9 +475,9 @@ def api_get_message(message_id: int) -> dict[str, JsonValue]:
 
 @router.get("/messages/{message_id}/delete-info")
 def api_delete_exchange_info(message_id: int) -> dict[str, int | dict[str, int]]:
-    """What deleting this prompt would also remove (other versions of it and.
+    """What deleting this prompt would also remove, for the confirmation.
 
-    the messages that followed them), for the confirmation.
+    That is other versions of it and the messages that followed them.
     """
     msg = get_db().get_chat_message(message_id)
     info = msg and get_db().chat_exchange_delete_info(msg.conversation_id, message_id)

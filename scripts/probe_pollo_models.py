@@ -13,11 +13,11 @@ body with placeholder media URLs and returns a price without starting a job.
     404 "Not found"                        -> not available to this key
     anything else                          -> shown verbatim, decide yourself
 
-Usage:
-    POLLO_API_KEY=sk-... python scripts/probe_pollo_models.py            # motion/recast family
-    python scripts/probe_pollo_models.py --key sk-... --family motion
-    python scripts/probe_pollo_models.py --key sk-... --all-video        # every video model
-    python scripts/probe_pollo_models.py --key sk-... --live             # GROUND TRUTH: really submits, SPENDS CREDITS
+Usage (from the repo root; `make` puts src/py on the path):
+    POLLO_API_KEY=sk-... make probe-models                          # motion/recast family
+    make probe-models ARGS="--key sk-... --family motion"
+    make probe-models ARGS="--key sk-... --all-video"               # every video model
+    make probe-models ARGS="--key sk-... --live"                    # GROUND TRUTH: SPENDS CREDITS
 
 The estimate probe is free but only proves the estimate endpoint is enabled.
 A model can in principle gate generation separately; `--live` submits a real
@@ -30,13 +30,9 @@ import argparse
 import json
 import os
 import sys
-from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 import requests
-
-# `web` lives in src/py, which isn't on the path when run from the repo root.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src" / "py"))
 
 from web.providers.pollo_engine import VIDEO_GENERATORS
 from web.providers.pollo_engine import video_generator as get_video_generator

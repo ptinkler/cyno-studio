@@ -1,6 +1,6 @@
-"""Audio generation (speech / music): submit a Pollo job; the video poller.
+"""Audio generation (speech / music) through a Pollo job.
 
-finishes it (audio rides the same job + download path, saved as .mp3).
+The video poller finishes it: audio rides the same job and download path, and is saved as .mp3.
 """
 
 from collections.abc import Mapping

@@ -1,6 +1,6 @@
-"""Tests for web.api — the endpoints and helpers that remain after the legacy.
+"""Tests for web.api: the endpoints and helpers that remain.
 
-generation/projects/jobs subsystem was removed (auth, SPA serving, lifespan).
+They remain after the legacy generation/projects/jobs subsystem was removed (auth, SPA serving, lifespan).
 """
 
 import asyncio
@@ -72,9 +72,9 @@ class TestLoginThrottle:
     """Tests for login throttle."""
 
     def test_throttle_is_per_account_despite_ip_spoofing(self, client: TestClient) -> None:
-        """Rotating the client-IP headers must not lift the per-email cap: a.
+        """Rotating the client-IP headers must not lift the per-email cap.
 
-        brute-force against one account trips the throttle even from fresh IPs.
+        A brute-force against one account trips the throttle even from fresh IPs.
         """
         api_mod.reset_login_attempts()
         last: Response | None = None

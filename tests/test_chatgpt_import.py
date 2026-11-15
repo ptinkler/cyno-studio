@@ -387,9 +387,9 @@ class TestRoutes:
     def test_another_users_export_is_not_importable(
         self, imp: None, client: TestClient, story_zip: Path, tmp_path: Path
     ) -> None:
-        """The imports folder is per-tenant, so a user can't list or import an.
+        """The imports folder is per-tenant.
 
-        export another user uploaded (even knowing its filename).
+        So a user can't list or import an export another user uploaded (even knowing its filename).
         """
         (tmp_path / "imports" / "other-user").mkdir(parents=True)
         story_zip.rename(tmp_path / "imports" / "other-user" / "export1.zip")

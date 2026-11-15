@@ -40,9 +40,9 @@ pytest_plugins = ["tests.chat_fixtures"]
 
 
 class TestPolloImageModels:
-    """Pollo image models in chat. Pollo is fully mocked — nothing here can.
+    """Pollo image models in chat.
 
-    reach the real API (which would bill credits).
+    Pollo is fully mocked — nothing here can reach the real API (which would bill credits).
     """
 
     POLLO: ClassVar = {**SETTINGS, "image_model": "pollo/seedream"}
@@ -307,10 +307,10 @@ class TestPolloImageModels:
         monkeypatch: pytest.MonkeyPatch,
         pollo: PolloCalls,
     ) -> None:
-        """The composer resolves Auto to a number before sending, so the item.
+        """The media item records that its length *was* Auto.
 
-        records that it *was* Auto — otherwise reusing its settings would pin
-        whatever Auto worked out to.
+        The composer resolves Auto to a number before sending; otherwise reusing the item's settings would pin whatever
+        Auto worked out to.
         """
         monkeypatch.setattr(openrouter, "submit_video", stub(lambda: pytest.fail("should run on Pollo")))
         chat_catalogue.seed_models(
@@ -681,8 +681,8 @@ class TestPolloImageModels:
     ) -> None:
         """A failed job isn't billed, even though Pollo reports its price.
 
-        with the verdict — so no credits land on the item or in spend — and the
-        stored response is the verdict, not the "accepted" reply from submitting.
+        The card ends in error with the verdict, so no credits land on the item or in spend, and the stored response is
+        the verdict, not the "accepted" reply from submitting.
         """
         msg = db.add_chat_message(
             conv["id"],

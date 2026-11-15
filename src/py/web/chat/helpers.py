@@ -1,7 +1,7 @@
-"""Helpers shared by the chat routes and the turn engine: chat-folder paths,.
+"""Helpers shared by the chat routes and the turn engine.
 
-media-item builders, branch/message shaping, ownership/idle guards, spend, and
-the live default-inheritance resolution.
+Chat-folder paths, media-item builders, branch and message shaping, ownership and idle guards, spend, and the
+live default-inheritance resolution.
 """
 
 from __future__ import annotations
@@ -33,9 +33,7 @@ def chat_root() -> Path:
 def conversation_dir(conv_id: str) -> Path:
     """A chat's media folder, created if it isn't there yet.
 
-    (It is made here
-    rather than on upload because every path that writes into it goes
-    through this.).
+    It is made here rather than on upload because every path that writes into it goes through this.
     """
     d = chat_root() / conv_id
     d.mkdir(parents=True, exist_ok=True)
@@ -144,9 +142,9 @@ def effective_ids(conv: ChatConversation | None, kind: str) -> list[int]:
 
 
 def spend(conv: ChatConversation) -> dict[str, float | int]:
-    """What the chat cost: `usd` and `credits` in total, of which `inherited_*`.
+    """What the chat cost: `usd` and `credits` in total, and how much of that was inherited.
 
-    came with the messages copied in when it was branched off another chat.
+    The `inherited_*` amounts came with the messages copied in when it was branched off another chat.
     """
     usd, credit_cost = get_db().get_chat_spend(conv.id)
     return {
@@ -158,18 +156,18 @@ def spend(conv: ChatConversation) -> dict[str, float | int]:
 
 
 def require_own_conversation(conv_id: str) -> None:
-    """404 unless the conversation belongs to the current user (get_conversation.
+    """404 unless the conversation belongs to the current user.
 
-    is tenant-scoped, so another user's id reads as not found).
+    `get_conversation` is tenant-scoped, so another user's id reads as not found.
     """
     if not get_db().get_conversation(conv_id):
         raise HTTPException(404, "Not found")
 
 
 def require_idle(conv_id: str, lane: str | None = None) -> None:
-    """Edits/retries rewrite history, so they can't overlap a running reply.
+    """Edits and retries rewrite history, so they can't overlap a running reply in the same lane.
 
-    in the same lane (gallery exchanges never block the chat or each other).
+    Gallery exchanges never block the chat or each other.
     """
     if lane:
         return
@@ -178,10 +176,7 @@ def require_idle(conv_id: str, lane: str | None = None) -> None:
 
 
 def remember_settings(conv: ChatConversation, settings: TurnSettings) -> None:
-    """Persist the model picks and composer settings on the conversation so.
-
-    reopening it restores them.
-    """
+    """Persist the model picks and composer settings on the conversation so reopening it restores them."""
     picks = {
         "text_model": (settings.text_model, conv.text_model),
         "image_model": (settings.image_model, conv.image_model),

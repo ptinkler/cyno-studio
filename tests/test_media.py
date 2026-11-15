@@ -151,11 +151,10 @@ class TestListing:
         assert client.delete(f"/api/media/{media_id}").status_code in (400, 404)
 
     def test_another_users_chat_media_is_not_reachable(self, client: TestClient, db: MetadataDB) -> None:
-        """Chat files live under a global folder keyed only by the (random).
+        """Chat files live under a global folder keyed only by the (random) conversation id.
 
-        conversation id. Knowing another user's id must not let you view,
-        delete, or copy their files — only the owning user, or anyone for a
-        truly orphaned folder with no conversation row (see test_delete).
+        Knowing another user's id must not let you view, delete, or copy their files — only the owning user,
+        or anyone for a truly orphaned folder with no conversation row (see test_delete).
         """
         token = metadata.set_tenant("other-user")  # a conversation someone else owns
         try:
@@ -208,9 +207,10 @@ class TestOrphans:
 
     @pytest.fixture
     def orphans(self, db: MetadataDB, conv: ChatConversation) -> Path:
-        """Conv plus an attachment nothing sent, a reference a reply was made.
+        """A conversation plus the files that are orphaned in its folder.
 
-        from, and the folder of a deleted chat — all old enough.
+        The orphans are an attachment nothing sent, a reference a reply was made from, and the folder of a deleted chat,
+        all old enough.
         """
         root = config.ROOT_DIR / "chat"
         (root / conv.id / "up_lost.png").write_bytes(_png())
@@ -316,9 +316,10 @@ class TestBlocked:
 
     @pytest.fixture
     def blocked(self, db: MetadataDB, conv: ChatConversation) -> Path:
-        """Conv plus: a moderated failure and a black image in a reply, an.
+        """A conversation plus the blocked generations.
 
-        ordinary failure (kept), and a moderated failure detached to the library.
+        They are a moderated failure and a black image in a reply, an ordinary failure (kept), and a moderated failure
+        detached to the library.
         """
         d = config.ROOT_DIR / "chat" / conv.id
         (d / "img_black.png").write_bytes(_png("black"))
@@ -592,10 +593,10 @@ def _durations_by_name(client: TestClient) -> dict[str, JsonValue]:
 
 
 class TestVideoDurations:
-    """Reading a length opens the file with OpenCV, which is slow on a NAS, so.
+    """Reading a length opens the file with OpenCV, which is slow on a NAS.
 
-    building the list never does it: a request fills in the page it returns,
-    and what's been read is kept in the database (MediaDuration).
+    So building the list never does it: a request fills in the page it returns, and what's been read is kept in the
+    database (MediaDuration).
     """
 
     @pytest.fixture
@@ -671,9 +672,9 @@ class TestVideoDurations:
 
 
 class TestMediaCache:
-    """The cache lives under <data>/cache with the thumbnails, so deleting that.
+    """The cache lives under <data>/cache with the thumbnails.
 
-    folder wipes it — and it can't grow past one row per file that exists.
+    So deleting that folder wipes it, and it can't grow past one row per file that exists.
     """
 
     @pytest.fixture(autouse=True)

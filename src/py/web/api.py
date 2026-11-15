@@ -64,7 +64,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     log.info("OAuth providers: %s", ", ".join(providers) if providers else "none configured")
     # Alembic owns the schema; bring it up to date before anything reads it.
     db = get_db()
-    ensure_schema(db.engine, db.db_path, fresh=getattr(db, "is_fresh", False))
+    ensure_schema(db.engine, db.db_path, fresh=db.is_fresh)
     # Dev: seed the one-click dev account when enabled (no-op otherwise).
     seed_dev_user()
     startup_resume_chat()
@@ -172,10 +172,10 @@ def reset_login_attempts() -> None:
 
 
 def _client_ip(request: Request) -> str:
-    """The real client IP. Behind the reverse proxy, request.client is the.
+    """The real client IP.
 
-    The proxy is preferred via nginx's X-Real-IP header, then the first
-    X-Forwarded-For hop, then the socket peer.
+    Behind the reverse proxy, ``request.client`` is the proxy itself, so this prefers nginx's X-Real-IP
+    header, then the first X-Forwarded-For hop, then the socket peer.
     """
     real = request.headers.get("x-real-ip", "").strip()
     if real:

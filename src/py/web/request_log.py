@@ -17,7 +17,7 @@ the previous one) and a new one starts.
 Providers wrap each generation call in `logged(...)` and put what came back
 in its outcome (`response_of(resp)`, or `chat_reply` for a streamed chat).
 The chat then reads the request and response back for the media card's
-"Request" view: `take_last()` after a call, or the error's `log_entry`.
+"Request" view: `take_last()` after a call, or `entry_of(error)` for a call that raised.
 """
 
 import contextlib
@@ -226,6 +226,27 @@ def recent(limit: int = 100) -> list[dict[str, JsonValue]]:
     return out
 
 
+# The exception attribute that carries the log entry. Exceptions come from many libraries (and the built-in ones
+# can't be weakly referenced), so there is no shared base class or side table to hang it on; it is only ever read
+# and written through the two helpers below.
+_ENTRY_ATTR = "log_entry"
+
+
+def _attach_entry(error: BaseException, entry: Mapping[str, JsonValue]) -> None:
+    """Remember on the exception which log entry recorded its call (skipped if it can't take attributes)."""
+    with contextlib.suppress(TypeError):  # an exception type without a __dict__
+        vars(error)[_ENTRY_ATTR] = entry
+
+
+def entry_of(error: BaseException) -> Mapping[str, JsonValue] | None:
+    """The log entry of the call that raised `error`, when it was raised inside ``logged()``."""
+    try:
+        entry = vars(error).get(_ENTRY_ATTR)
+    except TypeError:
+        return None
+    return cast("Mapping[str, JsonValue]", entry) if isinstance(entry, Mapping) else None
+
+
 @contextlib.contextmanager
 def logged(provider: str, method: str, path: str, body: JsonValue, model: str | None = None) -> Generator[LogOutcome]:
     """Record one provider call made inside the block.
@@ -234,7 +255,7 @@ def logged(provider: str, method: str, path: str, body: JsonValue, model: str | 
     (headers worth keeping), and ``response`` (see ``response_of`` /
     ``chat_reply``). Set these before raising on an error response so the log
     shows what the provider said. An exception leaving the block is recorded
-    as the error and gets the entry as its ``log_entry`` attribute.
+    as the error, and the entry is attached to the exception (read it back with ``entry_of``).
     """
     shown = redact(body)
     outcome: LogOutcome = {"status": None, "flags": None, "response": None}
@@ -264,8 +285,7 @@ def logged(provider: str, method: str, path: str, body: JsonValue, model: str | 
         raise
     except Exception as e:
         entry = done(str(e), getattr(e, "status", None))
-        with contextlib.suppress(AttributeError):
-            e.__dict__["log_entry"] = entry
+        _attach_entry(e, entry)
         raise
     done()
 

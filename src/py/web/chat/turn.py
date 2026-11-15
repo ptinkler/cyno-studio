@@ -65,6 +65,7 @@ from web.chat.tools import (
 from web.chat.workers import ctx_thread
 from web.core.metadata import get_db
 from web.core.metadata.models import Character, ChatInstruction, ChatMessage
+from web.jsonutil import loads
 from web.providers import openrouter, provider_for, stream_chat
 from web.types import ChatChunk, JsonValue, ToolCallDelta
 
@@ -494,7 +495,7 @@ class Turn:
     @staticmethod
     def _parse_tool_arguments(arguments: str) -> tuple[Mapping[str, JsonValue] | None, str | None]:
         try:
-            parsed = cast("object", json.loads(arguments or "{}"))
+            parsed = loads(arguments or "{}")
         except json.JSONDecodeError:
             return None, "Arguments were not valid JSON"
         if not isinstance(parsed, dict):
@@ -880,10 +881,10 @@ class Turn:
     def _video_inputs(
         self, first_frame: str | None, last_frame: str | None, attached: list[str], chars: list[Character]
     ) -> dict[str, JsonValue]:
-        """The extra inputs the video model's family takes (Venice): reference.
+        """The extra inputs the video model's family takes (Venice).
 
-        images (attached ones, the frame, characters' images and pins), a
-        last frame, or the chat's latest video.
+        These are reference images (attached ones, the frame, characters' images and pins), a last frame, or the
+        chat's latest video.
         """
         info = model_info("video", self.s.video_model) or {}
         out: dict[str, JsonValue] = {}
@@ -910,9 +911,9 @@ class Turn:
         return self._latest_media_file("video")
 
     def _latest_audio(self) -> str | None:
-        """The most recent audio attachment (this turn first, then history) —.
+        """The most recent audio attachment (this turn first, then history).
 
-        the uploaded track a lip-sync model drives a portrait with.
+        It is the uploaded track a lip-sync model drives a portrait with.
         """
         return self._latest_media_file("audio")
 
@@ -957,9 +958,9 @@ class Turn:
 
     # ― title ―
     def _start_title(self) -> _TitleJob | None:
-        """A new chat's first turn asks a text model for a short title while.
+        """On a new chat's first turn, ask a text model for a short title while the reply is made.
 
-        the reply is made (CHAT_TITLE_MODEL, else the chat model).
+        Uses CHAT_TITLE_MODEL, else the chat model.
         """
         conv = self.db.get_conversation(self.conv_id)
         if not conv or conv.title != DEFAULT_TITLE:

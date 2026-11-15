@@ -5,6 +5,7 @@ docs. These helpers take any value and return the expected shape, or an empty
 one when the value is something else, so callers never index into the wrong type.
 """
 
+import json
 from collections.abc import Mapping, Sequence
 from typing import Protocol, cast
 
@@ -22,6 +23,11 @@ class _Decodable(Protocol):
 def body_of(response: _Decodable) -> JsonValue:
     """An HTTP response's decoded JSON body; raises ValueError when it is not JSON."""
     return cast("JsonValue", response.json())
+
+
+def loads(text: str | bytes) -> JsonValue:
+    """Decode JSON text; raises ValueError (``json.JSONDecodeError``) when it is not JSON."""
+    return cast("JsonValue", json.loads(text))
 
 
 def as_object(value: object) -> dict[str, JsonValue]:

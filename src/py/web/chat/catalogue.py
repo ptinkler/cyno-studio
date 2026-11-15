@@ -1,6 +1,6 @@
-"""The chat model catalogue, cached: every provider's text/image/video models,.
+"""The chat model catalogue, cached per user.
 
-and the per-model lookups used to validate and auto-fit media params.
+It holds every provider's models, and the per-model lookups used to validate and auto-fit media params.
 """
 
 import logging
@@ -91,9 +91,9 @@ def seed_models(data: Catalogue, stale: bool = False) -> None:
 
 @on_keys_changed
 def clear_models() -> None:
-    """Forget every cached catalogue — called when a user's provider keys.
+    """Forget every cached catalogue.
 
-    change, since their keys decide what the catalogue contains.
+    Called when a user's provider keys change, since their keys decide what the catalogue contains.
     """
     with _models_lock:
         _models_cache.clear()
@@ -174,9 +174,9 @@ def auto_ratio(kind: str, model_id: str | None) -> str | None:
 def fit_video_params(
     model_id: str, duration: int | None, aspect_ratio: str | None, resolution: str | None
 ) -> tuple[int | None, str | None, str | None]:
-    """Snap requested params onto what the video model supports (when known),.
+    """Snap requested params onto what the video model supports, when known.
 
-    so a model-chosen "7 seconds" doesn't fail on a 5/10-only model.
+    So a model-chosen "7 seconds" doesn't fail on a model that only takes 5 or 10.
     """
     info = model_info("video", model_id)
     if not info:

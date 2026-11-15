@@ -34,9 +34,9 @@ pytest_plugins = ["tests.chat_fixtures"]
 
 
 class TestModelCatalogue:
-    """The /models catalogue lists each provider independently — no provider.
+    """The /models catalogue lists each provider independently.
 
-    gates the endpoint, so media models show with only a Pollo key.
+    No provider gates the endpoint, so media models show with only a Pollo key.
     """
 
     def test_media_models_load_without_a_chat_provider(
@@ -190,6 +190,8 @@ def test_gallery_lane_backfill_converts_only_pure_gallery_threads() -> None:
             )
         )
         c.execute(sa.text("INSERT INTO chat_conversations VALUES ('g','gallery',4),('m','gallery',7),('c','chat',9)"))
+        # One (id, conversation, parent, role, mode) row per line pair, kept compact: the formatter would split
+        # each tuple over five lines and bury the table's shape.
         rows = [
             (1, "g", None, "user", "image"), (2, "g", 1, "assistant", "image"),
             (3, "g", 2, "user", "image"), (4, "g", 3, "assistant", "image"),
@@ -214,9 +216,9 @@ def test_gallery_lane_backfill_converts_only_pure_gallery_threads() -> None:
 
 
 def test_alembic_migration_creates_chat_tables(tmp_path: Path) -> None:
-    """0003 adds the chat tables to a pre-chat DB, and is a no-op when.
+    """Migration 0003 adds the chat tables to a pre-chat DB.
 
-    create_all() already made them (the app creates tables on startup).
+    It is a no-op when create_all() already made them (the app creates tables on startup).
     """
 
     def cfg_for(path: Path) -> Config:

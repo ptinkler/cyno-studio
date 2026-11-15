@@ -59,9 +59,9 @@ def _require_message(msg: ChatMessage | None) -> ChatMessage:
 
 @router.post("/messages/{message_id}/media/{media_id}/pin")
 def api_pin_media(message_id: int, media_id: str, data: PinMedia) -> dict[str, JsonValue]:
-    """Pin an image as a reference: it's sent with every image generated.
+    """Pin an image as a reference.
 
-    later on this branch of the chat, until unpinned.
+    It is sent with every image generated later on this branch of the chat, until unpinned.
     """
     db = get_db()
     msg = db.get_chat_message(message_id)

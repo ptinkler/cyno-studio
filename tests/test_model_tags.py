@@ -1,6 +1,6 @@
-"""Capability tags: the uniform derivation (model_tags.tags_for) and that the.
+"""Capability tags: the uniform derivation (model_tags.tags_for).
 
-catalogue attaches them to every model it assembles.
+Also that the catalogue attaches them to every model it assembles.
 """
 
 import pytest
@@ -129,9 +129,9 @@ def test_catalogue_attaches_tags_to_every_model(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_each_user_gets_their_own_catalogue(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The catalogue is built from the requesting user's provider keys, so it.
+    """The catalogue is built from the requesting user's provider keys.
 
-    must be cached per user: one user's list must never be served to another.
+    So it must be cached per user: one user's list must never be served to another.
     """
     seen: list[str | None] = []
 

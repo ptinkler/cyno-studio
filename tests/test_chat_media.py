@@ -994,9 +994,9 @@ class TestFork:
 
 
 class TestEditAndRewordInPlace:
-    """Editing a picture on its card, and writing a reply's words again,.
+    """Editing a picture on its card, and writing a reply's words again.
 
-    without re-running the turn that made them.
+    Both happen without re-running the turn that made them.
     """
 
     def _reply_with_image(self, db: MetadataDB, conv: ConversationOut, **extra: JsonValue) -> ChatMessage:
@@ -1353,10 +1353,7 @@ class TestEditAndRewordInPlace:
 
 
 class TestRetryAFailedPicture:
-    """A failed generation can be run again with a changed prompt, and leaves.
-
-    no empty version behind.
-    """
+    """A failed generation can be run again with a changed prompt, and leaves no empty version behind."""
 
     def _failed(self, db: MetadataDB, conv: ConversationOut) -> ChatMessage:
         db.add_chat_message(conv["id"], "user", "draw a fox")
@@ -1438,9 +1435,9 @@ class TestRetryAFailedPicture:
 def test_a_webm_attachment_is_recorded_as_a_video(
     client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB
 ) -> None:
-    """Attachment kind comes from web.media_types now. Only ".mp4" counted.
+    """Attachment kind comes from web.media_types now.
 
-    before, so a .webm or .mov clip was recorded as an image.
+    Only ".mp4" counted before, so a .webm or .mov clip was recorded as an image.
     """
     d = config.ROOT_DIR / "chat" / conv["id"]
     d.mkdir(parents=True, exist_ok=True)

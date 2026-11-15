@@ -1,6 +1,6 @@
-"""Global test fixtures — prevent tests from touching the real database, the.
+"""Global test fixtures.
 
-real assets, the developer's .env, or the network.
+They prevent tests from touching the real database, the real assets, the developer's .env, or the network.
 """
 
 import types
@@ -59,9 +59,9 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(autouse=True)
 def _guard_real_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """Redirect config paths to a temp directory so no test can accidentally.
+    """Redirect config paths to a temp directory.
 
-    create files in the real data/assets directories.
+    So no test can accidentally create files in the real data/assets directories.
     """
     monkeypatch.setattr(config_mod, "ROOT_DIR", tmp_path)
     monkeypatch.setattr(config_mod, "ASSETS_DIR", tmp_path / "assets")
@@ -77,9 +77,9 @@ _TEST_PROVIDER_KEYS: dict[str, str | None] = {}
 
 @pytest.fixture(autouse=True)
 def provider_keys(monkeypatch: pytest.MonkeyPatch) -> dict[str, str | None]:
-    """Inject per-user provider keys for a test via an in-memory dict, patching.
+    """Inject per-user provider keys for a test via an in-memory dict, patching only the resolver seam.
 
-    only the resolver seam. No API key is read from the environment.
+    No API key is read from the environment.
     """
     _TEST_PROVIDER_KEYS.clear()
 
@@ -101,10 +101,10 @@ def pytest_configure(config: pytest.Config) -> None:
 
 @pytest.fixture(autouse=True)
 def _tenant(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> Iterator[types.SimpleNamespace | None]:
-    """Bind one test tenant so multi-tenant ORM scoping is consistent: rows.
+    """Bind one test tenant so multi-tenant ORM scoping is consistent.
 
-    created directly via the db and via the API (middleware) all belong to it,
-    and the middleware resolves this same admin without touching the real DB.
+    Rows created directly via the db and via the API (middleware) all belong to it, and the middleware resolves this
+    same admin without touching the real DB.
 
     Tests marked `no_tenant` opt out — they build pre-user_id schemas where the
     scope filter can't reference the column yet.

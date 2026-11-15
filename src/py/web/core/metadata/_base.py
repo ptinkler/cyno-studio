@@ -5,9 +5,10 @@ session context manager and shared list/get/save helpers, and detaches ids from
 JSON-backed lists. Alembic owns the schema; see ``schema.py``.
 """
 
+import inspect
 import sqlite3
 import threading
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -24,6 +25,27 @@ from web.core.metadata.models import Base
 from web.types import JsonValue
 
 ModelT = TypeVar("ModelT", bound=Base)
+
+
+class UnknownFieldError(AttributeError):
+    """A row update named a field the model doesn't have."""
+
+    def __init__(self, model: str, name: str) -> None:
+        super().__init__(f"{model} has no field {name!r}")
+
+
+def set_fields(item: object, fields: Mapping[str, JsonValue | datetime]) -> None:
+    """Set values on a row by field name: a column, or a property with a setter.
+
+    An unknown name raises instead of being silently dropped (or set as a stray attribute that is never saved), so
+    a misspelt field in a caller fails at once.
+    """
+    cls = type(item)
+    for name, value in fields.items():
+        # Columns (instrumented attributes) and properties both have __set__; plain methods and unknown names don't.
+        if not hasattr(cast("object", inspect.getattr_static(cls, name, None)), "__set__"):
+            raise UnknownFieldError(cls.__name__, name)
+        setattr(item, name, value)
 
 
 class _Stamped(Protocol):
@@ -121,8 +143,7 @@ class DBBase:
                 item = session.get(model, pk)
                 if not item:
                     return None
-                for key, value in fields.items():
-                    setattr(item, key, value)
+                set_fields(item, fields)
                 cast("_Stamped", item).updated_at = datetime.now().astimezone().replace(tzinfo=None)
             session.commit()
             session.refresh(item)

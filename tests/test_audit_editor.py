@@ -1,6 +1,6 @@
-"""The audit's --write editor: it must make only the intended surgical change.
+"""The audit's --write editor must make only the intended surgical change.
 
-to a model entry and leave everything else (including curated fields) intact.
+That is, to a model entry, leaving everything else (including curated fields) intact.
 """
 
 import ast

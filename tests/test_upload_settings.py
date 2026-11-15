@@ -1,7 +1,4 @@
-"""Per-user source-media hosting: prefs resolution, host dispatch order, and.
-
-the signed self-host serving route.
-"""
+"""Per-user source-media hosting: prefs resolution, host dispatch order, and the signed self-host serving route."""
 
 import time
 from dataclasses import dataclass, field
@@ -106,9 +103,9 @@ class TestPrefsResolution:
 
 @pytest.fixture
 def _no_url_check(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Dispatch/cache tests stub the hosts themselves, so there's no real URL.
+    """Dispatch/cache tests stub the hosts themselves, so there's no real URL to fetch.
 
-    to fetch — the served-file check is exercised in TestServedCheck.
+    The served-file check is exercised in TestServedCheck.
     """
     monkeypatch.setattr(image_hosts, "_verify_served", _no_verify)
     monkeypatch.setattr(image_hosts, "_tmpfiles_direct_url", _same_page)
@@ -398,9 +395,9 @@ class TestFallbackNotice:
 
 
 class TestServedCheck:
-    """A host can take the upload and still not serve the file to a plain.
+    """A host can take the upload and still not serve the file to a plain client.
 
-    client; the provider would then be charged for fetching a web page.
+    The provider would then be charged for fetching a web page.
     """
 
     @pytest.fixture(autouse=True)

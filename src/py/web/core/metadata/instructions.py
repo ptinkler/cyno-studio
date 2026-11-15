@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import overload
 
-from web.core.metadata._base import DBBase
+from web.core.metadata._base import DBBase, set_fields
 from web.core.metadata.models import ChatConversation, ChatInstruction, ChatInstructionGroup, ChatSettings, ChatSpace
 from web.types import JsonValue
 
@@ -139,8 +139,7 @@ class InstructionMixin(DBBase):
         with self._session() as session:
             item = session.query(ChatSettings).first() or ChatSettings()
             session.add(item)
-            for key, value in fields.items():
-                setattr(item, key, value)
+            set_fields(item, fields)
             item.updated_at = datetime.now().astimezone().replace(tzinfo=None)
             session.commit()
             session.refresh(item)

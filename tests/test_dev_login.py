@@ -1,6 +1,7 @@
-"""One-click dev login (DEV_LOGIN): signs in a local admin with no password,.
+"""One-click dev login (DEV_LOGIN).
 
-stores keys unencrypted, and is refused on an already-encrypted (prod) DB.
+It signs in a local admin with no password, stores keys unencrypted, and is refused on an already-encrypted
+(prod) DB.
 """
 
 import json

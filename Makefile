@@ -49,6 +49,14 @@ test:
 	.venv/bin/python -m pytest -q
 	cd src/js && npm test
 
+# Pollo model maintenance scripts (src/py is put on the path for you). Pass options with ARGS, e.g.
+#   make audit-models ARGS="--key sk-..."
+audit-models:
+	PYTHONPATH=src/py .venv/bin/python -m scripts.audit_pollo_models $(ARGS)
+
+probe-models:
+	PYTHONPATH=src/py .venv/bin/python -m scripts.probe_pollo_models $(ARGS)
+
 vpn-restart:
 	docker compose --profile vpn restart gluetun
 

@@ -85,9 +85,9 @@ def api_chat_media(conv_id: str, filename: str) -> FileResponse:
 
 @router.get("/media/{conv_id}/{filename}/preview")
 async def api_chat_media_preview(conv_id: str, filename: str) -> Response:
-    """A chat image (or a video's first frame) scaled down for showing in the.
+    """A chat image (or a video's first frame), scaled down and cached for showing in the chat.
 
-    chat, cached; the full file is for the lightbox and downloads.
+    The full file is for the lightbox and downloads.
     """
     path = chat_root() / safe_filename(conv_id) / safe_filename(filename)  # rejects traversal (400)
     require_own_conversation(conv_id)

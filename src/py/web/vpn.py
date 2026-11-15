@@ -1,7 +1,6 @@
 """Control VPN status and settings through Gluetun's API.
 
-The routes expose status, restart and server-country controls.
-control server.
+The routes expose status, restart and server-country controls, all talking to Gluetun's local control server.
 
 Docs: https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md
 """
@@ -91,9 +90,8 @@ def _egress_ip() -> str | None:
             r = requests.get(url, timeout=6)
             if r.ok and r.text.strip():
                 return r.text.strip()
-        except Exception:
+        except requests.RequestException:
             log.debug("egress-IP lookup failed at %s; trying the next service", url, exc_info=True)
-            continue
     return None
 
 
@@ -122,9 +120,9 @@ def vpn_restart(_admin: Annotated[User, Depends(require_admin)]) -> dict[str, bo
     """Restart the VPN tunnel by cycling Gluetun's status off then on."""
     try:
         _gluetun_put("/v1/vpn/status", {"status": "stopped"})
-        time.sleep(2)
+        time.sleep(2)  # Gluetun needs a moment to tear the tunnel down before it is asked to start again
         r = _gluetun_put("/v1/vpn/status", {"status": "running"})
-    except Exception as e:
+    except requests.RequestException as e:
         raise HTTPException(502, detail=f"Cannot reach Gluetun control server: {e}") from e
     if r.ok:
         return {"ok": True, "message": "VPN tunnel restarted — new IP in ~10s"}
@@ -143,7 +141,7 @@ def vpn_change_country(
         raise HTTPException(400, detail=f"Invalid country: '{country}'. Allowed: {', '.join(ALLOWED_VPN_COUNTRIES)}")
     try:
         r = _gluetun_put("/v1/vpn/settings", {"server_countries": [country]})
-    except Exception as e:
+    except requests.RequestException as e:
         raise HTTPException(502, detail=f"Cannot reach Gluetun control server: {e}") from e
     if not r.ok:
         return {"ok": False, "message": f"Gluetun responded {r.status_code}: {r.text}"}

@@ -1,7 +1,7 @@
-"""Building the model request and running generation: the chat-title helper,.
+"""Building the model request and running generation.
 
-conversation/history shaping, reference planning, moderation handling, and the
-image/video submit primitives shared by turns and media retries.
+Covers the chat-title helper, conversation and history shaping, reference planning, moderation handling, and
+the image and video submit primitives shared by turns and media retries.
 """
 
 import json
@@ -162,9 +162,9 @@ def _ref_file(conv_id: str, ref: str) -> Path:
 
 
 def _history_window(history: list[ChatMessage], limit: int | None) -> list[ChatMessage]:
-    """The last `limit` messages (None = all), starting on a user message so.
+    """The last `limit` messages (None = all), starting on a user message.
 
-    the model never sees a reply without the prompt that caused it.
+    So the model never sees a reply without the prompt that caused it.
     """
     if not limit or len(history) <= limit:
         return history
@@ -212,10 +212,9 @@ def conversation(
 
 
 def _pixel_files(history: list[ChatMessage], budget: int | None) -> set[str]:
-    """The most recent `budget` images (None = all) — uploaded or generated —.
+    """The most recent `budget` images (None = all), uploaded or generated.
 
-    which go over as pixels so the model can see what's in them; older ones
-    are described by a note instead.
+    These go over as pixels so the model can see what's in them; older ones are described by a note instead.
     """
     images: list[str] = []
     for msg in reversed(history):
@@ -435,15 +434,14 @@ def failure_fields(e: openrouter.OpenRouterError) -> dict[str, JsonValue]:
     black image) — from the request log.
     """
     fields: dict[str, JsonValue] = {"status": "error", "error": str(e), "moderated": is_moderation_error(e)}
-    raw_entry = cast("object", getattr(e, "log_entry", None))
-    entry = cast("Mapping[str, JsonValue]", raw_entry) if isinstance(raw_entry, Mapping) else request_log.take_last()
+    entry = request_log.entry_of(e) or request_log.take_last()
     return {**fields, **exchange_fields(entry)}
 
 
 def exchange_fields(entry: Mapping[str, JsonValue] | None) -> dict[str, JsonValue]:
-    """A request-log entry as media item fields: the body sent to the provider.
+    """A request-log entry as media item fields.
 
-    and what it answered, for the UI's "Request" view.
+    The body sent to the provider and what it answered, for the UI's "Request" view.
     """
     return {"request": entry.get("request"), "response": entry.get("response")} if entry else {}
 

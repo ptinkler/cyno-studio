@@ -33,6 +33,10 @@ import { useStudioSidebar } from './useStudioSidebar'
 // All of Studio's state + behaviour, kept out of the view so the components
 // stay presentational. `settings` is a useComposerSettings() instance (shared
 // with the inspector's model pickers); `models` is its catalogue, filled here.
+// How long send() waits for a turn before handing the composer back. runTurn marks a chat thread as sending
+// within this time (which then blocks a second send); a gallery send never blocks, so it can go again at once.
+const SEND_HANDOFF_MS = 400
+
 export function useStudio({ models, settings, showToast }) {
   const { selected, mode, turnSettings, applyChat, applyDefaults } = settings
 
@@ -503,7 +507,7 @@ export function useStudio({ models, settings, showToast }) {
       { ...turnSettings(), content, attachments: sent.map(a => a.file), lane: lane.value },
       tempUser,
     )
-    await Promise.race([turn, new Promise(r => setTimeout(r, 400))])
+    await Promise.race([turn, new Promise(r => setTimeout(r, SEND_HANDOFF_MS))])
   }
 
   async function retry(msg) {

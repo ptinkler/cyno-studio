@@ -1,7 +1,7 @@
-"""Reference-to-video (refs branch): the named refs list a ref_mode model gets,.
+"""Reference-to-video (refs branch).
 
-how attachments map to [@name] handles with per-type caps, and the submit path
-that uploads each ref and routes to Pollo's reference-to-video branch.
+Covers the named refs list a ref_mode model gets, how attachments map to [@name] handles with per-type caps,
+and the submit path that uploads each ref and routes to Pollo's reference-to-video branch.
 """
 
 import json

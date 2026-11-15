@@ -21,6 +21,7 @@ from pydantic import BaseModel
 
 from web.core import config
 from web.core.metadata import User, current_tenant, get_db
+from web.jsonutil import loads
 from web.net_guard import UnsafeURLError, get_public
 from web.public_media import selfhost_url
 from web.users import require_user
@@ -101,7 +102,7 @@ def resolve_prefs(user: User) -> UploadPrefs:
     if not blob:
         return base
     try:
-        raw = cast("object", json.loads(blob))
+        raw = loads(blob)
     except (ValueError, TypeError):
         return base
     return _sanitize(cast("dict[str, object]", raw), base) if isinstance(raw, dict) else base

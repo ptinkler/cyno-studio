@@ -1,6 +1,6 @@
-"""The system/title prompts and the generate_* / create_* tool schemas the.
+"""The system and title prompts and the tool schemas the chat model is given.
 
-chat model is given, plus the helper that adds the `characters` argument.
+The tools are generate_* and create_*; this also has the helper that adds the `characters` argument.
 """
 
 from collections.abc import Mapping

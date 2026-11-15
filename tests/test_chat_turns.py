@@ -420,7 +420,7 @@ class TestTurns:
     ) -> None:
         """A reply sent in Chat mode, retried with Auto selected, reruns in Auto.
 
-        (tools offered) and the prompt's mode tag follows it.
+        That means tools are offered, and the prompt's mode tag follows it.
         """
         stream = FakeStream(text_chunks("ok"), text_chunks("ok"))
         monkeypatch.setattr(openrouter, "stream_chat", stream)

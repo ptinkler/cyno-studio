@@ -6,7 +6,7 @@ import io
 import json
 from collections.abc import Callable, Generator, Sequence
 from pathlib import Path
-from typing import NamedTuple, cast
+from typing import NamedTuple
 
 import httpx
 import pytest
@@ -569,7 +569,7 @@ class TestImages:
         assert request["images"] == ["data:image/png;base64,… (0 KB)"]
         response = obj(entry, "response")
         assert response == {"error": "Your prompt violates the content policy of Venice.ai or the model provider"}
-        assert cast("object", getattr(e.value, "log_entry", None)) == entry
+        assert request_log.entry_of(e.value) == entry
 
     def test_failed_card_keeps_the_request_and_the_log_is_readable(
         self, client: TestClient, conv: ConversationOut, chat: None, venice: FakeVenice
@@ -763,9 +763,9 @@ class TestText:
     def test_no_images_for_a_model_without_vision_before_the_model_list_loads(
         self, client: TestClient, conv: ConversationOut, chat: None, venice: FakeVenice
     ) -> None:
-        """After a restart (or a failed model list) the app still knows from.
+        """After a restart (or a failed model list) the app still knows the model can't see images.
 
-        Venice's own catalogue that the model can't see images.
+        It knows this from Venice's own catalogue.
         """
         venice.routes["/chat/completions"] = _sse({"choices": [{"delta": {"content": "ok"}}]})
         assert chat_catalogue.cached_models() is None

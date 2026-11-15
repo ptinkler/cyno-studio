@@ -4,7 +4,7 @@ from datetime import datetime
 
 from sqlalchemy import func
 
-from web.core.metadata._base import DBBase
+from web.core.metadata._base import DBBase, set_fields
 from web.core.metadata.models import Character, ChatConversation, ChatSettings, ChatSpace
 from web.types import JsonValue
 
@@ -44,8 +44,7 @@ class CharacterMixin(DBBase):
             char = session.get(Character, character_id)
             if not char:
                 return None
-            for key, value in fields.items():
-                setattr(char, key, value)
+            set_fields(char, fields)
             char.updated_at = datetime.now().astimezone().replace(tzinfo=None)
             session.commit()
             session.refresh(char)

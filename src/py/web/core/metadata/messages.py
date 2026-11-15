@@ -12,7 +12,7 @@ from typing import TypedDict, cast
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from web.core.metadata._base import DBBase
+from web.core.metadata._base import DBBase, set_fields
 from web.core.metadata.models import ChatConversation, ChatLibraryItem, ChatMessage
 from web.types import JsonValue
 
@@ -139,8 +139,8 @@ class MessageMixin(DBBase):
     def add_chat_branch(self, conversation_id: str, rows: list[dict[str, object]]) -> None:
         """Add a message branch in one transaction and show it.
 
-        The first row starts the chat. Each row contains ``ChatMessage`` fields
-        with ``media`` as a list; batching avoids one commit per message.
+        The first row starts the chat. Each row contains ``ChatMessage`` fields with ``media`` as a list;
+        batching avoids one commit per message.
         """
         with self._session() as session:
             conv = session.get(ChatConversation, conversation_id)
@@ -212,9 +212,7 @@ class MessageMixin(DBBase):
             msg = session.get(ChatMessage, message_id)
             if not msg:
                 return None
-            for key, value in fields.items():
-                if hasattr(msg, key):
-                    setattr(msg, key, value)
+            set_fields(msg, fields)
             if media is not None:
                 msg.media_json = json.dumps(media) if media else None
             session.commit()

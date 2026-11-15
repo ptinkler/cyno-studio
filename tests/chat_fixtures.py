@@ -1,6 +1,4 @@
-"""Fixtures and shared helpers for the chat-mode tests, loaded via.
-
-`pytest_plugins`.
+"""Fixtures and shared helpers for the chat-mode tests, loaded via `pytest_plugins`.
 
 A fixture plugin rather than a cross-module import: pytest resolves fixtures by
 name, so the test modules need no import of this file to use them (and no F401
