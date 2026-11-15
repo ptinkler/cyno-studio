@@ -78,6 +78,17 @@ def _resolve_token(token: str) -> Path | None:
     return path
 
 
+class SelfhostBaseUrlError(ValueError):
+    """Self-hosting was chosen but no reachable public base URL is configured."""
+
+    def __init__(self) -> None:
+        """Build the fixed message."""
+        super().__init__(
+            "Self-host upload needs a public base URL — set it in Settings → Media uploads "
+            "(or PUBLIC_BASE_URL). It must be the https address this instance is reachable at."
+        )
+
+
 def selfhost_url(filepath: Path, base_url: str, ttl_seconds: int) -> str:
     """Build a signed URL for a provider to fetch a local file.
 
@@ -85,10 +96,7 @@ def selfhost_url(filepath: Path, base_url: str, ttl_seconds: int) -> str:
     """
     base = (base_url or "").strip().rstrip("/")
     if not base.startswith(("http://", "https://")):
-        raise ValueError(  # noqa: TRY003
-            "Self-host upload needs a public base URL — set it in Settings → Media uploads "
-            "(or PUBLIC_BASE_URL). It must be the https address this instance is reachable at."
-        )
+        raise SelfhostBaseUrlError
     return f"{base}/api/public-media/{sign_media_token(filepath, ttl_seconds)}"
 
 

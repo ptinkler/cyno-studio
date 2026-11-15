@@ -7,9 +7,10 @@ from collections.abc import Mapping
 from typing import NotRequired, TypedDict, cast
 
 from web import request_log
+from web.chat.errors import InvalidAudioJobError, PolloModelRequiredError
 from web.chat.helpers import conversation_dir
 from web.chat.models import AudioOptions
-from web.providers import openrouter, pollo
+from web.providers import pollo
 from web.types import JsonValue
 
 # AudioOptions fields that go to the model as-is
@@ -42,7 +43,7 @@ def audio_params(opts: AudioOptions) -> dict[str, JsonValue]:
 def submit_audio_generation(conv_id: str, model: str, prompt: str, params: dict[str, JsonValue]) -> _AudioJob:
     """Start the job. Returns the job plus "log": what was sent and answered."""
     if not pollo.is_pollo(model):
-        raise openrouter.OpenRouterError("Audio generation needs a Pollo model")  # noqa: TRY003
+        raise PolloModelRequiredError
     request_log.forget_last()
     source_audio = params.get("source_audio")
     clip = conversation_dir(conv_id) / source_audio if isinstance(source_audio, str) else None
@@ -50,5 +51,5 @@ def submit_audio_generation(conv_id: str, model: str, prompt: str, params: dict[
     job_id = job.get("id")
     job_params = job.get("params")
     if not isinstance(job_id, str) or not isinstance(job_params, Mapping):
-        raise TypeError("Pollo returned an invalid audio job")  # noqa: TRY003
+        raise InvalidAudioJobError
     return {"id": job_id, "params": dict(job_params), "log": request_log.take_last()}

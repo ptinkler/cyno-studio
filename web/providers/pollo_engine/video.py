@@ -2,17 +2,134 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING, NotRequired, Protocol, TypedDict, cast
 
 from web.core.config import POLLO_GENERATION_BASE
-from web.providers.pollo_engine._shared import parse_aspect_ratio, valid_length
+from web.providers.pollo_engine._shared import Payload, as_str, parse_aspect_ratio, valid_length
+from web.providers.pollo_engine.errors import (
+    EditPromptRequiredError,
+    FaceImageRequiredError,
+    LipsyncAudioRequiredError,
+    LipsyncImageRequiredError,
+    LipsyncPromptRequiredError,
+    ReferenceImageRequiredError,
+    SourceVideoRequiredError,
+    TextToVideoUnsupportedError,
+    UnknownBuilderError,
+    VideoAction,
+)
 
 if TYPE_CHECKING:
     from web.types import JsonValue
 
+
+class VideoRow(TypedDict, total=False):
+    """One video model's table row: overrides of the defaults, plus its endpoint."""
+
+    PROVIDER: str
+    MODEL: str
+    V1_URL: str
+    endpoint: str
+    builder: str
+    VALID_LENGTHS: tuple[int, ...]
+    VALID_RESOLUTIONS: tuple[str, ...]
+    VALID_RATIOS: tuple[str, ...]
+    DEFAULT_RESOLUTION: str
+    DEFAULT_LENGTH: int
+    DEFAULT_RATIO: str
+    FORCE_RESOLUTION: str
+    DEFAULT_MODE: str
+    MODE_DEFAULT: str
+    MODES: tuple[str, ...]
+    MODE_PRO_RESOLUTIONS: tuple[str, ...]
+    HAS_GENERATE_AUDIO: bool
+    HAS_WEB_SEARCH: bool
+    HAS_SEED: bool
+    HAS_IMAGE_TAIL: bool
+    HAS_REFS: bool
+    HAS_MODE: bool
+    HAS_NEGATIVE_PROMPT_AUDIO: bool
+    HAS_ASPECT_RATIO_ON_IMAGE: bool
+    REF_TYPES: tuple[str, ...]
+    MAX_REFS: int
+    REF_HAS_SEED: bool
+    REF_VALID_LENGTHS: tuple[int, ...]
+    REF_VALID_RESOLUTIONS: tuple[str, ...]
+    NEEDS_PROMPT: bool
+    RESOLUTION_IS_MODE: bool
+    MODE_ON_TEXT: bool
+    TEXT_TO_VIDEO: bool
+    IMAGE_TAIL_NEEDS_PRO: bool
+    NO_AUDIO_WITH_IMAGE_TAIL: bool
+
+
+class VideoCfg(TypedDict):
+    """A video model's settings once the defaults are layered under its row."""
+
+    VALID_LENGTHS: tuple[int, ...]
+    VALID_RESOLUTIONS: tuple[str, ...]
+    VALID_RATIOS: tuple[str, ...]
+    DEFAULT_RESOLUTION: str
+    DEFAULT_LENGTH: int
+    HAS_GENERATE_AUDIO: bool
+    HAS_WEB_SEARCH: bool
+    HAS_SEED: bool
+    HAS_IMAGE_TAIL: bool
+    HAS_REFS: bool
+    HAS_MODE: bool
+    HAS_NEGATIVE_PROMPT_AUDIO: bool
+    HAS_ASPECT_RATIO_ON_IMAGE: bool
+    REF_TYPES: tuple[str, ...]
+    MAX_REFS: int
+    REF_HAS_SEED: bool
+    REF_VALID_LENGTHS: tuple[int, ...]
+    REF_VALID_RESOLUTIONS: tuple[str, ...]
+    builder: str
+    endpoint: str
+    RESOLUTION_IS_MODE: bool
+    MODE_ON_TEXT: bool
+    TEXT_TO_VIDEO: bool
+    IMAGE_TAIL_NEEDS_PRO: bool
+    NO_AUDIO_WITH_IMAGE_TAIL: bool
+    PROVIDER: NotRequired[str]
+    MODEL: NotRequired[str]
+    V1_URL: NotRequired[str]
+    FORCE_RESOLUTION: NotRequired[str]
+    DEFAULT_RATIO: NotRequired[str]
+    DEFAULT_MODE: NotRequired[str]
+    MODE_DEFAULT: NotRequired[str]
+    MODES: NotRequired[tuple[str, ...]]
+    MODE_PRO_RESOLUTIONS: NotRequired[tuple[str, ...]]
+    NEEDS_PROMPT: NotRequired[bool]
+
+
+class _Inputs(TypedDict):
+    """A request's inputs resolved against a model's configuration."""
+
+    refs: list[dict[str, JsonValue]] | None
+    is_text_only: bool
+    resolution: str
+    length: int
+    aspect_ratio: str
+    image_tail: JsonValue
+    seed: JsonValue
+    generate_audio: JsonValue
+    web_search: JsonValue
+    mode: str | None
+    negative_prompt: JsonValue
+    audio_url: JsonValue
+
+
+class _Builder(Protocol):
+    """A family's body builder."""
+
+    def __call__(self, c: VideoCfg, prompt: str, image_url: str | None, s: _Inputs, /, **kw: JsonValue) -> Payload: ...
+
+
 # Config rows (introspected from the generator classes). Fields omitted here
 # take the base defaults below.
-_V1_VIDEO_DEFAULTS: dict[str, Any] = {
+_V1_VIDEO_DEFAULTS: VideoRow = {
     "VALID_LENGTHS": (),
     "VALID_RESOLUTIONS": (),
     "VALID_RATIOS": (),
@@ -43,7 +160,7 @@ _V1_VIDEO_DEFAULTS: dict[str, Any] = {
 }
 
 # Kling models share these base values (layered under each Kling row).
-_KLING_BASE: dict[str, Any] = {
+_KLING_BASE: VideoRow = {
     "PROVIDER": "kling-ai",
     "VALID_LENGTHS": (5, 10),
     "VALID_RATIOS": ("16:9", "9:16", "1:1"),
@@ -54,7 +171,7 @@ _UPSCALE_SCALES = ("original", "2x", "4x", "hd", "4K")
 _UPSCALE_MODES = ("standard", "face", "denoise", "sharpen", "anime")
 
 # model_id -> overrides of the defaults above (plus PROVIDER/MODEL)
-VIDEO_MODELS: dict[str, dict[str, Any]] = {
+VIDEO_MODELS: dict[str, VideoRow] = {
     "pollo20": {
         "PROVIDER": "pollo-ai",
         "MODEL": "pollo-v2",
@@ -696,32 +813,35 @@ VIDEO_MODELS: dict[str, dict[str, Any]] = {
 }
 
 
-def cfg(model_id: str) -> dict[str, Any]:
+def cfg(model_id: str) -> VideoCfg:
     """Return default and model-specific settings for a video model."""
     row = VIDEO_MODELS[model_id]
     base = {**_V1_VIDEO_DEFAULTS}
     if row.get("builder") == "kling":
         base.update(_KLING_BASE)
-    return {**base, **row}
+    # The defaults supply every key a row leaves out.
+    return cast("VideoCfg", {**base, **row})
 
 
 def video_model_url(model_id: str) -> str:
     """Return the generation endpoint for a video model."""
     c = cfg(model_id)
-    if c.get("V1_URL"):
-        return c["V1_URL"]
-    return f"{POLLO_GENERATION_BASE}/{c['PROVIDER']}/{c['MODEL']}/{c['endpoint']}"
+    if v1_url := c.get("V1_URL"):
+        return v1_url
+    return f"{POLLO_GENERATION_BASE}/{c.get('PROVIDER', '')}/{c.get('MODEL', '')}/{c['endpoint']}"
 
 
-def _normalize_refs(refs: list[dict[str, object]] | None) -> list[dict[str, Any]] | None:
-    if not refs:
+def _normalize_refs(refs: JsonValue) -> list[dict[str, JsonValue]] | None:
+    if not isinstance(refs, Sequence) or isinstance(refs, str):
         return None
-    out: list[dict[str, Any]] = []
+    out: list[dict[str, JsonValue]] = []
     for ref in refs:
+        if not isinstance(ref, Mapping):
+            continue
         url = str(ref.get("url") or ref.get("image") or ref.get("video") or ref.get("audio") or "").strip()
         if not url:
             continue
-        item: dict[str, Any] = {"url": url}
+        item: dict[str, JsonValue] = {"url": url}
         if ref.get("type"):
             item["type"] = ref["type"]
         # The handle the prompt mentions as [@name] (Kling 4.0 / Omni, MiniMax
@@ -732,13 +852,13 @@ def _normalize_refs(refs: list[dict[str, object]] | None) -> list[dict[str, Any]
     return out or None
 
 
-def _resolve_resolution(c: dict[str, object], **kw: JsonValue) -> str:
-    if c.get("FORCE_RESOLUTION"):
-        return c["FORCE_RESOLUTION"]
-    return kw.get("resolution") or c["DEFAULT_RESOLUTION"]
+def _resolve_resolution(c: VideoCfg, **kw: JsonValue) -> str:
+    if forced := c.get("FORCE_RESOLUTION"):
+        return forced
+    return as_str(kw.get("resolution")) or c["DEFAULT_RESOLUTION"]
 
 
-def _resolve_length(c: dict[str, object], **kw: JsonValue) -> int:
+def _resolve_length(c: VideoCfg, **kw: JsonValue) -> int:
     length_str = str(kw.get("length") or c["DEFAULT_LENGTH"])
     if kw.get("refs") and c["REF_VALID_LENGTHS"]:
         length = int(length_str) if length_str.isdigit() else c["DEFAULT_LENGTH"]
@@ -746,27 +866,38 @@ def _resolve_length(c: dict[str, object], **kw: JsonValue) -> int:
     return valid_length(length_str, c["VALID_LENGTHS"], c["DEFAULT_LENGTH"])
 
 
-def _resolve_aspect_ratio(c: dict[str, object], **kw: JsonValue) -> str:
+def _resolve_aspect_ratio(c: VideoCfg, **kw: JsonValue) -> str:
     # the explicit kwarg, then a model default ("adaptive" on a few), else the
     # base "portrait" → 9:16.
-    return kw.get("aspect_ratio") or c.get("DEFAULT_RATIO") or parse_aspect_ratio("portrait")
+    return as_str(kw.get("aspect_ratio")) or c.get("DEFAULT_RATIO") or parse_aspect_ratio("portrait")
 
 
-def _resolve_mode(c: dict[str, object], resolution: str, mode: str | None) -> str | None:
+def _resolve_mode(c: VideoCfg, resolution: str, mode: str | None) -> str | None:
     if not c["HAS_MODE"]:
         return None
-    if c.get("MODE_PRO_RESOLUTIONS"):
-        return "pro" if resolution.upper() in {r.upper() for r in c["MODE_PRO_RESOLUTIONS"]} else "basic"
+    if pro_resolutions := c.get("MODE_PRO_RESOLUTIONS"):
+        return "pro" if resolution.upper() in {r.upper() for r in pro_resolutions} else "basic"
     return mode or c.get("MODE_DEFAULT")
 
 
-def _process_inputs(c: dict[str, object], image_url: str | None, **kw: JsonValue) -> dict[str, Any]:
+def _pick_mode(c: VideoCfg, **kw: JsonValue) -> str | None:
+    """The requested mode when the model offers it, else the model's first mode."""
+    modes = c.get("MODES", ())
+    requested = as_str(kw.get("mode"))
+    if requested in modes:
+        return requested
+    return modes[0] if modes else None
+
+
+def _process_inputs(c: VideoCfg, image_url: str | None, **kw: JsonValue) -> _Inputs:
     """Resolve request inputs against a model's configuration.
 
     Use the caller's value or the model default; unsupported fields stay None.
     """
     refs = _normalize_refs(kw.get("refs")) if c["HAS_REFS"] else None
     resolution = _resolve_resolution(c, **kw)
+    generate_audio = kw.get("generate_audio")
+    web_search = kw.get("web_search")
     return {
         "refs": refs,
         "is_text_only": image_url is None,
@@ -775,25 +906,17 @@ def _process_inputs(c: dict[str, object], image_url: str | None, **kw: JsonValue
         "aspect_ratio": _resolve_aspect_ratio(c, **kw),
         "image_tail": kw.get("image_tail") if c["HAS_IMAGE_TAIL"] else None,
         "seed": kw.get("seed") if c["HAS_SEED"] else None,
-        "generate_audio": (
-            (True if kw.get("generate_audio") is None else kw["generate_audio"]) if c["HAS_GENERATE_AUDIO"] else None
-        ),
-        "web_search": ((False if kw.get("web_search") is None else kw["web_search"]) if c["HAS_WEB_SEARCH"] else None),
-        "mode": _resolve_mode(c, resolution, kw.get("mode")),
+        "generate_audio": (True if generate_audio is None else generate_audio) if c["HAS_GENERATE_AUDIO"] else None,
+        "web_search": (False if web_search is None else web_search) if c["HAS_WEB_SEARCH"] else None,
+        "mode": _resolve_mode(c, resolution, as_str(kw.get("mode"))),
         "negative_prompt": kw.get("negative_prompt") if c["HAS_NEGATIVE_PROMPT_AUDIO"] else None,
         "audio_url": kw.get("audio_url") if c["HAS_NEGATIVE_PROMPT_AUDIO"] else None,
     }
 
 
-def _generic_payload(
-    c: dict[str, object],
-    prompt: str,
-    image_url: str | None,
-    s: dict[str, object],
-    **_: JsonValue,
-) -> dict[str, Any]:
+def _generic_payload(c: VideoCfg, prompt: str, image_url: str | None, s: _Inputs, **_: JsonValue) -> Payload:
     refs, is_text_only = s["refs"], s["is_text_only"]
-    attrs: dict[str, Any] = {"prompt": prompt}
+    attrs: dict[str, JsonValue] = {"prompt": prompt}
     if refs:
         attrs["refs"] = refs
     elif not is_text_only:
@@ -808,7 +931,7 @@ def _generic_payload(
 
     has_refs = bool(refs)
     image_branch = not has_refs and not is_text_only
-    candidates = {
+    candidates: dict[str, tuple[JsonValue, bool]] = {
         "imageTail": ((s["image_tail"] or None) if c["HAS_IMAGE_TAIL"] else None, image_branch),
         "generateAudio": (s["generate_audio"], True),
         "webSearch": (s["web_search"], not has_refs),
@@ -821,15 +944,9 @@ def _generic_payload(
     return {"input": attrs}
 
 
-def _kling_payload(
-    c: dict[str, object],
-    prompt: str,
-    image_url: str | None,
-    s: dict[str, object],
-    **_: JsonValue,
-) -> dict[str, Any]:
+def _kling_payload(c: VideoCfg, prompt: str, image_url: str | None, s: _Inputs, **_: JsonValue) -> Payload:
     if s["is_text_only"] and not c["TEXT_TO_VIDEO"]:
-        raise ValueError(f"{c['MODEL']} needs a source image (it has no text-to-video mode)")
+        raise TextToVideoUnsupportedError(c.get("MODEL", ""))
     payload = _generic_payload(c, prompt, image_url, s)
     attrs = payload["input"]
     tier = attrs.pop("resolution", None)
@@ -846,17 +963,11 @@ def _kling_payload(
     return payload
 
 
-def _extend_payload(
-    c: dict[str, object],
-    prompt: str,
-    image_url: str | None,
-    s: dict[str, object],
-    **kw: JsonValue,
-) -> dict[str, Any]:
+def _extend_payload(_c: VideoCfg, prompt: str, _image_url: str | None, s: _Inputs, **kw: JsonValue) -> Payload:
     video_url = kw.get("video_url")
     if not video_url:
-        raise ValueError("Extending needs the source video's URL")
-    attrs: dict[str, Any] = {"video": video_url}
+        raise SourceVideoRequiredError(VideoAction.EXTEND)
+    attrs: dict[str, JsonValue] = {"video": video_url}
     if prompt:
         attrs["prompt"] = prompt
     attrs["duration"] = s["length"]
@@ -868,107 +979,69 @@ def _extend_payload(
     return {"input": attrs}
 
 
-def _edit_payload(
-    c: dict[str, object],
-    prompt: str,
-    image_url: str | None,
-    s: dict[str, object],
-    **kw: JsonValue,
-) -> dict[str, Any]:
+def _edit_payload(c: VideoCfg, prompt: str, _image_url: str | None, s: _Inputs, **kw: JsonValue) -> Payload:
     video_url = kw.get("video_url")
     if not video_url:
-        raise ValueError("Editing needs the source video's URL")
+        raise SourceVideoRequiredError(VideoAction.EDIT)
     if not prompt:
-        raise ValueError("Editing needs an instruction prompt")
-    attrs: dict[str, Any] = {"video": video_url, "prompt": prompt}
+        raise EditPromptRequiredError
+    attrs: dict[str, JsonValue] = {"video": video_url, "prompt": prompt}
     if c["VALID_RESOLUTIONS"] and s["resolution"]:
         attrs["resolution"] = s["resolution"]
     return {"input": attrs}
 
 
-def _upscale_payload(
-    c: dict[str, object],
-    prompt: str,
-    image_url: str | None,
-    s: dict[str, object],
-    **kw: JsonValue,
-) -> dict[str, Any]:
+def _upscale_payload(c: VideoCfg, _prompt: str, _image_url: str | None, s: _Inputs, **kw: JsonValue) -> Payload:
     """Build a video-upscale body containing the source, scale, and mode.
 
     Unknown scale or mode values fall back to the model defaults.
     """
     video_url = kw.get("video_url")
     if not video_url:
-        raise ValueError("Upscaling needs the source video's URL")
+        raise SourceVideoRequiredError(VideoAction.UPSCALE)
     scales = {v.lower(): v for v in c["VALID_RESOLUTIONS"]}
-    scale = scales.get(str(s["resolution"]).lower(), c["DEFAULT_RESOLUTION"])
-    mode = kw.get("mode") if kw.get("mode") in c["MODES"] else c["MODES"][0]
-    return {"input": {"video": video_url, "scale": scale, "mode": mode}}
+    scale = scales.get(s["resolution"].lower(), c["DEFAULT_RESOLUTION"])
+    return {"input": {"video": video_url, "scale": scale, "mode": _pick_mode(c, **kw)}}
 
 
-def _bgremove_payload(
-    c: dict[str, object],
-    prompt: str,
-    image_url: str | None,
-    s: dict[str, object],
-    **kw: JsonValue,
-) -> dict[str, Any]:
+def _bgremove_payload(c: VideoCfg, _prompt: str, _image_url: str | None, s: _Inputs, **kw: JsonValue) -> Payload:
     """Video background removal: {video, outputFormat} (webm / mov, both transparent)."""
     if not kw.get("video_url"):
-        raise ValueError("Background removal needs the source video's URL")
+        raise SourceVideoRequiredError(VideoAction.BGREMOVE)
     fmt = s["resolution"] if s["resolution"] in c["VALID_RESOLUTIONS"] else c["DEFAULT_RESOLUTION"]
     return {"input": {"video": kw["video_url"], "outputFormat": fmt}}
 
 
-def _subtitle_payload(
-    c: dict[str, object],
-    prompt: str,
-    image_url: str | None,
-    s: dict[str, object],
-    **kw: JsonValue,
-) -> dict[str, Any]:
+def _subtitle_payload(c: VideoCfg, _prompt: str, _image_url: str | None, s: _Inputs, **kw: JsonValue) -> Payload:
     """Subtitle removal: {video, language, tier}; unknown values fall back to the defaults."""
     if not kw.get("video_url"):
-        raise ValueError("Subtitle removal needs the source video's URL")
+        raise SourceVideoRequiredError(VideoAction.SUBTITLE)
     lang = s["resolution"] if s["resolution"] in c["VALID_RESOLUTIONS"] else c["DEFAULT_RESOLUTION"]
-    tier = kw.get("mode") if kw.get("mode") in c["MODES"] else c["MODES"][0]
-    return {"input": {"video": kw["video_url"], "language": lang, "tier": tier}}
+    return {"input": {"video": kw["video_url"], "language": lang, "tier": _pick_mode(c, **kw)}}
 
 
-def _faceswap_payload(
-    c: dict[str, object],
-    prompt: str,
-    image_url: str | None,
-    s: dict[str, object],
-    **kw: JsonValue,
-) -> dict[str, Any]:
+def _faceswap_payload(_c: VideoCfg, _prompt: str, image_url: str | None, _s: _Inputs, **kw: JsonValue) -> Payload:
     """Face swap: the source video plus a face image."""
     if not kw.get("video_url"):
-        raise ValueError("Face swap needs the source video's URL")
+        raise SourceVideoRequiredError(VideoAction.FACESWAP)
     if not image_url:
-        raise ValueError("Face swap needs a face image URL")
+        raise FaceImageRequiredError
     return {"input": {"video": kw["video_url"], "faceImage": image_url}}
 
 
-def _lipsync_payload(
-    c: dict[str, object],
-    prompt: str,
-    image_url: str | None,
-    s: dict[str, object],
-    **kw: JsonValue,
-) -> dict[str, Any]:
+def _lipsync_payload(c: VideoCfg, prompt: str, image_url: str | None, s: _Inputs, **kw: JsonValue) -> Payload:
     """Build a lip-sync body from a reference image and audio track.
 
     Include a prompt when supplied or required, and resolution when supported.
     """
     audio_url = kw.get("audio_url")
     if not image_url:
-        raise ValueError("Lip sync needs a reference image URL")
+        raise LipsyncImageRequiredError
     if not audio_url:
-        raise ValueError("Lip sync needs an audio URL")
+        raise LipsyncAudioRequiredError
     if c.get("NEEDS_PROMPT") and not prompt:
-        raise ValueError("Lip sync needs a prompt")
-    attrs: dict[str, Any] = {"image": image_url, "audio": audio_url}
+        raise LipsyncPromptRequiredError
+    attrs: dict[str, JsonValue] = {"image": image_url, "audio": audio_url}
     if prompt:
         attrs["prompt"] = prompt
     if c["VALID_RESOLUTIONS"] and s["resolution"]:
@@ -976,29 +1049,23 @@ def _lipsync_payload(
     return {"input": attrs}
 
 
-def _motion_payload(
-    c: dict[str, object],
-    prompt: str,
-    image_url: str | None,
-    s: dict[str, object],
-    **kw: JsonValue,
-) -> dict[str, Any]:
+def _motion_payload(c: VideoCfg, _prompt: str, image_url: str | None, s: _Inputs, **kw: JsonValue) -> Payload:
     """Build a motion-transfer body from a reference image and source video.
 
     ``mode`` is sent only when the model supports it.
     """
     video_url = kw.get("video_url")
     if not video_url:
-        raise ValueError("This model needs the source video's URL")
+        raise SourceVideoRequiredError(VideoAction.MOTION)
     if not image_url:
-        raise ValueError("This model needs a reference image URL")
-    attrs: dict[str, Any] = {"image": image_url, "video": video_url}
+        raise ReferenceImageRequiredError
+    attrs: dict[str, JsonValue] = {"image": image_url, "video": video_url}
     if c["HAS_MODE"]:
-        attrs["mode"] = s["mode"] or c["DEFAULT_MODE"]
+        attrs["mode"] = s["mode"] or c.get("DEFAULT_MODE")
     return {"input": attrs}
 
 
-_BUILDERS = {
+_BUILDERS: dict[str, _Builder] = {
     "generic": _generic_payload,
     "kling": _kling_payload,
     "extend": _extend_payload,
@@ -1012,10 +1079,10 @@ _BUILDERS = {
 }
 
 
-def video_payload(model_id: str, *, prompt: str, image_url: str | None, **kw: JsonValue) -> dict[str, Any]:
+def video_payload(model_id: str, *, prompt: str, image_url: str | None, **kw: JsonValue) -> Payload:
     """Build the video API body for any model, dispatching on its family."""
     c = cfg(model_id)
     build = _BUILDERS.get(c["builder"])
     if build is None:
-        raise ValueError(f"unknown builder {c['builder']!r} for {model_id}")
+        raise UnknownBuilderError(c["builder"], model_id)
     return build(c, prompt, image_url, _process_inputs(c, image_url, **kw), **kw)

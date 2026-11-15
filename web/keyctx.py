@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from contextvars import ContextVar, Token
 
-_current_keys: ContextVar[dict | None] = ContextVar("current_keys", default=None)
+_current_keys: ContextVar[dict[str, str] | None] = ContextVar("current_keys", default=None)
 
 
 def set_keys(keys: dict[str, str] | None) -> Token[dict[str, str] | None]:

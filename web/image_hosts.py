@@ -9,7 +9,6 @@ import threading
 import time
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TypedDict, cast
 
 import requests
 from bs4 import BeautifulSoup
@@ -17,7 +16,7 @@ from pydantic import TypeAdapter
 
 from web.public_media import selfhost_url
 from web.types import JsonValue
-from web.upload_settings import current_upload_prefs
+from web.upload_settings import UploadPrefs, current_upload_prefs
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +30,108 @@ _UGUU_RESPONSE = TypeAdapter(dict[str, JsonValue])
 # nearest. Keys are minutes.
 _LITTERBOX_BUCKETS = {60: "1h", 720: "12h", 1440: "24h", 4320: "72h"}
 _TMPFILES_RESPONSE = TypeAdapter(dict[str, JsonValue])
+
+
+class UploadError(ValueError):
+    """A source file could not be hosted publicly (the message is shown to the user)."""
+
+
+class HostedFileUnreachableError(UploadError):
+    """The uploaded file's public URL could not be fetched."""
+
+    def __init__(self, cause: Exception) -> None:
+        """Name the kind of network failure."""
+        super().__init__(f"hosted file isn't reachable ({type(cause).__name__})")
+
+
+class HostedFileStatusError(UploadError):
+    """The uploaded file's public URL answered with an error status."""
+
+    def __init__(self, status: int) -> None:
+        """Give the HTTP status."""
+        super().__init__(f"hosted file answered HTTP {status}")
+
+
+class HostedFileIsPageError(UploadError):
+    """The public URL serves a web page instead of the file."""
+
+    def __init__(self, suffix: str) -> None:
+        """Name the file type that was expected (its extension, if any)."""
+        super().__init__(f"hosted file served a web page, not {suffix.lstrip('.') or 'the file'}")
+
+
+class UnknownHostError(UploadError):
+    """The chosen upload host is not one we support."""
+
+    def __init__(self, host: str) -> None:
+        """Name the host."""
+        super().__init__(f"Unknown upload host {host!r}")
+
+
+class FileTooLargeForUguuError(UploadError):
+    """The file is over uguu.se's size cap."""
+
+    def __init__(self, size_bytes: int) -> None:
+        """Give the file's size."""
+        super().__init__(f"uguu.se takes files up to 128 MiB; this one is {size_bytes / 1024 / 1024:.0f} MiB")
+
+
+class UploadFailedError(UploadError):
+    """The request to a host failed at the network level."""
+
+    def __init__(self, service: str, cause: Exception) -> None:
+        """Name the service and what went wrong."""
+        super().__init__(f"{service} upload failed — {type(cause).__name__}: {cause}")
+
+
+class UploadRejectedError(UploadError):
+    """A host answered, but not with a hosted file."""
+
+    def __init__(self, service: str, detail: object) -> None:
+        """Name the service and what it said."""
+        super().__init__(f"{service} upload failed — {detail}")
+
+
+class UploadUnexpectedReplyError(UploadError):
+    """A host's reply could not be understood."""
+
+    def __init__(self, service: str, body: str) -> None:
+        """Name the service and show the start of its reply."""
+        super().__init__(f"{service} upload failed — unexpected reply: {body[:200]}")
+
+
+class UploadHttpError(UploadError):
+    """A host answered with an HTTP error."""
+
+    def __init__(self, service: str, status: int, body: str) -> None:
+        """Name the service, the status and (if any) the start of its reply."""
+        detail = body[:200].strip()
+        super().__init__(f"{service} upload failed — HTTP {status}" + (f" — {detail}" if detail else ""))
+
+
+class LitterboxTimeoutError(UploadError):
+    """Litterbox did not answer in time."""
+
+    def __init__(self) -> None:
+        """Build the fixed message."""
+        super().__init__("Litterbox upload timed out — cycle VPN if blocked")
+
+
+class TmpfilesNoUrlError(TypeError):
+    """tmpfiles.org's upload reply carried no file URL."""
+
+    def __init__(self) -> None:
+        """Build the fixed message."""
+        super().__init__("tmpfiles.org upload response has no URL")
+
+
+class TmpfilesNoDirectLinkError(UploadError):
+    """tmpfiles.org's file page had no direct download link."""
+
+    def __init__(self, page_url: str) -> None:
+        """Give the page that was searched."""
+        super().__init__(f"tmpfiles.org upload succeeded but no direct download link found on {page_url}")
+
 
 # A retry (or a second model on the same source media) re-runs the whole submit
 # and would otherwise re-upload the same local file — pure wasted bandwidth,
@@ -50,11 +151,23 @@ _URL_CACHE_MAX = 256  # bound the dict; prune expired first, then oldest
 _FIXED_RETENTION_MIN = {"tmpfiles": 60, "uguu": 180}
 
 
-class _UploadPrefs(TypedDict):
-    primary: str
-    backup: str | None
-    expiry_minutes: int
-    selfhost_base: str
+def clear_url_cache() -> None:
+    """Forget every remembered upload (tests, and after upload settings change)."""
+    with _url_cache_lock:
+        _url_cache.clear()
+
+
+def expire_cached_urls() -> None:
+    """Make every remembered upload look lapsed, so the next upload goes out afresh."""
+    with _url_cache_lock:
+        for key, (url, _) in list(_url_cache.items()):
+            _url_cache[key] = (url, time.time() - 1)
+
+
+def cached_url_expiries() -> list[float]:
+    """When each remembered upload's URL lapses (monotonic seconds)."""
+    with _url_cache_lock:
+        return [expires for _, expires in _url_cache.values()]
 
 
 def _cache_key(filepath: Path, host: str, expiry_minutes: int) -> tuple[str, int, int, str, int] | None:
@@ -102,13 +215,13 @@ def _store_url(key: tuple[str, int, int, str, int] | None, url: str, expiry_minu
         _url_cache[key] = (url, good_until)
 
 
-def upload_file(filepath: Path, prefs: _UploadPrefs | None = None) -> str:
+def upload_file(filepath: Path, prefs: UploadPrefs | None = None) -> str:
     """Upload a source file and return its public URL.
 
     Try the primary host before the backup. If omitted, ``prefs`` uses the
     current user's resolved preferences; a live cached URL is reused.
     """
-    resolved = prefs if prefs is not None else cast("_UploadPrefs", current_upload_prefs())
+    resolved = prefs if prefs is not None else current_upload_prefs()
     expiry = resolved.get("expiry_minutes", 60)
     order: list[str] = [resolved["primary"]]
     backup = resolved.get("backup")
@@ -201,31 +314,29 @@ def _verify_served(host: str, url: str, filepath: Path) -> None:
         content_type = (resp.headers.get("content-type") or "").split(";")[0].strip().lower()
         resp.close()
     except requests.RequestException as exc:
-        raise ValueError(f"hosted file isn't reachable ({type(exc).__name__})") from exc  # noqa: TRY003
+        raise HostedFileUnreachableError(exc) from exc
     if resp.status_code not in (200, 206):
-        raise ValueError(f"hosted file answered HTTP {resp.status_code}")  # noqa: TRY003
+        raise HostedFileStatusError(resp.status_code)
     # Only an HTML answer is treated as wrong: hosts serve files as all sorts of
     # octet-stream/text types, and rejecting those would break working uploads.
     if content_type in ("text/html", "application/xhtml+xml"):
-        raise ValueError(  # noqa: TRY003
-            f"hosted file served a web page, not {filepath.suffix.lstrip('.') or 'the file'}"
-        )
+        raise HostedFileIsPageError(filepath.suffix)
 
 
-def _dispatch(host: str, filepath: Path, prefs: _UploadPrefs) -> str:
+def _dispatch(host: str, filepath: Path, prefs: UploadPrefs) -> str:
     expiry = prefs.get("expiry_minutes", 60)
     if host == "litterbox":
         return _upload_to_litterbox(filepath, expiry)
     if host == "tmpfiles":
         return _upload_to_tmpfiles(filepath, expiry)
     if host == "uguu":
-        return _upload_to_uguu(filepath)
+        return upload_to_uguu(filepath)
     if host == "selfhost":
         return selfhost_url(filepath, prefs.get("selfhost_base", ""), ttl_seconds=expiry * 60)
-    raise ValueError(f"Unknown upload host {host!r}")  # noqa: TRY003
+    raise UnknownHostError(host)
 
 
-def _upload_to_uguu(filepath: Path) -> str:
+def upload_to_uguu(filepath: Path) -> str:
     """Upload a file to uguu.se and return its direct URL.
 
     uguu keeps files for a fixed 3 hours and rejects anything over 128 MiB, so
@@ -233,32 +344,31 @@ def _upload_to_uguu(filepath: Path) -> str:
     """
     size = filepath.stat().st_size
     if size > UGUU_MAX_BYTES:
-        raise ValueError(f"uguu.se takes files up to 128 MiB; this one is {size / 1024 / 1024:.0f} MiB")  # noqa: TRY003
+        raise FileTooLargeForUguuError(size)
     try:
         with filepath.open("rb") as f:
             resp = requests.post(UGUU_URL, files={"files[]": (filepath.name, f)}, timeout=(8, 60))
     except requests.RequestException as exc:
-        raise ValueError(f"uguu.se upload failed — {type(exc).__name__}: {exc}") from exc  # noqa: TRY003
+        raise UploadFailedError("uguu.se", exc) from exc
     if resp.status_code != 200:
         raise _http_failure("uguu.se", resp)
     try:
         data = _UGUU_RESPONSE.validate_json(resp.text)
     except ValueError as exc:
-        raise ValueError(f"uguu.se upload failed — unexpected reply: {resp.text[:200]}") from exc  # noqa: TRY003
+        raise UploadUnexpectedReplyError("uguu.se", resp.text) from exc
     files = data.get("files")
     first = files[0] if isinstance(files, list) and files else None
     url = first.get("url") if isinstance(first, dict) else None
     if data.get("success") is not True or not isinstance(url, str) or not url.startswith("https://"):
-        raise ValueError(f"uguu.se upload failed — {data.get('description') or data}")  # noqa: TRY003
+        raise UploadRejectedError("uguu.se", data.get("description") or data)
     return url
 
 
-def _http_failure(service: str, resp: requests.Response) -> ValueError:
-    body = resp.text[:200].strip()
-    return ValueError(f"{service} upload failed — HTTP {resp.status_code}" + (f" — {body}" if body else ""))
+def _http_failure(service: str, resp: requests.Response) -> UploadHttpError:
+    return UploadHttpError(service, resp.status_code, resp.text)
 
 
-def _litterbox_time(expiry_minutes: int) -> str:
+def litterbox_time(expiry_minutes: int) -> str:
     """Litterbox's retention label (1h/12h/24h/72h) nearest to the request."""
     return _LITTERBOX_BUCKETS[min(_LITTERBOX_BUCKETS, key=lambda v: abs(v - expiry_minutes))]
 
@@ -272,16 +382,16 @@ def _upload_to_litterbox(filepath: Path, expiry_minutes: int = 60) -> str:
         with filepath.open("rb") as f:
             resp = requests.post(
                 LITTERBOX_URL,
-                data={"reqtype": "fileupload", "time": _litterbox_time(expiry_minutes)},
+                data={"reqtype": "fileupload", "time": litterbox_time(expiry_minutes)},
                 files={"fileToUpload": (filepath.name, f)},
                 timeout=(8, 15),  # (connect, read) — read is server response time only, not upload duration
             )
     except requests.exceptions.Timeout as exc:
         log.warning("litterbox upload timed out (%s)", exc)
-        raise ValueError("Litterbox upload timed out — cycle VPN if blocked") from exc  # noqa: TRY003
+        raise LitterboxTimeoutError from exc
     except (requests.exceptions.SSLError, requests.exceptions.ConnectionError) as exc:
         log.warning("litterbox upload failed — %s: %s", type(exc).__name__, exc)
-        raise ValueError(f"Litterbox upload failed — {type(exc).__name__}: {exc}") from exc  # noqa: TRY003
+        raise UploadFailedError("Litterbox", exc) from exc
     if resp.status_code != 200 or not resp.text.startswith("https://"):
         err = _http_failure("Litterbox", resp)
         log.warning("%s", err)
@@ -304,15 +414,15 @@ def _upload_to_tmpfiles(filepath: Path, expiry_minutes: int = 60) -> str:
             )
         data = _TMPFILES_RESPONSE.validate_json(resp.text)
     except (requests.RequestException, ValueError) as exc:
-        raise ValueError(f"tmpfiles.org upload failed — {exc}") from exc  # noqa: TRY003
+        raise UploadRejectedError("tmpfiles.org", exc) from exc
     if resp.status_code != 200:
         raise _http_failure("tmpfiles.org", resp)
     if data.get("status") != "success":
-        raise ValueError(f"tmpfiles.org upload failed — {data}")  # noqa: TRY003
+        raise UploadRejectedError("tmpfiles.org", data)
     upload_data = data.get("data")
     url = upload_data.get("url") if isinstance(upload_data, Mapping) else None
     if not isinstance(url, str):
-        raise TypeError("tmpfiles.org upload response has no URL")  # noqa: TRY003
+        raise TmpfilesNoUrlError
     # The stable file page, not the dl/ link: that one expires in ~5 minutes
     # (see _served_url, which derives a fresh one each time it's handed out).
     return url
@@ -329,9 +439,8 @@ def _tmpfiles_direct_url(page_url: str) -> str:
     page.raise_for_status()
     soup = BeautifulSoup(page.text, "html.parser")
     link = soup.find("a", class_="download") or soup.find("img", id="img_preview")
-    direct_url = (link.get("href") or link.get("src")) if link else None
+    raw_url = (link.get("href") or link.get("src")) if link else None
+    direct_url = raw_url if isinstance(raw_url, str) else None
     if not direct_url:
-        raise ValueError(  # noqa: TRY003
-            f"tmpfiles.org upload succeeded but no direct download link found on {page_url}"
-        )
+        raise TmpfilesNoDirectLinkError(page_url)
     return direct_url

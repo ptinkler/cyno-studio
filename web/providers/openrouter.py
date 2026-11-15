@@ -40,6 +40,58 @@ class OpenRouterError(Exception):
         self.status = status
 
 
+class ConnectionDroppedError(OpenRouterError):
+    """The connection dropped while waiting; the request may still have been billed."""
+
+    def __init__(self, waited_seconds: int, waiting_for: str, cause: Exception) -> None:
+        """Say how long we waited, for what, and which network error ended it."""
+        super().__init__(
+            f"The connection to OpenRouter dropped after {waited_seconds}s waiting for the {waiting_for} "
+            f"({type(cause).__name__}) — usually a network/VPN closing idle connections. "
+            "It may still have been billed: check OpenRouter's activity before retrying."
+        )
+
+
+class MissingApiKeyError(OpenRouterError):
+    """No OpenRouter key is set for this user."""
+
+    def __init__(self) -> None:
+        """Build the fixed message (HTTP 503)."""
+        super().__init__("No OpenRouter API key set — add one in Settings → Keys", 503)
+
+
+class InvalidJsonObjectError(OpenRouterError):
+    """OpenRouter's reply was not a JSON object."""
+
+    def __init__(self) -> None:
+        """Build the fixed message."""
+        super().__init__("OpenRouter returned an invalid JSON object")
+
+
+class InvalidVideoJobError(OpenRouterError):
+    """OpenRouter's video-job reply carried no job id."""
+
+    def __init__(self) -> None:
+        """Build the fixed message."""
+        super().__init__("OpenRouter returned an invalid video job")
+
+
+class NoImagesError(OpenRouterError):
+    """An image model answered without any image."""
+
+    def __init__(self) -> None:
+        """Build the fixed message."""
+        super().__init__("Image model returned no images")
+
+
+class UnsafeImageUrlError(OpenRouterError):
+    """A returned image URL points somewhere we refuse to fetch."""
+
+    def __init__(self, cause: Exception) -> None:
+        """Give the reason the address was refused."""
+        super().__init__(f"Refusing to fetch unsafe image URL: {cause}")
+
+
 def keepalive_socket_options() -> list[tuple[int, int, int]]:
     """Enable TCP keepalive probes every 5 seconds while a request waits.
 
@@ -62,7 +114,7 @@ def keepalive_socket_options() -> list[tuple[int, int, int]]:
 
 
 # One shared, thread-safe client so every OpenRouter connection gets keepalive
-_client = httpx.Client(transport=httpx.HTTPTransport(socket_options=keepalive_socket_options()))
+http_client = httpx.Client(transport=httpx.HTTPTransport(socket_options=keepalive_socket_options()))
 
 
 @contextmanager
@@ -73,11 +125,7 @@ def _connection_guard(waiting_for: str) -> Generator[None]:
         yield
     except (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError) as e:
         waited = round(time.monotonic() - start)
-        raise OpenRouterError(  # noqa: TRY003
-            f"The connection to OpenRouter dropped after {waited}s waiting for the {waiting_for} "
-            f"({type(e).__name__}) — usually a network/VPN closing idle connections. "
-            "It may still have been billed: check OpenRouter's activity before retrying."
-        ) from e
+        raise ConnectionDroppedError(waited, waiting_for, e) from e
 
 
 def get_api_key() -> str:
@@ -90,7 +138,7 @@ def is_configured() -> bool:
     return bool(get_api_key())
 
 
-NAME = "openrouter"
+NAME: str = "openrouter"
 
 
 def _json_object(value: object) -> dict[str, JsonValue]:
@@ -116,7 +164,7 @@ def _cost(value: JsonValue) -> float | None:
     return float(value) if isinstance(value, int | float) and not isinstance(value, bool) else None
 
 
-def list_models(kind: str, refresh: bool = False) -> list[dict[str, JsonValue]]:  # noqa: ARG001 — provider interface
+def list_models(kind: str, _refresh: bool = False) -> list[dict[str, JsonValue]]:
     """Uniform provider interface: text/image/video models (empty without a key)."""
     if not is_configured():
         return []
@@ -124,10 +172,11 @@ def list_models(kind: str, refresh: bool = False) -> list[dict[str, JsonValue]]:
     return lister() if lister else []  # no audio models here
 
 
-def _headers() -> dict[str, str]:
+def request_headers() -> dict[str, str]:
+    """The headers every OpenRouter request carries (auth plus app attribution)."""
     key = get_api_key()
     if not key:
-        raise OpenRouterError("No OpenRouter API key set — add one in Settings → Keys", 503)  # noqa: TRY003
+        raise MissingApiKeyError
     return {
         "Authorization": f"Bearer {key}",
         # App attribution (https://openrouter.ai/docs/app-attribution). The URL
@@ -140,7 +189,8 @@ def _headers() -> dict[str, str]:
     }
 
 
-def _raise_for_response(resp: httpx.Response) -> None:
+def raise_for_response(resp: httpx.Response) -> None:
+    """Raise ``OpenRouterError`` for an HTTP error reply, with OpenRouter's own explanation."""
     if resp.status_code < 400:
         return
     try:
@@ -168,11 +218,13 @@ def _raise_for_response(resp: httpx.Response) -> None:
 
 
 def _get(path: str, params: dict[str, str] | None = None) -> dict[str, JsonValue]:
-    resp = _client.get(f"{OPENROUTER_BASE}{path}", headers=_headers(), params=params, timeout=DEFAULT_TIMEOUT)
-    _raise_for_response(resp)
+    resp = http_client.get(
+        f"{OPENROUTER_BASE}{path}", headers=request_headers(), params=params, timeout=DEFAULT_TIMEOUT
+    )
+    raise_for_response(resp)
     data = cast("object", resp.json())
     if not isinstance(data, dict):
-        raise OpenRouterError("OpenRouter returned an invalid JSON object")  # noqa: TRY003
+        raise InvalidJsonObjectError
     return cast("dict[str, JsonValue]", data)
 
 
@@ -323,15 +375,15 @@ def stream_chat(
 
     with (
         request_log.logged("openrouter", "POST", "/chat/completions", body) as outcome,
-        _client.stream(
-            "POST", f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=body, timeout=CHAT_TIMEOUT
+        http_client.stream(
+            "POST", f"{OPENROUTER_BASE}/chat/completions", headers=request_headers(), json=body, timeout=CHAT_TIMEOUT
         ) as resp,
     ):
         outcome["status"] = resp.status_code
         if resp.status_code >= 400:
             resp.read()
             outcome["response"] = request_log.response_of(resp)
-            _raise_for_response(resp)
+            raise_for_response(resp)
         chunks = sse.chat_chunks(resp.iter_lines(), OpenRouterError, max_seconds, should_stop)
         yield from request_log.chat_reply(chunks, outcome)
 
@@ -369,15 +421,15 @@ def generate_image(
     with (
         request_log.logged("openrouter", "POST", "/images", body) as outcome,
         _connection_guard("image"),
-        _client.stream(
-            "POST", f"{OPENROUTER_BASE}/images", headers=_headers(), json=body, timeout=IMAGE_TIMEOUT
+        http_client.stream(
+            "POST", f"{OPENROUTER_BASE}/images", headers=request_headers(), json=body, timeout=IMAGE_TIMEOUT
         ) as resp,
     ):
         outcome["status"] = resp.status_code
         if resp.status_code >= 400:
             resp.read()
             outcome["response"] = request_log.response_of(resp)
-            _raise_for_response(resp)
+            raise_for_response(resp)
         if "text/event-stream" not in resp.headers.get("content-type", ""):
             resp.read()  # a provider that doesn't stream answers with plain JSON
             outcome["response"] = request_log.response_of(resp)
@@ -396,7 +448,7 @@ def _images_from_json(data: dict[str, JsonValue]) -> tuple[list[tuple[bytes, str
         media_type = item.get("media_type")
         images.append((base64.b64decode(encoded), media_type if isinstance(media_type, str) else "image/png"))
     if not images:
-        raise OpenRouterError("Image model returned no images")  # noqa: TRY003
+        raise NoImagesError
     usage = _json_object(cast("object", data.get("usage") or {}))
     return images, _cost(usage.get("cost"))
 
@@ -427,7 +479,7 @@ def _images_from_stream(lines: Iterator[str]) -> tuple[list[tuple[bytes, str]], 
         if parsed_cost is not None:
             cost = parsed_cost
     if not images:
-        raise OpenRouterError("Image model returned no images")  # noqa: TRY003
+        raise NoImagesError
     return images, cost
 
 
@@ -466,12 +518,12 @@ def generate_image_chat(
         body["session_id"] = session_id
     with request_log.logged("openrouter", "POST", "/chat/completions", body) as outcome:
         with _connection_guard("image"):
-            resp = _client.post(
-                f"{OPENROUTER_BASE}/chat/completions", headers=_headers(), json=body, timeout=IMAGE_TIMEOUT
+            resp = http_client.post(
+                f"{OPENROUTER_BASE}/chat/completions", headers=request_headers(), json=body, timeout=IMAGE_TIMEOUT
             )
         outcome["status"] = resp.status_code
         outcome["response"] = request_log.response_of(resp)
-        _raise_for_response(resp)
+        raise_for_response(resp)
     data = _json_object(cast("object", resp.json()))
     choices = _json_objects(data.get("choices") or [])
     message = _json_object(cast("object", choices[0].get("message") or {})) if choices else {}
@@ -486,9 +538,9 @@ def generate_image_chat(
         elif url:
             # Provider-supplied URL — guard against SSRF (loopback/metadata/LAN).
             try:
-                r = net_guard.get_public(_client, url, timeout=IMAGE_TIMEOUT)
+                r = net_guard.get_public(http_client, url, timeout=IMAGE_TIMEOUT)
             except net_guard.UnsafeURLError as exc:
-                raise OpenRouterError(f"Refusing to fetch unsafe image URL: {exc}") from exc  # noqa: TRY003
+                raise UnsafeImageUrlError(exc) from exc
             r.raise_for_status()
             content_type = cast("object", r.headers.get("content-type", "image/png"))
             images.append((r.content, content_type.split(";")[0] if isinstance(content_type, str) else "image/png"))
@@ -528,14 +580,16 @@ def submit_video(
 
     with request_log.logged("openrouter", "POST", "/videos", body) as outcome:
         with _connection_guard("video job to start"):
-            resp = _client.post(f"{OPENROUTER_BASE}/videos", headers=_headers(), json=body, timeout=IMAGE_TIMEOUT)
+            resp = http_client.post(
+                f"{OPENROUTER_BASE}/videos", headers=request_headers(), json=body, timeout=IMAGE_TIMEOUT
+            )
         outcome["status"] = resp.status_code
         outcome["response"] = request_log.response_of(resp)
-        _raise_for_response(resp)
+        raise_for_response(resp)
     result = _json_object(cast("object", resp.json()))
     job_id = result.get("id")
     if not isinstance(job_id, str):
-        raise OpenRouterError("OpenRouter returned an invalid video job")  # noqa: TRY003
+        raise InvalidVideoJobError
     return cast("VideoJob", result)
 
 
@@ -547,17 +601,17 @@ def get_video(job_id: str) -> dict[str, JsonValue]:
 def download_video(job_id: str, dest: Path, index: int = 0) -> None:
     """Download a completed video job to ``dest``."""
     tmp = dest.with_suffix(dest.suffix + ".part")
-    with _client.stream(
+    with http_client.stream(
         "GET",
         f"{OPENROUTER_BASE}/videos/{job_id}/content",
-        headers=_headers(),
+        headers=request_headers(),
         params={"index": index},
         timeout=IMAGE_TIMEOUT,
         follow_redirects=True,
     ) as resp:
         if resp.status_code >= 400:
             resp.read()
-            _raise_for_response(resp)
+            raise_for_response(resp)
         with tmp.open("wb") as f:
             f.writelines(resp.iter_bytes())
     tmp.replace(dest)

@@ -14,14 +14,18 @@ anything another user must not see belongs under a per-tenant key.
 import threading
 import time
 from collections import OrderedDict
+from enum import Enum
+from typing import Final, overload
 
 
 # Tells a cached None apart from a miss, for callers that cache "no answer".
-class _Missing:
-    """Sentinel returned for cache misses that differ from a cached None."""
+class _Missing(Enum):
+    """Sentinel type for cache misses that differ from a cached None."""
+
+    MISS = 0
 
 
-MISS = _Missing()
+MISS: Final = _Missing.MISS
 
 
 class TTLCache[K, V]:
@@ -40,7 +44,13 @@ class TTLCache[K, V]:
         self._lock = threading.Lock()
         self._entries: OrderedDict[K, tuple[float, V]] = OrderedDict()
 
-    def get(self, key: K, default: V | None = None) -> V | None:
+    @overload
+    def get(self, key: K) -> V | None: ...
+
+    @overload
+    def get[D](self, key: K, default: D) -> V | D: ...
+
+    def get[D](self, key: K, default: D | None = None) -> V | D | None:
         """Return a live value for ``key``, or ``default`` on a miss."""
         with self._lock:
             entry = self._entries.get(key)

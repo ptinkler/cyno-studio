@@ -13,7 +13,7 @@ import contextlib
 import json
 import os
 import secrets
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, TypedDict, cast
 
 import httpx
 from fastapi import APIRouter, Depends
@@ -25,6 +25,9 @@ from web.net_guard import UnsafeURLError, get_public
 from web.public_media import selfhost_url
 from web.users import require_user
 
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
 router = APIRouter(prefix="/api/settings/uploads")
 
 HOSTS = ("litterbox", "uguu", "tmpfiles", "selfhost")
@@ -35,11 +38,20 @@ EXPIRY_OPTIONS = (60, 720, 1440, 4320)  # 1h / 12h / 24h / 72h, in minutes
 EXPIRY_CONFIGURABLE = ("litterbox", "selfhost")
 
 
+class UploadPrefs(TypedDict):
+    """The effective source-media hosting preferences."""
+
+    primary: str
+    backup: str | None
+    expiry_minutes: int
+    selfhost_base: str
+
+
 def _public_base_default() -> str:
     return (os.getenv("UPLOAD_SELFHOST_BASE") or os.getenv("PUBLIC_BASE_URL") or "").strip().rstrip("/")
 
 
-def default_prefs() -> dict[str, object]:
+def default_prefs() -> UploadPrefs:
     """Return the instance-wide upload defaults from the environment.
 
     Litterbox remains the primary host for large videos, with tmpfiles as backup.
@@ -58,40 +70,44 @@ def default_prefs() -> dict[str, object]:
     }
 
 
-def _sanitize(raw: dict[str, object], base: dict[str, object]) -> dict[str, object]:
+def _sanitize(raw: Mapping[str, object], base: UploadPrefs) -> UploadPrefs:
     """Merge valid stored preferences over the supplied defaults.
 
     Invalid values are dropped so a malformed stored blob cannot break uploads.
     """
-    out = dict(base)
-    if raw.get("primary") in HOSTS:
-        out["primary"] = raw["primary"]
+    out = UploadPrefs(**base)
+    primary = raw.get("primary")
+    if isinstance(primary, str) and primary in HOSTS:
+        out["primary"] = primary
     if "backup" in raw:
-        out["backup"] = raw["backup"] if raw["backup"] in HOSTS else None
-    if raw.get("expiry_minutes") in EXPIRY_OPTIONS:
-        out["expiry_minutes"] = raw["expiry_minutes"]
-    if isinstance(raw.get("selfhost_base"), str) and raw["selfhost_base"].strip():
-        out["selfhost_base"] = raw["selfhost_base"].strip().rstrip("/")
+        backup = raw["backup"]
+        out["backup"] = backup if isinstance(backup, str) and backup in HOSTS else None
+    expiry = raw.get("expiry_minutes")
+    if isinstance(expiry, int) and expiry in EXPIRY_OPTIONS:
+        out["expiry_minutes"] = expiry
+    selfhost_base = raw.get("selfhost_base")
+    if isinstance(selfhost_base, str) and selfhost_base.strip():
+        out["selfhost_base"] = selfhost_base.strip().rstrip("/")
     # A backup equal to the primary is just "no backup".
     if out["backup"] == out["primary"]:
         out["backup"] = None
     return out
 
 
-def resolve_prefs(user: User) -> dict[str, object]:
+def resolve_prefs(user: User) -> UploadPrefs:
     """The effective prefs for a user: their stored choices over the default."""
     base = default_prefs()
-    blob = getattr(user, "upload_prefs_json", None)
+    blob = user.upload_prefs_json
     if not blob:
         return base
     try:
-        raw = json.loads(blob)
+        raw = cast("object", json.loads(blob))
     except (ValueError, TypeError):
         return base
-    return _sanitize(raw, base) if isinstance(raw, dict) else base
+    return _sanitize(cast("dict[str, object]", raw), base) if isinstance(raw, dict) else base
 
 
-def current_upload_prefs() -> dict[str, object]:
+def current_upload_prefs() -> UploadPrefs:
     """Return upload preferences for the current request.
 
     Resolve them through the bound tenant, or use instance defaults anonymously.
@@ -126,15 +142,22 @@ def _meta() -> dict[str, object]:
 @router.get("")
 async def get_upload_prefs(user: Annotated[User, Depends(require_user)]) -> dict[str, object]:
     """Return the user's upload preferences and available choices."""
-    return {"prefs": resolve_prefs(user), **_meta()}
+    return {"prefs": dict(resolve_prefs(user)), **_meta()}
 
 
 @router.put("")
 async def set_upload_prefs(data: UploadPrefsUpdate, user: Annotated[User, Depends(require_user)]) -> dict[str, object]:
     """Save the user's upload preferences."""
-    merged = _sanitize({k: v for k, v in data.model_dump().items() if v is not None}, resolve_prefs(user))
+    fields: dict[str, object] = {
+        "primary": data.primary,
+        "backup": data.backup,
+        "expiry_minutes": data.expiry_minutes,
+        "selfhost_base": data.selfhost_base,
+    }
+    given = {k: v for k, v in fields.items() if v is not None}
+    merged = _sanitize(given, resolve_prefs(user))
     get_db().set_user_upload_prefs(user.id, json.dumps(merged))
-    return {"prefs": merged, **_meta()}
+    return {"prefs": dict(merged), **_meta()}
 
 
 class SelfhostTest(BaseModel):
@@ -149,7 +172,7 @@ async def check_selfhost(data: SelfhostTest, user: Annotated[User, Depends(requi
 
     Stage a small file, fetch its signed public URL and verify the returned bytes.
     """
-    base = (data.selfhost_base or resolve_prefs(user).get("selfhost_base") or "").strip()
+    base = (data.selfhost_base or resolve_prefs(user)["selfhost_base"] or "").strip()
     token = secrets.token_hex(8)
     test_dir = config.ROOT_DIR / "chat" / "__selfhost_test__"
     test_dir.mkdir(parents=True, exist_ok=True)
@@ -163,10 +186,10 @@ async def check_selfhost(data: SelfhostTest, user: Annotated[User, Depends(requi
             return {"ok": False, "detail": f"The URL returned HTTP {resp.status_code} — check the base URL and proxy."}
         if resp.text.strip() != token:
             return {"ok": False, "detail": "The URL was reachable but served the wrong content (proxy/caching?)."}
+    except UnsafeURLError as e:  # before ValueError, which it subclasses
+        return {"ok": False, "detail": f"Not publicly reachable: {e}. Pollo needs a public https address."}
     except ValueError as e:
         return {"ok": False, "detail": str(e)}
-    except UnsafeURLError as e:
-        return {"ok": False, "detail": f"Not publicly reachable: {e}. Pollo needs a public https address."}
     except httpx.HTTPError as e:
         return {"ok": False, "detail": f"Couldn't reach the URL: {e}"}
     finally:

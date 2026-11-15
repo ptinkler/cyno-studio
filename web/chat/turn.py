@@ -11,9 +11,9 @@ import logging
 import os
 import re
 import threading
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
-from typing import Any, TypedDict, cast
+from typing import TypedDict, cast
 
 from web import characters
 from web.chat import generation, polling
@@ -25,6 +25,12 @@ from web.chat.constants import (
     DEFAULT_TITLE,
     MAX_TOOL_ROUNDS,
     TITLE_WAIT_SECONDS,
+)
+from web.chat.errors import (
+    ModelNotSelectedError,
+    PromptRequiredError,
+    ToolImageRequiredError,
+    VideoInputRequiredError,
 )
 from web.chat.generation import (
     characters_note,
@@ -90,7 +96,7 @@ class Turn:
         conv_id: str,
         settings: TurnSettings,
         message_id: int,
-        emit: Callable[[dict[str, object]], None],
+        emit: Callable[[dict[str, JsonValue]], None],
         cancel: threading.Event,
         initial_cost: float = 0.0,
         rewrite: tuple[str, str] | None = None,
@@ -139,7 +145,8 @@ class Turn:
             status, error = ("done", None)
         except openrouter.OpenRouterError as e:
             status, error = "error", str(e)
-        except Exception as e:  # noqa: BLE001 — never leave a message stuck in "streaming"
+        except Exception as e:  # never leave a message stuck in "streaming"
+            log.exception("turn for message %s failed", self.message_id)
             status, error = "error", f"{type(e).__name__}: {e}"
         if self.cancel.is_set() and status == "done":
             self.content = self.content.rstrip() + ("\n\n" if self.content else "") + "*(stopped)*"
@@ -166,7 +173,7 @@ class Turn:
         if info.get("tool"):
             return self._direct_image_tool(user, prompt, info)
         if not prompt:
-            raise openrouter.OpenRouterError("Image mode needs a text prompt")  # noqa: TRY003
+            raise PromptRequiredError("image")
         chars = self.characters  # every attached character
         dropped: list[str] = []
         refs = [
@@ -198,7 +205,7 @@ class Turn:
             if media.get("kind") == "image" and isinstance((file := media.get("file")), str)
         ]
         if not files:
-            raise openrouter.OpenRouterError("This tool needs an image — attach one")  # noqa: TRY003
+            raise ToolImageRequiredError
         self._generate_image(prompt or info.get("name") or "Image tool", None, files[:1])
 
     def _direct_video(self) -> None:
@@ -218,9 +225,9 @@ class Turn:
         # image-to-video.
         ref_mode = info.get("ref_mode")
         has_av = any(m.get("file") and m["kind"] in ("video", "audio") for m in (user.media if user else []))
-        ref_items = self._ref_items(ref_mode) if ref_mode and ("[@" in prompt or has_av) else None
+        ref_items = self.build_ref_items(ref_mode) if ref_mode and ("[@" in prompt or has_av) else None
         if not prompt and not frames and not ref_items:
-            raise openrouter.OpenRouterError("Video mode needs a prompt or an image")  # noqa: TRY003
+            raise VideoInputRequiredError
         # Attached images: the first frame, the last frame (first+last-frame
         # models) and, for reference models, all of them are references
         self._generate_video(
@@ -234,7 +241,7 @@ class Turn:
             ref_items=ref_items,
         )
 
-    def _ref_items(self, ref_mode: RefMode) -> list[dict[str, str]]:
+    def build_ref_items(self, ref_mode: RefMode) -> list[dict[str, str]]:
         """Build the named reference list for a reference-to-video model.
 
         Supported attachments receive [@name] handles, subject to per-type and
@@ -263,12 +270,12 @@ class Turn:
         user = self._last_user()
         prompt = (user.content if user else "").strip()
         if not prompt:
-            raise openrouter.OpenRouterError("Audio mode needs a text prompt")  # noqa: TRY003
+            raise PromptRequiredError("audio")
         self._generate_audio(prompt)
 
     def _generate_audio(self, prompt: str) -> None:
         if not self.s.audio_model:
-            raise openrouter.OpenRouterError("No audio model selected")  # noqa: TRY003
+            raise ModelNotSelectedError("audio")
         params = audio_params(self.s.audio_options)
         if (model_info("audio", self.s.audio_model) or {}).get("audio_input"):
             params["source_audio"] = self._latest_audio()  # the clip to clone the voice from
@@ -282,12 +289,12 @@ class Turn:
         self._update_media(
             item, job_id=job["id"], params={**params, **job.get("params", {})}, **exchange_fields(job.get("log"))
         )
-        polling.start_video_poller(self.conv_id, self.message_id, item["id"], job["id"])
+        polling.start_video_poller(self.conv_id, self.message_id, str(item["id"]), job["id"])
 
     # ― chat with tools ―
     def _chat(self, tools_enabled: bool) -> None:
         if not self.s.text_model:
-            raise openrouter.OpenRouterError("No text model selected")  # noqa: TRY003
+            raise ModelNotSelectedError("text")
         model = self.s.text_model
         info = model_info("text", model)
         use_tools = tools_enabled and (info is None or info.get("supports_tools"))
@@ -481,7 +488,7 @@ class Turn:
         refs, dropped = self._image_refs(args, source, chars)
         ref_args = {k: args[k] for k in ("source_image", "keep_consistent", "characters") if k in args}
         self._generate_image(prompt, ratio, refs, ref_args, chars, dropped)
-        result: dict[str, Any] = {"ok": True, "result": IMAGE_TOOL_RESULT}
+        result: dict[str, JsonValue] = {"ok": True, "result": IMAGE_TOOL_RESULT}
         if chars:
             result["characters"] = [c.name for c in chars]
         pinned = self._pinned_images()
@@ -709,12 +716,12 @@ class Turn:
         prompt: str,
         aspect_ratio: str | None,
         ref_files: list[str],
-        ref_args: dict | None = None,
+        ref_args: dict[str, JsonValue] | None = None,
         chars: list[Character] | None = None,
         dropped: list[str] | None = None,
     ) -> None:
         if not self.s.image_model:
-            raise openrouter.OpenRouterError("No image model selected")  # noqa: TRY003
+            raise ModelNotSelectedError("image")
         # Params are stored on the item so a failed image can be retried as-is
         params: dict[str, JsonValue] = {
             "aspect_ratio": aspect_ratio,
@@ -779,10 +786,10 @@ class Turn:
         chars: list[Character] | None = None,
         last_frame: str | None = None,
         attached: list[str] | None = None,
-        ref_items: list[dict] | None = None,
+        ref_items: Sequence[Mapping[str, JsonValue]] | None = None,
     ) -> None:
         if not self.s.video_model:
-            raise openrouter.OpenRouterError("No video model selected")  # noqa: TRY003
+            raise ModelNotSelectedError("video")
         duration, aspect_ratio, resolution = fit_video_params(
             self.s.video_model, duration, aspect_ratio, self.s.video_options.resolution
         )
@@ -816,7 +823,7 @@ class Turn:
         self._update_media(
             item, job_id=job["id"], params={**params, **job.get("params", {})}, **exchange_fields(job.get("log"))
         )
-        polling.start_video_poller(self.conv_id, self.message_id, item["id"], job["id"])
+        polling.start_video_poller(self.conv_id, self.message_id, str(item["id"]), job["id"])
 
     def _video_inputs(
         self, first_frame: str | None, last_frame: str | None, attached: list[str], chars: list[Character]

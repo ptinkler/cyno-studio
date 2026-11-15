@@ -9,11 +9,11 @@ before any web.* module, so everything here is a plain top-level import.
 import logging
 import threading
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from http.cookies import SimpleCookie
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, cast
 
 import uvicorn
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Request
@@ -50,7 +50,7 @@ WEB_DIR = Path(__file__).parent.resolve()
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:  # noqa: ARG001 — ASGI lifespan signature
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     """Lifespan context manager for startup/shutdown events."""
     # Startup: announce the auth posture so a misconfigured deploy is obvious
     admins = admin_emails()
@@ -64,7 +64,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:  # noqa: ARG001 — ASG
     log.info("OAuth providers: %s", ", ".join(providers) if providers else "none configured")
     # Alembic owns the schema; bring it up to date before anything reads it.
     db = get_db()
-    ensure_schema(db.engine, db.db_path, fresh=getattr(db, "_fresh", False))
+    ensure_schema(db.engine, db.db_path, fresh=getattr(db, "is_fresh", False))
     # Dev: seed the one-click dev account when enabled (no-op otherwise).
     seed_dev_user()
     startup_resume_chat()
@@ -124,10 +124,12 @@ class UserContextMiddleware:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """Bind user keys and tenant data while handling an API request."""
-        if scope["type"] != "http" or not scope.get("path", "").startswith("/api"):
+        path = cast("str", scope.get("path", ""))
+        if scope["type"] != "http" or not path.startswith("/api"):
             return await self.app(scope, receive, send)
 
-        headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers", [])}
+        raw_headers = cast("list[tuple[bytes, bytes]]", scope.get("headers", []))
+        headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in raw_headers}
         jar = SimpleCookie()
         jar.load(headers.get("cookie", ""))
 
@@ -161,6 +163,12 @@ LOGIN_MAX_ATTEMPTS = 10
 LOGIN_WINDOW_SECONDS = 300
 _login_attempts: dict[str, list[float]] = {}
 _login_lock = threading.Lock()
+
+
+def reset_login_attempts() -> None:
+    """Forget every client's recent failed logins (tests, between runs)."""
+    with _login_lock:
+        _login_attempts.clear()
 
 
 def _client_ip(request: Request) -> str:
@@ -280,7 +288,7 @@ app.include_router(vpn.router)
 STATIC_DIR = WEB_DIR / "static"
 
 
-def _static_file(path: str, static_dir: Path = STATIC_DIR) -> Path:
+def static_file(path: str, static_dir: Path = STATIC_DIR) -> Path:
     """Map a request path to a file in the SPA build, falling back to index.html.
 
     Resolved and confined to static_dir: encoded "../" (e.g. /..%2F.env)
@@ -299,7 +307,7 @@ if STATIC_DIR.is_dir():
     @app.get("/{path:path}")
     def serve_frontend(path: str) -> FileResponse:
         """Catch-all: serve the Vue SPA index.html for any non-API route."""
-        return FileResponse(_static_file(path))
+        return FileResponse(static_file(path))
 
 
 if __name__ == "__main__":

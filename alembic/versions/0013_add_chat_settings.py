@@ -39,20 +39,24 @@ def upgrade() -> None:
     if bind.execute(sa.text("SELECT 1 FROM chat_settings WHERE id = 1")).first():
         return
     # Carry the old is_default flags into the global bucket
-    values = {}
+    values: dict[str, str] = {}
     for field, table in (
         ("default_instruction_ids_json", "chat_instructions"),
         ("default_instruction_group_ids_json", "chat_instruction_groups"),
     ):
         if insp.has_table(table) and "is_default" in {c["name"] for c in insp.get_columns(table)}:
-            ids = [r[0] for r in bind.execute(sa.text(f"SELECT id FROM {table} WHERE is_default = 1"))]
+            flagged = sa.table(table, sa.column("id", sa.Integer), sa.column("is_default", sa.Boolean))
+            ids = list(bind.execute(sa.select(flagged.c.id).where(flagged.c.is_default.is_(True))).scalars().all())
             if ids:
                 values[field] = json.dumps(ids)
-    cols = ", ".join(["id", "updated_at", *values])
-    placeholders = ", ".join(["1", ":updated_at", *(f":{k}" for k in values)])
+    settings = sa.table(
+        "chat_settings",
+        sa.column("id", sa.Integer),
+        sa.column("updated_at", sa.DateTime()),
+        *(sa.column(name, sa.Text()) for name in values),
+    )
     bind.execute(
-        sa.text(f"INSERT INTO chat_settings ({cols}) VALUES ({placeholders})"),
-        {"updated_at": datetime.now().astimezone().replace(tzinfo=None), **values},
+        sa.insert(settings).values(id=1, updated_at=datetime.now().astimezone().replace(tzinfo=None), **values)
     )
 
 

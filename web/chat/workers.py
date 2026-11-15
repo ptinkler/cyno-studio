@@ -8,7 +8,7 @@ import contextlib
 import contextvars
 import functools
 import threading
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from typing import Concatenate
 
 from web import keyctx, user_keys
@@ -25,13 +25,13 @@ def ctx_thread(target: Callable[[], None], *, name: str | None = None) -> thread
 
 
 @contextlib.contextmanager
-def _owner_keys(conv_id: str) -> Iterator[None]:
+def _owner_keys(conv_id: str) -> Generator[None]:
     """Bind the conversation owner's provider keys for background work.
 
     The conversation ID scopes operations, so no tenant context is needed.
     """
     conv = get_db().get_conversation(conv_id)
-    owner = get_db().get_user(conv.user_id) if conv and getattr(conv, "user_id", None) else None
+    owner = get_db().get_user(conv.user_id) if conv and conv.user_id else None
     token = keyctx.set_keys(user_keys.get_user_keys(owner) if owner else {})
     try:
         yield

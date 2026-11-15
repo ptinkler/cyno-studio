@@ -9,16 +9,26 @@ a model id to the module that owns it (OpenRouter is the fallback).
 
 from collections.abc import Callable, Iterator
 from pathlib import Path
-from types import ModuleType
 from typing import Protocol, cast
 
 from web.providers import openrouter, pollo, pollo_models, venice
-from web.types import ChatChunk, JsonValue, VideoJob
+from web.types import ChatChunk, JsonValue, ModelEntry, VideoJob
 from web.uploads import file_to_data_url
+
 
 # Dispatch order for the model catalogue (Pollo first, OpenRouter last). Each
 # exposes the uniform surface: NAME, is_configured(), list_models(kind, refresh).
-PROVIDERS = (pollo, venice, openrouter)
+class Provider(Protocol):
+    """The uniform surface every provider module offers."""
+
+    NAME: str
+
+    def is_configured(self) -> bool: ...
+
+    def list_models(self, kind: str, refresh: bool = False, /) -> list[ModelEntry]: ...
+
+
+PROVIDERS: tuple[Provider, ...] = (pollo, venice, openrouter)
 
 
 class _TextProvider(Protocol):
@@ -82,7 +92,7 @@ def stream_chat(
     )
 
 
-def provider_for(model_id: str | None) -> ModuleType:
+def provider_for(model_id: str | None) -> Provider:
     """The provider module that owns `model_id` (OpenRouter is the default)."""
     if pollo.is_pollo(model_id):
         return pollo
@@ -91,7 +101,7 @@ def provider_for(model_id: str | None) -> ModuleType:
     return openrouter
 
 
-def provider_for_job(job_id: str | None) -> ModuleType:
+def provider_for_job(job_id: str | None) -> Provider:
     """The provider module that owns an async job id.
 
     Pollo and Venice ids are prefixed with ``pollo:`` and ``venice:``; all
@@ -130,7 +140,7 @@ def generate_image(
         images, credits, sent = pollo.generate_image(
             model, prompt, aspect_ratio=aspect_ratio, resolution=resolution, ref_paths=refs
         )
-        return images, None, credits, cast("dict[str, JsonValue]", sent)
+        return images, None, credits, sent
     if owner is venice:
         images, cost, sent = venice.generate_image(
             model, prompt, aspect_ratio=aspect_ratio, resolution=resolution, ref_paths=refs

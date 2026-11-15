@@ -17,6 +17,46 @@ class UnsafeURLError(ValueError):
     """The URL is not a fetchable public http(s) address."""
 
 
+class UnsupportedSchemeError(UnsafeURLError):
+    """The URL is not http or https."""
+
+    def __init__(self, scheme: str) -> None:
+        """Name the scheme that was refused."""
+        super().__init__(f"Unsupported URL scheme: {scheme!r}")
+
+
+class MissingHostError(UnsafeURLError):
+    """The URL has no host to connect to."""
+
+    def __init__(self) -> None:
+        """Build the fixed message."""
+        super().__init__("URL has no host")
+
+
+class UnresolvableHostError(UnsafeURLError):
+    """The URL's host does not resolve."""
+
+    def __init__(self, host: str, cause: Exception) -> None:
+        """Name the host and why resolution failed."""
+        super().__init__(f"Cannot resolve host {host!r}: {cause}")
+
+
+class NonPublicAddressError(UnsafeURLError):
+    """The URL's host resolves to a private, loopback or otherwise non-public address."""
+
+    def __init__(self, host: str, ip: str) -> None:
+        """Name the host and the address it resolved to."""
+        super().__init__(f"Host {host!r} resolves to non-public address {ip}")
+
+
+class TooManyRedirectsError(UnsafeURLError):
+    """The redirect limit was reached before a final response."""
+
+    def __init__(self) -> None:
+        """Build the fixed message."""
+        super().__init__("Too many redirects")
+
+
 def _is_public_ip(ip: str) -> bool:
     try:
         addr = ipaddress.ip_address(ip)
@@ -40,18 +80,18 @@ def assert_public_url(url: str) -> None:
     """
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
-        raise UnsafeURLError(f"Unsupported URL scheme: {parsed.scheme!r}")  # noqa: TRY003
+        raise UnsupportedSchemeError(parsed.scheme)
     host = parsed.hostname
     if not host:
-        raise UnsafeURLError("URL has no host")  # noqa: TRY003
+        raise MissingHostError
     try:
         infos = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80))
     except socket.gaierror as exc:
-        raise UnsafeURLError(f"Cannot resolve host {host!r}: {exc}") from exc  # noqa: TRY003
+        raise UnresolvableHostError(host, exc) from exc
     for info in infos:
-        ip = info[4][0]
+        ip = str(info[4][0])
         if not _is_public_ip(ip):
-            raise UnsafeURLError(f"Host {host!r} resolves to non-public address {ip}")  # noqa: TRY003
+            raise NonPublicAddressError(host, ip)
 
 
 def get_public(
@@ -82,4 +122,4 @@ def get_public(
             url = str(resp.next_request.url) if resp.next_request else resp.headers["location"]
             continue
         return resp
-    raise UnsafeURLError("Too many redirects")  # noqa: TRY003
+    raise TooManyRedirectsError

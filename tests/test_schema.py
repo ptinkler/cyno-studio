@@ -6,29 +6,35 @@ The case that matters is the real one: a database this app created *before*
 Alembic was wired in here, which has no version row but a current schema.
 """
 
+from pathlib import Path
+
 import pytest
 import sqlalchemy as sa
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 
 import web.core.metadata._base as base
+from tests.jsonpath import must
+from tests.stubs import stub
 from web.core.metadata import MetadataDB
 from web.core.metadata.schema import ADOPT_AT, ensure_schema
 
 pytestmark = pytest.mark.no_tenant
 
 
-def _version(path):
+def _version(path: Path) -> str | None:
     eng = sa.create_engine(f"sqlite:///{path}")
     with eng.begin() as c:
-        return c.execute(sa.text("SELECT version_num FROM alembic_version")).scalar()
+        return c.execute(
+            sa.select(sa.column("version_num", sa.String)).select_from(sa.table("alembic_version"))
+        ).scalar()
 
 
-def test_a_new_database_is_stamped_at_head(tmp_path):
+def test_a_new_database_is_stamped_at_head(tmp_path: Path) -> None:
     """create_all already made the current schema, so nothing should re-run."""
     path = tmp_path / "new.db"
     db = MetadataDB(db_path=path)
-    assert db._fresh is True
+    assert db.is_fresh is True
     ensure_schema(db.engine, path, fresh=True)
 
     cfg = Config("alembic.ini")
@@ -36,7 +42,7 @@ def test_a_new_database_is_stamped_at_head(tmp_path):
     assert _version(path) == ScriptDirectory.from_config(cfg).get_current_head()
 
 
-def test_an_unversioned_database_is_adopted_not_replayed(tmp_path):
+def test_an_unversioned_database_is_adopted_not_replayed(tmp_path: Path) -> None:
     """Replaying from 0001 fails on a populated database (0002 re-adds a.
 
     column), so one without a version row is adopted at ADOPT_AT instead.
@@ -54,10 +60,10 @@ def test_an_unversioned_database_is_adopted_not_replayed(tmp_path):
     db2 = MetadataDB(db_path=path)
     ensure_schema(db2.engine, path, fresh=False)
     assert _version(path) is not None
-    assert db2.get_conversation(conv.id).title == "Fox"  # data untouched
+    assert must(db2.get_conversation(conv.id)).title == "Fox"  # data untouched
 
 
-def test_adopting_still_runs_the_migrations_after_it(tmp_path):
+def test_adopting_still_runs_the_migrations_after_it(tmp_path: Path) -> None:
     """The point of adopting at ADOPT_AT rather than head: anything newer.
 
     must still run. 0027 rewrites stored Pollo model ids.
@@ -79,23 +85,23 @@ def test_adopting_still_runs_the_migrations_after_it(tmp_path):
 
     db2 = MetadataDB(db_path=path)
     ensure_schema(db2.engine, path, fresh=False)
-    assert _version(path) > ADOPT_AT  # moved past the adoption point
-    media = db2.get_chat_message(msg.id).media
+    assert must(_version(path)) > ADOPT_AT  # moved past the adoption point
+    media = must(db2.get_chat_message(msg.id)).media
     assert media[0]["model"] == "pollo/seedream"  # 0027 ran
 
 
-def test_a_broken_migration_does_not_stop_the_server(tmp_path, monkeypatch):
+def test_a_broken_migration_does_not_stop_the_server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A server that can't migrate should still start and say so."""
     path = tmp_path / "x.db"
     db = MetadataDB(db_path=path)
     monkeypatch.setattr(
-        "web.core.metadata.schema.command.upgrade", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
+        "web.core.metadata.schema.command.upgrade", stub(lambda: (_ for _ in ()).throw(RuntimeError("boom")))
     )
     ensure_schema(db.engine, path, fresh=True)  # must not raise
 
 
-def test_the_old_handwritten_catch_up_is_gone(tmp_path):
+def test_the_old_handwritten_catch_up_is_gone(tmp_path: Path) -> None:
     """It was a second copy of the schema; Alembic is the only one now."""
-    src = __import__("pathlib").Path(base.__file__).read_text()
+    src = Path(must(base.__file__)).read_text()
     assert "_LATE_COLUMNS" not in src
     assert "_BACKFILLS" not in src

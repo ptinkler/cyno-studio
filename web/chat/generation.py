@@ -9,11 +9,12 @@ import re
 import uuid
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 from web import characters, providers, request_log
 from web.chat.catalogue import auto_ratio, model_info
 from web.chat.constants import DEFAULT_IMAGE_LIMIT, IMAGE_EXTS, TITLE_SECONDS
+from web.chat.errors import EmptyPromptError
 from web.chat.helpers import conversation_dir, effective_ids
 from web.chat.models import RefChoices
 from web.chat.tools import AUDIO_TOOL_RESULT, IMAGE_TOOL_RESULT, TITLE_PROMPT, VIDEO_TOOL_RESULT
@@ -57,7 +58,7 @@ def _ask(model: str, prompt: str, max_seconds: float) -> tuple[str, float]:
 def generate_title(model: str, prompt: str) -> tuple[str | None, float]:
     """(a short title for a chat starting with `prompt`, its cost in USD)."""
     text, cost = _ask(model, TITLE_PROMPT.format(prompt=prompt[:2000]), TITLE_SECONDS)
-    return _clean_title(text), cost
+    return clean_title(text), cost
 
 
 ENHANCE_SECONDS = 45
@@ -81,11 +82,11 @@ def enhance_prompt(model: str, prompt: str, kind: str) -> tuple[str, float]:
     text, cost = _ask(model, ENHANCE_PROMPT.format(kind=kind, prompt=prompt[:4000]), ENHANCE_SECONDS)
     text = _THINK.sub("", text).strip().strip("\"'`").strip()
     if not text:
-        raise ValueError("The model returned no prompt")  # noqa: TRY003
+        raise EmptyPromptError
     return text, cost
 
 
-def _clean_title(text: str) -> str | None:
+def clean_title(text: str) -> str | None:
     """Normalize a model reply into a short chat title.
 
     Return None if no usable title remains after cleanup.
@@ -94,7 +95,7 @@ def _clean_title(text: str) -> str | None:
     line = next((ln.strip() for ln in text.splitlines() if ln.strip()), "")
     line = re.sub(r"^(?:\*\*)?title(?:\*\*)?\s*:\s*", "", line, flags=re.IGNORECASE)
     # Model-generated titles may wrap text in curly quotes; remove them too.
-    line = line.strip(" \t\"'`*#_“”‘’").rstrip(".").strip()  # noqa: RUF001 - accepted title punctuation
+    line = line.strip(" \t\"'`*#_\u201c\u201d\u2018\u2019").rstrip(".").strip()
     if not line or len(line) > 80:
         return None
     return line
@@ -495,7 +496,7 @@ def run_image_generation(
     kept = [(data, media_type) for data, media_type in images if not is_blank_image(data)]
     if images and not kept:
         raise openrouter.OpenRouterError(BLACK_IMAGE_ERROR)
-    names = []
+    names: list[str] = []
     for data, media_type in kept:
         name = f"img_{uuid.uuid4().hex[:12]}{IMAGE_EXTS.get(media_type, '.png')}"
         (conv_dir / name).write_bytes(data)
@@ -503,7 +504,7 @@ def run_image_generation(
     return names, cost, credits, {**sent, "log": request_log.take_last()}
 
 
-def submit_video_generation(conv_id: str, model: str, prompt: str, params: dict[str, Any]) -> VideoJob:
+def submit_video_generation(conv_id: str, model: str, prompt: str, params: dict[str, JsonValue]) -> VideoJob:
     """Start a video job on the model's provider.
 
     Returns the job plus
@@ -513,31 +514,47 @@ def submit_video_generation(conv_id: str, model: str, prompt: str, params: dict[
     return {**_submit_video(conv_id, model, prompt, params), "log": request_log.take_last()}
 
 
-def _submit_video(conv_id: str, model: str, prompt: str, params: dict[str, Any]) -> VideoJob:
-    frame = _ref_file(conv_id, params["first_frame"]) if params.get("first_frame") else None
+def _text_param(params: Mapping[str, JsonValue], key: str) -> str | None:
+    """A parameter's non-empty string value, else None."""
+    value = params.get(key)
+    return value if isinstance(value, str) and value else None
+
+
+def _submit_video(conv_id: str, model: str, prompt: str, params: dict[str, JsonValue]) -> VideoJob:
+    first_frame = _text_param(params, "first_frame")
+    frame = _ref_file(conv_id, first_frame) if first_frame else None
     prompt = characters.with_characters(prompt, param_characters(params))
     # An unset ratio uses the model's own auto value when it has one (matching
     # the image path); animating an image still derives the ratio from the frame.
-    aspect_ratio = params.get("aspect_ratio") or (None if frame else auto_ratio("video", model))
+    aspect_ratio = _text_param(params, "aspect_ratio") or (None if frame else auto_ratio("video", model))
     conv_dir = conversation_dir(conv_id)
+    duration = params.get("duration")
+    generate_audio = params.get("generate_audio")
+    last_frame = _text_param(params, "last_frame")
+    source_video = _text_param(params, "source_video")
+    source_audio = _text_param(params, "source_audio")
+    ref_values = params.get("refs")
+    refs = [ref for ref in ref_values if isinstance(ref, str)] if isinstance(ref_values, list) else []
+    item_values = params.get("ref_items")
+    items = [item for item in item_values if isinstance(item, Mapping)] if isinstance(item_values, list) else []
     return providers.submit_video(
         model,
         prompt,
-        duration=params.get("duration"),
+        duration=duration if isinstance(duration, int) and not isinstance(duration, bool) else None,
         aspect_ratio=aspect_ratio,
-        resolution=params.get("resolution"),
-        generate_audio=params.get("generate_audio"),
+        resolution=_text_param(params, "resolution"),
+        generate_audio=generate_audio if isinstance(generate_audio, bool) else None,
         first_frame=frame,
-        last_frame=_ref_file(conv_id, params["last_frame"]) if params.get("last_frame") else None,
-        source_video=conv_dir / params["source_video"] if params.get("source_video") else None,
-        source_audio=conv_dir / params["source_audio"] if params.get("source_audio") else None,
-        mode=params.get("mode"),
-        refs=[_ref_file(conv_id, r) for r in params.get("refs") or []],
+        last_frame=_ref_file(conv_id, last_frame) if last_frame else None,
+        source_video=conv_dir / source_video if source_video else None,
+        source_audio=conv_dir / source_audio if source_audio else None,
+        mode=_text_param(params, "mode"),
+        refs=[_ref_file(conv_id, r) for r in refs],
         # Reference-to-video: named image/video/audio refs the prompt mentions
         # as [@name] (resolve each file to a path; keep its name and type).
         ref_items=[
-            {"path": _ref_file(conv_id, r["file"]), "name": r.get("name"), "type": r.get("type")}
-            for r in params.get("ref_items") or []
+            {"path": _ref_file(conv_id, str(r.get("file") or "")), "name": r.get("name"), "type": r.get("type")}
+            for r in items
         ],
         session_id=conv_id,
     )

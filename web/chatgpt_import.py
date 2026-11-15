@@ -29,6 +29,7 @@ the new turns; if it was carried on here too, they're a separate branch.
 import contextlib
 import contextvars
 import json
+import logging
 import re
 import threading
 import time
@@ -53,6 +54,8 @@ from web.media_types import IMAGE_EXTS, VIDEO_EXTS
 from web.types import JsonValue
 from web.uploads import safe_filename
 from web.users import require_user
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from web.core.metadata.imports import ImportedMessage, ImportedMessageUpdate
@@ -419,8 +422,6 @@ def _import_space_id() -> int:
     space = next((s for s in db.list_spaces() if s.name.strip().lower() == SPACE_NAME.lower()), None)
     if space is None:
         space = db.save_space(name=SPACE_NAME)
-    if space is None:
-        raise LookupError("Could not create the ChatGPT import space")  # noqa: TRY003
     return space.id
 
 
@@ -536,7 +537,8 @@ def run_import(path: Path, progress: dict[str, JsonValue] | None = None) -> _Imp
                 else:
                     try:
                         outcome = _import_conversation(export, data, conv, stats)
-                    except Exception as e:  # noqa: BLE001 — one bad chat shouldn't stop the rest
+                    except Exception as e:  # one bad chat shouldn't stop the rest
+                        log.exception("importing one ChatGPT conversation failed")
                         outcome = None
                         stats["failed"].append({"title": data.get("title"), "error": str(e)})
             if outcome:
@@ -570,6 +572,11 @@ def _warm_thumbnails(paths: list[Path]) -> None:
 # single-flight don't leak into or block another's).
 _jobs: dict[str, dict[str, JsonValue]] = {}
 _job_lock = threading.Lock()
+
+
+def reset_jobs() -> None:
+    """Forget every tenant's import progress (tests, between runs)."""
+    _jobs.clear()
 
 
 def _job_key() -> str:
@@ -631,7 +638,8 @@ def _run_job(path: Path, job: dict[str, JsonValue]) -> None:
     try:
         run_import(path, job)
         job["state"] = "done"
-    except Exception as e:  # noqa: BLE001 — report unexpected worker failures to the UI
+    except Exception as e:  # report unexpected worker failures to the UI
+        log.exception("ChatGPT import job failed")
         job.update(state="error", error=str(e))
 
 

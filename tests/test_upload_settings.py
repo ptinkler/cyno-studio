@@ -4,16 +4,23 @@ the signed self-host serving route.
 """
 
 import time
-import types
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import web.api as api_mod
+from tests.errors import NoRouteError
+from tests.jsonpath import seq, text
+from tests.stubs import stub
 from web import image_hosts, public_media, upload_settings
 from web.core import config
-from web.image_hosts import _UploadPrefs  # pyright: ignore[reportPrivateUsage]
+from web.core.metadata.models import User
+from web.image_hosts import HostedFileStatusError, LitterboxTimeoutError
+from web.upload_settings import UploadPrefs
 
 
 def _same_page(page: str) -> str:
@@ -30,18 +37,37 @@ def _no_verify(host: str, url: str, filepath: Path) -> None:
     """Skip the served-file check."""
 
 
-def _prefs(primary: str, backup: str | None, expiry_minutes: int = 60) -> _UploadPrefs:
-    return {"primary": primary, "backup": backup, "expiry_minutes": expiry_minutes, "selfhost_base": ""}
+def _prefs(primary: str, backup: str | None, expiry_minutes: int = 60, selfhost_base: str = "") -> UploadPrefs:
+    """Upload preferences with the given hosts and expiry."""
+    return {"primary": primary, "backup": backup, "expiry_minutes": expiry_minutes, "selfhost_base": selfhost_base}
 
 
-def _user(upload_prefs_json=None):
-    return types.SimpleNamespace(id="u1", upload_prefs_json=upload_prefs_json)
+def _user(upload_prefs_json: str | None = None) -> User:
+    """A user whose stored upload preferences are ``upload_prefs_json``."""
+    return User(id="u1", upload_prefs_json=upload_prefs_json)
+
+
+@dataclass
+class _Reply:
+    """A stand-in HTTP reply: status, body text and headers, with a no-op ``close``."""
+
+    status_code: int
+    text: str = ""
+    headers: dict[str, str] = field(default_factory=dict)
+
+    def close(self) -> None:
+        """Release the connection (nothing is held)."""
+
+
+def _served(status: int = 200, content_type: str = "video/mp4") -> _Reply:
+    """A reply to the served-file check, with the given status and content type."""
+    return _Reply(status, headers={"content-type": content_type})
 
 
 class TestPrefsResolution:
     """Tests for prefs resolution."""
 
-    def test_default_from_env(self, monkeypatch):
+    def test_default_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that default from env."""
         monkeypatch.setenv("UPLOAD_PRIMARY", "tmpfiles")
         monkeypatch.setenv("UPLOAD_BACKUP", "litterbox")
@@ -51,29 +77,29 @@ class TestPrefsResolution:
         assert d["backup"] == "litterbox"
         assert d["expiry_minutes"] == 1440
 
-    def test_unset_user_gets_default(self):
+    def test_unset_user_gets_default(self) -> None:
         """Test that unset user gets default."""
         assert upload_settings.resolve_prefs(_user())["primary"] == upload_settings.default_prefs()["primary"]
 
-    def test_stored_overrides_default(self):
+    def test_stored_overrides_default(self) -> None:
         """Test that stored overrides default."""
         prefs = upload_settings.resolve_prefs(_user('{"primary": "selfhost", "selfhost_base": "https://x.test"}'))
         assert prefs["primary"] == "selfhost"
         assert prefs["selfhost_base"] == "https://x.test"
 
-    def test_invalid_host_and_expiry_dropped(self):
+    def test_invalid_host_and_expiry_dropped(self) -> None:
         """Test that invalid host and expiry dropped."""
         prefs = upload_settings.resolve_prefs(_user('{"primary": "nope", "expiry_minutes": 7}'))
         d = upload_settings.default_prefs()
         assert prefs["primary"] == d["primary"]
         assert prefs["expiry_minutes"] == d["expiry_minutes"]
 
-    def test_backup_equal_to_primary_becomes_none(self):
+    def test_backup_equal_to_primary_becomes_none(self) -> None:
         """Test that backup equal to primary becomes none."""
         prefs = upload_settings.resolve_prefs(_user('{"primary": "litterbox", "backup": "litterbox"}'))
         assert prefs["backup"] is None
 
-    def test_corrupt_blob_falls_back(self):
+    def test_corrupt_blob_falls_back(self) -> None:
         """Test that corrupt blob falls back."""
         assert upload_settings.resolve_prefs(_user("not json"))["primary"] == upload_settings.default_prefs()["primary"]
 
@@ -92,86 +118,107 @@ def _no_url_check(monkeypatch: pytest.MonkeyPatch) -> None:
 class TestDispatchOrder:
     """Tests for dispatch order."""
 
-    def test_primary_then_backup(self, monkeypatch):
+    def test_primary_then_backup(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that primary then backup."""
-        calls = []
-        monkeypatch.setattr(image_hosts, "_upload_to_litterbox", lambda p, e=60: calls.append("litterbox") or "L")
-        monkeypatch.setattr(image_hosts, "_upload_to_tmpfiles", lambda p, e=60: calls.append("tmpfiles") or "T")
-        prefs = {"primary": "tmpfiles", "backup": "litterbox", "expiry_minutes": 60}
-        assert image_hosts.upload_file("f", prefs) == "T"
+        calls: list[str] = []
+
+        def litterbox(p: Path, e: int = 60) -> str:
+            calls.append("litterbox")
+            return "L"
+
+        def tmpfiles(p: Path, e: int = 60) -> str:
+            calls.append("tmpfiles")
+            return "T"
+
+        monkeypatch.setattr(image_hosts, "_upload_to_litterbox", litterbox)
+        monkeypatch.setattr(image_hosts, "_upload_to_tmpfiles", tmpfiles)
+        prefs = _prefs("tmpfiles", "litterbox")
+        assert image_hosts.upload_file(Path("f"), prefs) == "T"
         assert calls == ["tmpfiles"]
 
-    def test_falls_back_to_backup_on_failure(self, monkeypatch):
+    def test_falls_back_to_backup_on_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that falls back to backup on failure."""
 
-        def boom(p, e=60):
+        def boom(p: Path, e: int = 60) -> NoReturn:
             raise ValueError("down")
 
         monkeypatch.setattr(image_hosts, "_upload_to_tmpfiles", boom)
-        monkeypatch.setattr(image_hosts, "_upload_to_litterbox", lambda p, e=60: "L")
-        prefs = {"primary": "tmpfiles", "backup": "litterbox", "expiry_minutes": 60}
-        assert image_hosts.upload_file("f", prefs) == "L"
+        monkeypatch.setattr(image_hosts, "_upload_to_litterbox", stub(lambda: "L"))
+        prefs = _prefs("tmpfiles", "litterbox")
+        assert image_hosts.upload_file(Path("f"), prefs) == "L"
 
-    def test_all_fail_raises(self, monkeypatch):
+    def test_all_fail_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that all fail raises."""
-        monkeypatch.setattr(image_hosts, "_upload_to_tmpfiles", lambda p, e=60: (_ for _ in ()).throw(ValueError("x")))
-        prefs = {"primary": "tmpfiles", "backup": None, "expiry_minutes": 60}
-        with pytest.raises(ValueError, match="All upload hosts failed"):
-            image_hosts.upload_file("f", prefs)
 
-    def test_litterbox_expiry_bucketed(self):
+        def boom(p: Path, e: int = 60) -> NoReturn:
+            raise ValueError("x")
+
+        monkeypatch.setattr(image_hosts, "_upload_to_tmpfiles", boom)
+        prefs = _prefs("tmpfiles", None)
+        with pytest.raises(ValueError, match="All upload hosts failed"):
+            image_hosts.upload_file(Path("f"), prefs)
+
+    def test_litterbox_expiry_bucketed(self) -> None:
         """Test that litterbox expiry bucketed."""
-        assert image_hosts._litterbox_time(70) == "1h"
-        assert image_hosts._litterbox_time(4000) == "72h"
+        assert image_hosts.litterbox_time(70) == "1h"
+        assert image_hosts.litterbox_time(4000) == "72h"
 
 
 @pytest.mark.usefixtures("_no_url_check")
 class TestUploadCache:
     """Tests for upload cache."""
 
-    def test_reuses_url_without_reuploading(self, tmp_path, monkeypatch):
+    def test_reuses_url_without_reuploading(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that reuses url without reuploading."""
-        image_hosts._url_cache.clear()
+        image_hosts.clear_url_cache()
         f = tmp_path / "clip.mp4"
         f.write_bytes(b"video-bytes")
-        calls = []
-        monkeypatch.setattr(image_hosts, "_upload_to_litterbox", lambda p, e=60: calls.append(p) or "https://host/x")
-        prefs = {"primary": "litterbox", "backup": None, "expiry_minutes": 60}
+        calls: list[Path] = []
+
+        def upload(p: Path, e: int = 60) -> str:
+            calls.append(p)
+            return "https://host/x"
+
+        monkeypatch.setattr(image_hosts, "_upload_to_litterbox", upload)
+        prefs = _prefs("litterbox", None)
         assert image_hosts.upload_file(f, prefs) == "https://host/x"
         assert image_hosts.upload_file(f, prefs) == "https://host/x"  # retry: served from cache
         assert len(calls) == 1  # uploaded only once
 
-    def test_editing_the_file_forces_reupload(self, tmp_path, monkeypatch):
+    def test_editing_the_file_forces_reupload(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that editing the file forces reupload."""
-        image_hosts._url_cache.clear()
+        image_hosts.clear_url_cache()
         f = tmp_path / "clip.mp4"
         f.write_bytes(b"v1")
-        calls = []
-        monkeypatch.setattr(
-            image_hosts, "_upload_to_litterbox", lambda p, e=60: calls.append(1) or f"https://host/{len(calls)}"
-        )
-        prefs = {"primary": "litterbox", "backup": None, "expiry_minutes": 60}
+        calls: list[Path] = []
+
+        def upload(p: Path, e: int = 60) -> str:
+            calls.append(p)
+            return f"https://host/{len(calls)}"
+
+        monkeypatch.setattr(image_hosts, "_upload_to_litterbox", upload)
+        prefs = _prefs("litterbox", None)
         assert image_hosts.upload_file(f, prefs) == "https://host/1"
         f.write_bytes(b"different-bytes-and-size")  # content/size change invalidates the key
         assert image_hosts.upload_file(f, prefs) == "https://host/2"
         assert len(calls) == 2
 
-    def test_expired_entry_is_not_reused(self, tmp_path, monkeypatch):
+    def test_expired_entry_is_not_reused(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that expired entry is not reused."""
-        image_hosts._url_cache.clear()
+        image_hosts.clear_url_cache()
         f = tmp_path / "clip.mp4"
         f.write_bytes(b"bytes")
-        calls = []
-        monkeypatch.setattr(
-            image_hosts, "_upload_to_litterbox", lambda p, e=60: calls.append(1) or f"https://host/{len(calls)}"
-        )
-        prefs = {"primary": "litterbox", "backup": None, "expiry_minutes": 60}
+        calls: list[Path] = []
+
+        def upload(p: Path, e: int = 60) -> str:
+            calls.append(p)
+            return f"https://host/{len(calls)}"
+
+        monkeypatch.setattr(image_hosts, "_upload_to_litterbox", upload)
+        prefs = _prefs("litterbox", None)
         assert image_hosts.upload_file(f, prefs) == "https://host/1"
         # Force the one cached entry to look lapsed, then confirm a fresh upload.
-        with image_hosts._url_cache_lock:
-            (k,) = list(image_hosts._url_cache)
-            url, _ = image_hosts._url_cache[k]
-            image_hosts._url_cache[k] = (url, time.time() - 1)
+        image_hosts.expire_cached_urls()
         assert image_hosts.upload_file(f, prefs) == "https://host/2"
         assert len(calls) == 2
 
@@ -183,7 +230,7 @@ class TestCacheLifetimeAndRecheck:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Test that tmpfiles is cached for 60 minutes even when 24h is requested."""
-        image_hosts._url_cache.clear()  # pyright: ignore[reportPrivateUsage]
+        image_hosts.clear_url_cache()
         monkeypatch.setattr(image_hosts, "_served_url", _no_upload_check)
         f = tmp_path / "clip.mp4"
         f.write_bytes(b"v")
@@ -193,14 +240,14 @@ class TestCacheLifetimeAndRecheck:
 
         monkeypatch.setattr(image_hosts, "_upload_to_tmpfiles", upload)
         image_hosts.upload_file(f, _prefs("tmpfiles", None, 1440))
-        ((_, good_until),) = image_hosts._url_cache.values()  # pyright: ignore[reportPrivateUsage]
+        (good_until,) = image_hosts.cached_url_expiries()
         assert good_until <= time.time() + 60 * 60
 
     def test_tmpfiles_retry_reuses_upload_with_a_fresh_download_link(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """The dl/ link is signed for ~5 min: each hand-out derives a new one, without re-uploading."""
-        image_hosts._url_cache.clear()  # pyright: ignore[reportPrivateUsage]
+        image_hosts.clear_url_cache()
         monkeypatch.setattr(image_hosts, "_verify_served", _no_verify)
         f = tmp_path / "clip.mp4"
         f.write_bytes(b"v")
@@ -227,7 +274,7 @@ class TestCacheLifetimeAndRecheck:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Test that a cached upload failing the served check triggers a fresh upload."""
-        image_hosts._url_cache.clear()  # pyright: ignore[reportPrivateUsage]
+        image_hosts.clear_url_cache()
         f = tmp_path / "clip.mp4"
         f.write_bytes(b"v")
         calls: list[Path] = []
@@ -239,7 +286,7 @@ class TestCacheLifetimeAndRecheck:
 
         def check(host: str, url: str, filepath: Path) -> None:
             if url in dead:
-                raise ValueError("hosted file answered HTTP 404")  # noqa: TRY003
+                raise HostedFileStatusError(404)
 
         monkeypatch.setattr(image_hosts, "_upload_to_litterbox", upload)
         monkeypatch.setattr(image_hosts, "_verify_served", check)
@@ -254,21 +301,18 @@ class TestCacheLifetimeAndRecheck:
 class TestUguu:
     """uguu.se: anonymous, raw-file URLs, 128 MiB cap, fixed 3h retention."""
 
-    def _reply(self, status: int, text: str) -> types.SimpleNamespace:
-        return types.SimpleNamespace(status_code=status, text=text)
-
     def test_upload_returns_the_file_url(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that a successful upload returns uguu's direct file URL."""
         f = tmp_path / "clip.mov"
         f.write_bytes(b"v")
         sent: list[str] = []
 
-        def post(url: str, **kw: object) -> types.SimpleNamespace:
+        def post(url: str, **kw: object) -> _Reply:
             sent.append(url)
-            return self._reply(200, '{"success": true, "files": [{"url": "https://h.uguu.se/AbCd.mov"}]}')
+            return _Reply(200, '{"success": true, "files": [{"url": "https://h.uguu.se/AbCd.mov"}]}')
 
         monkeypatch.setattr(image_hosts.requests, "post", post)
-        assert image_hosts._upload_to_uguu(f) == "https://h.uguu.se/AbCd.mov"  # pyright: ignore[reportPrivateUsage]
+        assert image_hosts.upload_to_uguu(f) == "https://h.uguu.se/AbCd.mov"
         assert sent == [image_hosts.UGUU_URL]
 
     def test_oversized_file_is_refused_before_uploading(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -277,28 +321,28 @@ class TestUguu:
         f.write_bytes(b"v")
         monkeypatch.setattr(image_hosts, "UGUU_MAX_BYTES", 0)
 
-        def post(url: str, **kw: object) -> types.SimpleNamespace:
-            raise AssertionError("should not upload")  # noqa: TRY003
+        def post(url: str, **kw: object) -> NoReturn:
+            pytest.fail("should not upload")
 
         monkeypatch.setattr(image_hosts.requests, "post", post)
         with pytest.raises(ValueError, match="128 MiB"):
-            image_hosts._upload_to_uguu(f)  # pyright: ignore[reportPrivateUsage]
+            image_hosts.upload_to_uguu(f)
 
     def test_error_reply_is_a_failure(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that an unsuccessful reply raises, so the backup host is tried."""
         f = tmp_path / "clip.mov"
         f.write_bytes(b"v")
 
-        def post(url: str, **kw: object) -> types.SimpleNamespace:
-            return self._reply(200, '{"success": false, "errorcode": 400, "description": "No input file(s)"}')
+        def post(url: str, **kw: object) -> _Reply:
+            return _Reply(200, '{"success": false, "errorcode": 400, "description": "No input file(s)"}')
 
         monkeypatch.setattr(image_hosts.requests, "post", post)
         with pytest.raises(ValueError, match="No input file"):
-            image_hosts._upload_to_uguu(f)  # pyright: ignore[reportPrivateUsage]
+            image_hosts.upload_to_uguu(f)
 
     def test_cached_for_its_fixed_three_hours(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that a uguu URL isn't reused past its 3h life, whatever span is requested."""
-        image_hosts._url_cache.clear()  # pyright: ignore[reportPrivateUsage]
+        image_hosts.clear_url_cache()
         monkeypatch.setattr(image_hosts, "_served_url", _no_upload_check)
         f = tmp_path / "clip.mov"
         f.write_bytes(b"v")
@@ -306,9 +350,9 @@ class TestUguu:
         def upload(p: Path) -> str:
             return "https://h.uguu.se/AbCd.mov"
 
-        monkeypatch.setattr(image_hosts, "_upload_to_uguu", upload)
+        monkeypatch.setattr(image_hosts, "upload_to_uguu", upload)
         assert image_hosts.upload_file(f, _prefs("uguu", "tmpfiles", 4320)) == "https://h.uguu.se/AbCd.mov"
-        ((_, good_until),) = image_hosts._url_cache.values()  # pyright: ignore[reportPrivateUsage]
+        (good_until,) = image_hosts.cached_url_expiries()
         assert good_until <= time.time() + 3 * 60 * 60
 
 
@@ -317,14 +361,14 @@ class TestFallbackNotice:
 
     def test_fallback_is_noted_with_reason(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that a backup-host upload leaves a note naming the primary's failure."""
-        image_hosts._url_cache.clear()  # pyright: ignore[reportPrivateUsage]
+        image_hosts.clear_url_cache()
         image_hosts.take_upload_notes()
         monkeypatch.setattr(image_hosts, "_served_url", _no_upload_check)
         f = tmp_path / "clip.mp4"
         f.write_bytes(b"v")
 
         def boom(p: Path, e: int = 60) -> str:
-            raise ValueError("Litterbox upload timed out")  # noqa: TRY003
+            raise LitterboxTimeoutError
 
         def upload(p: Path, e: int = 60) -> str:
             return "https://tmpfiles.org/abc/x.mp4"
@@ -339,7 +383,7 @@ class TestFallbackNotice:
 
     def test_primary_success_leaves_no_note(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that using the primary host leaves no note."""
-        image_hosts._url_cache.clear()  # pyright: ignore[reportPrivateUsage]
+        image_hosts.clear_url_cache()
         image_hosts.take_upload_notes()
         monkeypatch.setattr(image_hosts, "_served_url", _no_upload_check)
         f = tmp_path / "clip.mp4"
@@ -364,60 +408,61 @@ class TestServedCheck:
         """The tmpfiles page lookup is its own request; these tests cover only the served check."""
         monkeypatch.setattr(image_hosts, "_tmpfiles_direct_url", _same_page)
 
-    def _resp(self, status=200, content_type="video/mp4"):
-        """Document the  resp test helper."""
-        return types.SimpleNamespace(status_code=status, headers={"content-type": content_type}, close=lambda: None)
-
-    def test_html_answer_falls_through_to_the_backup(self, tmp_path, monkeypatch):
+    def test_html_answer_falls_through_to_the_backup(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that html answer falls through to the backup."""
-        image_hosts._url_cache.clear()
+        image_hosts.clear_url_cache()
         f = tmp_path / "clip.mp4"
         f.write_bytes(b"v")
-        monkeypatch.setattr(image_hosts, "_upload_to_tmpfiles", lambda p, e=60: "https://tmp/x.mp4")
-        monkeypatch.setattr(image_hosts, "_upload_to_litterbox", lambda p, e=60: "https://litter/x.mp4")
-        monkeypatch.setattr(
-            image_hosts.requests,
-            "get",
-            lambda url, **kw: self._resp(content_type="text/html" if "tmp/" in url else "video/mp4"),
-        )
-        prefs = {"primary": "tmpfiles", "backup": "litterbox", "expiry_minutes": 60}
+        monkeypatch.setattr(image_hosts, "_upload_to_tmpfiles", stub(lambda: "https://tmp/x.mp4"))
+        monkeypatch.setattr(image_hosts, "_upload_to_litterbox", stub(lambda: "https://litter/x.mp4"))
+
+        def get(url: str, **kw: object) -> _Reply:
+            return _served(content_type="text/html" if "tmp/" in url else "video/mp4")
+
+        monkeypatch.setattr(image_hosts.requests, "get", get)
+        prefs = _prefs("tmpfiles", "litterbox")
         assert image_hosts.upload_file(f, prefs) == "https://litter/x.mp4"
 
-    def test_unreachable_url_is_not_handed_on(self, tmp_path, monkeypatch):
+    def test_unreachable_url_is_not_handed_on(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that unreachable url is not handed on."""
-        image_hosts._url_cache.clear()
+        image_hosts.clear_url_cache()
         f = tmp_path / "clip.mp4"
         f.write_bytes(b"v")
-        monkeypatch.setattr(image_hosts, "_upload_to_tmpfiles", lambda p, e=60: "https://tmp/x.mp4")
+        monkeypatch.setattr(image_hosts, "_upload_to_tmpfiles", stub(lambda: "https://tmp/x.mp4"))
 
-        def boom(url, **kw):
-            raise image_hosts.requests.ConnectionError("no route")  # noqa: TRY003
+        def boom(url: str, **kw: object) -> NoReturn:
+            raise NoRouteError
 
         monkeypatch.setattr(image_hosts.requests, "get", boom)
-        prefs = {"primary": "tmpfiles", "backup": None, "expiry_minutes": 60}
+        prefs = _prefs("tmpfiles", None)
         with pytest.raises(ValueError, match="All upload hosts failed"):
             image_hosts.upload_file(f, prefs)
 
-    def test_a_served_file_passes(self, tmp_path, monkeypatch):
+    def test_a_served_file_passes(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that a served file passes."""
-        image_hosts._url_cache.clear()
+        image_hosts.clear_url_cache()
         f = tmp_path / "clip.mp4"
         f.write_bytes(b"v")
-        monkeypatch.setattr(image_hosts, "_upload_to_tmpfiles", lambda p, e=60: "https://tmp/x.mp4")
-        monkeypatch.setattr(image_hosts.requests, "get", lambda url, **kw: self._resp(206, "application/octet-stream"))
-        prefs = {"primary": "tmpfiles", "backup": None, "expiry_minutes": 60}
+        monkeypatch.setattr(image_hosts, "_upload_to_tmpfiles", stub(lambda: "https://tmp/x.mp4"))
+        monkeypatch.setattr(image_hosts.requests, "get", stub(lambda: _served(206, "application/octet-stream")))
+        prefs = _prefs("tmpfiles", None)
         assert image_hosts.upload_file(f, prefs) == "https://tmp/x.mp4"
 
-    def test_selfhost_is_not_checked(self, tmp_path, monkeypatch):
+    def test_selfhost_is_not_checked(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that selfhost is not checked."""
-        image_hosts._url_cache.clear()
+        image_hosts.clear_url_cache()
         f = tmp_path / "clip.mp4"
         f.write_bytes(b"v")
-        calls = []
-        monkeypatch.setattr(image_hosts.requests, "get", lambda url, **kw: calls.append(url) or self._resp())
+        calls: list[str] = []
+
+        def get(url: str, **kw: object) -> _Reply:
+            calls.append(url)
+            return _served()
+
+        monkeypatch.setattr(image_hosts.requests, "get", get)
         # patch where image_hosts looks the name up, not where it is defined
-        monkeypatch.setattr(image_hosts, "selfhost_url", lambda p, base, ttl_seconds: "https://my.box/t")
-        prefs = {"primary": "selfhost", "backup": None, "expiry_minutes": 60, "selfhost_base": "https://my.box"}
+        monkeypatch.setattr(image_hosts, "selfhost_url", stub(lambda: "https://my.box/t"))
+        prefs = _prefs("selfhost", None, selfhost_base="https://my.box")
         assert image_hosts.upload_file(f, prefs) == "https://my.box/t"
         assert calls == []
 
@@ -425,14 +470,14 @@ class TestServedCheck:
 class TestSelfHost:
     """Tests for self host."""
 
-    def test_selfhost_url_requires_base(self, tmp_path):
+    def test_selfhost_url_requires_base(self, tmp_path: Path) -> None:
         """Test that selfhost url requires base."""
         f = tmp_path / "a.bin"
         f.write_bytes(b"x")
         with pytest.raises(ValueError, match="public base URL"):
             public_media.selfhost_url(f, "", ttl_seconds=60)
 
-    def test_token_round_trip_and_serve(self, tmp_path, monkeypatch):
+    def test_token_round_trip_and_serve(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that token round trip and serve."""
         monkeypatch.setattr(config, "ROOT_DIR", tmp_path)
         media = tmp_path / "chat" / "conv1"
@@ -446,7 +491,7 @@ class TestSelfHost:
         assert r.status_code == 200
         assert r.content == b"hello"
 
-    def test_serves_from_character_refs_root(self, tmp_path, monkeypatch):
+    def test_serves_from_character_refs_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         # Character reference images (ROOT_DIR/characters) are a valid Pollo
         # image-ref source, so the self-host route must serve them too.
         """Test that serves from character refs root."""
@@ -459,7 +504,7 @@ class TestSelfHost:
         token = url.rsplit("/", 1)[1]
         assert TestClient(_app()).get(f"/api/public-media/{token}").content == b"png"
 
-    def test_expired_token_404(self, tmp_path, monkeypatch):
+    def test_expired_token_404(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that expired token 404."""
         monkeypatch.setattr(config, "ROOT_DIR", tmp_path)
         media = tmp_path / "chat"
@@ -469,7 +514,7 @@ class TestSelfHost:
         token = public_media.sign_media_token(f, ttl_seconds=-1)  # already expired
         assert TestClient(_app()).get(f"/api/public-media/{token}").status_code == 404
 
-    def test_tampered_token_404(self, tmp_path, monkeypatch):
+    def test_tampered_token_404(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that tampered token 404."""
         monkeypatch.setattr(config, "ROOT_DIR", tmp_path)
         (tmp_path / "chat").mkdir(parents=True)
@@ -478,7 +523,7 @@ class TestSelfHost:
         token = public_media.sign_media_token(f, ttl_seconds=120)[:-2] + "zz"
         assert TestClient(_app()).get(f"/api/public-media/{token}").status_code == 404
 
-    def test_out_of_bounds_path_404(self, tmp_path, monkeypatch):
+    def test_out_of_bounds_path_404(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         # A validly-signed token for a file outside the media roots must not serve.
         """Test that out of bounds path 404."""
         monkeypatch.setattr(config, "ROOT_DIR", tmp_path)
@@ -492,16 +537,15 @@ class TestSelfHost:
 class TestApi:
     """Tests for api."""
 
-    def test_get_returns_defaults_and_meta(self):
+    def test_get_returns_defaults_and_meta(self) -> None:
         """Test that get returns defaults and meta."""
         r = TestClient(_app()).get("/api/settings/uploads")
         assert r.status_code == 200
-        body = r.json()
-        assert body["prefs"]["primary"] in upload_settings.HOSTS
-        assert "litterbox" in body["hosts"]
-        assert body["expiry_options"] == list(upload_settings.EXPIRY_OPTIONS)
+        assert text(r, "prefs", "primary") in upload_settings.HOSTS
+        assert "litterbox" in seq(r, "hosts")
+        assert seq(r, "expiry_options") == list(upload_settings.EXPIRY_OPTIONS)
 
 
-def _app():
-
+def _app() -> FastAPI:
+    """The application under test."""
     return api_mod.app

@@ -18,6 +18,7 @@ Images live under <data>/characters/<id>/. Elsewhere they're referred to as
 import re
 import shutil
 import uuid
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Annotated
 
@@ -103,7 +104,7 @@ def _short_name(char: Character, chars: list[Character]) -> str | None:
     return words[0]
 
 
-def mentioned(chars: list[Character], text: str, prefer: list[Character] = ()) -> list[Character]:
+def mentioned(chars: list[Character], text: str, prefer: Sequence[Character] = ()) -> list[Character]:
     """Find characters named in text as a whole word, ignoring case.
 
     Match full names or unambiguous short names, preferring longer or explicit names.
@@ -127,7 +128,7 @@ def named(chars: list[Character], names: list[str] | None) -> list[Character]:
     Names aren't unique: if the user attached a library character with the
     same name as one of this chat's own, the name means the chat's own.
     """
-    out = []
+    out: list[Character] = []
     for n in names or []:
         n = str(n).strip().lower()
         same = sorted((c for c in chars if c.name.strip().lower() == n), key=lambda c: c.conversation_id is None)
@@ -137,6 +138,14 @@ def named(chars: list[Character], names: list[str] | None) -> list[Character]:
         if hit and hit not in out:
             out.append(hit)
     return out
+
+
+def _updated(db: MetadataDB, character_id: int, **fields: JsonValue) -> Character:
+    """Update a character that must exist, raising 404 if it has gone."""
+    char = db.update_character(character_id, **fields)
+    if char is None:
+        raise HTTPException(404, "Character not found")
+    return char
 
 
 def create_from_files(
@@ -151,12 +160,12 @@ def create_from_files(
     char = db.create_character(name, description, conversation_id)
     d = char_dir(char.id)
     d.mkdir(parents=True, exist_ok=True)
-    names = []
+    names: list[str] = []
     for f in files[:MAX_IMAGES]:
         name_on_disk = f"img_{uuid.uuid4().hex[:12]}{f.suffix.lower()}"
         shutil.copyfile(f, d / name_on_disk)
         names.append(name_on_disk)
-    return db.update_character(char.id, images=names)
+    return _updated(db, char.id, images=names)
 
 
 def copy_to_conversation(char: Character, conversation_id: str, db: MetadataDB | None = None) -> Character:
@@ -171,7 +180,7 @@ def copy_to_conversation(char: Character, conversation_id: str, db: MetadataDB |
     files = [f for f in char.images if (char_dir(char.id) / f).is_file()]
     for f in files:
         shutil.copyfile(char_dir(char.id) / f, d / f)
-    return db.update_character(copy.id, images=files)
+    return _updated(db, copy.id, images=files)
 
 
 def describe(chars: list[Character]) -> str:
@@ -270,11 +279,11 @@ def api_list_characters(
     Set ``include_adhoc`` to include all chats' ad-hoc characters for management.
     """
     db = get_db()
-    titles = {}
+    titles: dict[str, str] = {}
     if include_adhoc:
         titles = db.conversation_titles()
     items = [
-        {**c.to_dict(), "conversation_title": titles.get(c.conversation_id)}
+        {**c.to_dict(), "conversation_title": titles.get(c.conversation_id or "")}
         for c in db.list_characters()
         if c.conversation_id is None or include_adhoc or c.conversation_id == conversation_id
     ]
@@ -306,19 +315,19 @@ def api_get_character(character_id: int) -> dict[str, JsonValue]:
 def api_update_character(character_id: int, data: CharacterUpdate) -> dict[str, JsonValue]:
     """Update a character's name, description or reference images."""
     char = _require_char(character_id)
-    fields = data.model_dump(exclude_unset=True, exclude_none=True)
-    if "name" in fields:
-        fields["name"] = fields["name"].strip()
-    if "description" in fields:
-        fields["description"] = fields["description"].strip()
-    if "images" in fields:
-        keep = [f for f in dict.fromkeys(fields["images"]) if f in char.images]
-        if set(keep) != set(fields["images"]):
+    fields: dict[str, JsonValue] = {}
+    if data.name is not None:
+        fields["name"] = data.name.strip()
+    if data.description is not None:
+        fields["description"] = data.description.strip()
+    if data.images is not None:
+        keep = [f for f in dict.fromkeys(data.images) if f in char.images]
+        if set(keep) != set(data.images):
             raise HTTPException(400, "Unknown image")
         for f in set(char.images) - set(keep):
             (char_dir(character_id) / f).unlink(missing_ok=True)
         fields["images"] = keep
-    return get_db().update_character(character_id, **fields).to_dict()
+    return _updated(get_db(), character_id, **fields).to_dict()
 
 
 @router.delete("/{character_id}")
@@ -336,7 +345,7 @@ def api_delete_character(character_id: int) -> dict[str, int]:
 def api_promote_character(character_id: int) -> dict[str, JsonValue]:
     """Turn an ad-hoc chat character into a saved one, attachable anywhere."""
     _require_char(character_id)
-    return get_db().update_character(character_id, conversation_id=None).to_dict()
+    return _updated(get_db(), character_id, conversation_id=None).to_dict()
 
 
 def _add_image(char: Character, content: bytes, ext: str) -> dict[str, JsonValue]:
@@ -346,7 +355,7 @@ def _add_image(char: Character, content: bytes, ext: str) -> dict[str, JsonValue
     d = char_dir(char.id)
     d.mkdir(parents=True, exist_ok=True)
     (d / name).write_bytes(content)
-    return get_db().update_character(char.id, images=[*char.images, name]).to_dict()
+    return _updated(get_db(), char.id, images=[*char.images, name]).to_dict()
 
 
 def add_image_from_file(char: Character, source: Path) -> dict[str, JsonValue]:

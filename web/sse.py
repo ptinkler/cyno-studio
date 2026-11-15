@@ -11,6 +11,11 @@ from typing import cast
 from web.types import ChatChunk, JsonValue
 
 
+def timeout_message(seconds: int) -> str:
+    """The error text for a model that ran past its time limit."""
+    return f"The model didn't finish within {seconds}s"
+
+
 def chat_chunks(
     lines: Iterable[str],
     error: Callable[[str, int | None], Exception],
@@ -25,11 +30,12 @@ def chat_chunks(
     An error chunk raises `error(message, status)`.
     """
     deadline = time.monotonic() + max_seconds if max_seconds else None
+    limit = int(max_seconds) if max_seconds else 0
     for line in lines:
         if should_stop and should_stop():
             return
         if deadline and time.monotonic() > deadline:
-            raise error(f"The model didn't finish within {int(max_seconds)}s", 504)  # noqa: TRY003
+            raise error(timeout_message(limit), 504)
         if not line.startswith("data:"):
             continue
         payload = line[5:].strip()

@@ -13,6 +13,7 @@ taking something out of the defaults would leave it in every older chat.
 
 import json
 from collections.abc import Sequence
+from typing import cast
 
 import sqlalchemy as sa
 from alembic import op
@@ -25,9 +26,9 @@ depends_on: str | Sequence[str] | None = None
 KINDS = ("character", "instruction", "instruction_group")
 
 
-def _ids(raw: str | None) -> list:
+def _ids(raw: str | None) -> list[str]:
     try:
-        return json.loads(raw) if raw else []
+        return cast("list[str]", json.loads(raw)) if raw else []
     except json.JSONDecodeError:
         return []
 
@@ -35,15 +36,33 @@ def _ids(raw: str | None) -> list:
 def upgrade() -> None:
     """Apply default instructions to existing conversations."""
     bind = op.get_bind()
-    cols = ", ".join(f"default_{k}_ids_json" for k in KINDS)
-    glob = bind.execute(sa.text(f"SELECT {cols} FROM chat_settings WHERE id = 1")).first()
-    spaces = {row[0]: row[1:] for row in bind.execute(sa.text(f"SELECT id, {cols} FROM chat_spaces"))}
-    own_cols = ", ".join(f"{k}_ids_json" for k in KINDS)
-    for conv_id, space_id, *own in bind.execute(
-        sa.text(f"SELECT id, space_id, {own_cols} FROM chat_conversations")
-    ).all():
-        buckets = [b for b in (glob, spaces.get(space_id)) if b]
-        changes = {}
+    default_cols = [f"default_{k}_ids_json" for k in KINDS]
+    own_cols = [f"{k}_ids_json" for k in KINDS]
+    settings = sa.table("chat_settings", sa.column("id", sa.Integer), *(sa.column(c, sa.Text()) for c in default_cols))
+    spaces_t = sa.table("chat_spaces", sa.column("id", sa.Integer), *(sa.column(c, sa.Text()) for c in default_cols))
+    convs = sa.table(
+        "chat_conversations",
+        sa.column("id", sa.String()),
+        sa.column("space_id", sa.Integer),
+        *(sa.column(c, sa.Text()) for c in own_cols),
+    )
+    glob = cast(
+        "tuple[str | None, ...] | None",
+        bind.execute(sa.select(*(settings.c[c] for c in default_cols)).where(settings.c.id == 1)).tuples().first(),
+    )
+    spaces = {
+        row[0]: row[1:]
+        for row in cast(
+            "list[tuple[int, *tuple[str | None, ...]]]",
+            bind.execute(sa.select(spaces_t.c.id, *(spaces_t.c[c] for c in default_cols))).tuples().all(),
+        )
+    }
+    for conv_id, space_id, *own in cast(
+        "list[tuple[str, int | None, *tuple[str | None, ...]]]",
+        bind.execute(sa.select(convs.c.id, convs.c.space_id, *(convs.c[c] for c in own_cols))).tuples().all(),
+    ):
+        buckets = [b for b in (glob, spaces.get(space_id) if space_id is not None else None) if b]
+        changes: dict[str, str] = {}
         for i, kind in enumerate(KINDS):
             inherited = {x for b in buckets for x in _ids(b[i])}
             ids = _ids(own[i])
@@ -51,8 +70,7 @@ def upgrade() -> None:
             if kept != ids:
                 changes[f"{kind}_ids_json"] = json.dumps(kept)
         if changes:
-            sets = ", ".join(f"{c} = :{c}" for c in changes)
-            bind.execute(sa.text(f"UPDATE chat_conversations SET {sets} WHERE id = :id"), {**changes, "id": conv_id})
+            bind.execute(sa.update(convs).where(convs.c.id == conv_id).values(changes))
 
 
 def downgrade() -> None:

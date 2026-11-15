@@ -15,14 +15,19 @@ The redirect/callback URI registered with each provider must be
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, Protocol
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Protocol, cast
 
 from authlib.integrations.starlette_client import OAuth
 
 if TYPE_CHECKING:
+    from fastapi import Request
+    from fastapi.responses import RedirectResponse
+
     from web.types import JsonValue
 
-oauth = OAuth()
+# Authlib ships no type information, so the registry is typed by the Protocol above.
+oauth = cast("OAuthRegistry", OAuth())
 
 # Provider definitions. OIDC providers discover their endpoints from the
 # metadata url; X is plain OAuth2 and needs its endpoints spelled out.
@@ -61,7 +66,9 @@ def register_providers() -> None:
             client_id=_env("x", "CLIENT_ID"),
             client_secret=_env("x", "CLIENT_SECRET"),
             authorize_url="https://twitter.com/i/oauth2/authorize",
-            access_token_url="https://api.twitter.com/2/oauth2/token",
+            # S106 false positive: this is X's public token-endpoint URL, not a credential, and
+            # `access_token_url` is Authlib's own keyword so it can't be renamed. Approved by the maintainer.
+            access_token_url="https://api.twitter.com/2/oauth2/token",  # noqa: S106
             api_base_url="https://api.twitter.com/2/",
             client_kwargs={
                 "scope": "users.read tweet.read offline.access",
@@ -81,16 +88,57 @@ class OAuthResponse(Protocol):
 
     def json(self) -> dict[str, JsonValue]:
         """Decode the provider response body."""
+        raise NotImplementedError
 
 
 class OAuthClient(Protocol):
-    """Provider client operations used during profile normalization."""
+    """Provider client operations used during sign-in (Authlib's dynamic interface)."""
 
     async def userinfo(self, *, token: dict[str, JsonValue]) -> dict[str, JsonValue]:
         """Fetch the provider's user-info document."""
+        raise NotImplementedError
 
     async def get(self, url: str, *, token: dict[str, JsonValue]) -> OAuthResponse:
         """Perform an authenticated provider request."""
+        raise NotImplementedError
+
+    async def authorize_redirect(self, request: Request, redirect_uri: str) -> RedirectResponse:
+        """Start the authorization-code flow."""
+        raise NotImplementedError
+
+    async def authorize_access_token(self, request: Request) -> dict[str, JsonValue]:
+        """Exchange the callback's code for a token."""
+        raise NotImplementedError
+
+
+class OAuthRegistry(Protocol):
+    """The part of Authlib's ``OAuth`` registry this app uses."""
+
+    def register(self, name: str, **kwargs: JsonValue) -> object:
+        """Register a provider by name."""
+        raise NotImplementedError
+
+    def create_client(self, name: str) -> OAuthClient:
+        """The client for a registered provider."""
+        raise NotImplementedError
+
+
+def _text(value: JsonValue) -> str | None:
+    """A JSON value as text when it is a string, else None."""
+    return value if isinstance(value, str) else None
+
+
+def _object(value: JsonValue) -> dict[str, JsonValue]:
+    """A JSON value as an object when it is one, else empty."""
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+class UnknownProviderError(ValueError):
+    """The sign-in provider is not one we support."""
+
+    def __init__(self, provider: str) -> None:
+        """Name the provider."""
+        super().__init__(f"Unknown provider: {provider}")
 
 
 async def normalize_profile(provider: str, client: OAuthClient, token: dict[str, JsonValue]) -> dict[str, str | None]:
@@ -103,27 +151,27 @@ async def normalize_profile(provider: str, client: OAuthClient, token: dict[str,
         ValueError: If ``provider`` is not supported.
     """
     if provider in ("google", "microsoft"):
-        info = token.get("userinfo")
-        if not isinstance(info, dict):
-            info = await client.userinfo(token=token)
-        email = (info.get("email") or info.get("preferred_username") or "").lower() or None
+        userinfo = token.get("userinfo")
+        info = _object(userinfo) if isinstance(userinfo, Mapping) else await client.userinfo(token=token)
+        email = (_text(info.get("email")) or _text(info.get("preferred_username")) or "").lower() or None
         return {
             "provider": provider,
-            "sub": info.get("sub"),
+            "sub": _text(info.get("sub")),
             "email": email,
-            "name": info.get("name"),
-            "avatar": info.get("picture"),
+            "name": _text(info.get("name")),
+            "avatar": _text(info.get("picture")),
         }
     if provider == "x":
         resp = await client.get("users/me?user.fields=profile_image_url,name,username", token=token)
-        data = (resp.json() or {}).get("data") or {}
+        data = _object(_object(resp.json()).get("data"))
+        username = _text(data.get("username"))
         # X does not return email without elevated access; key on the handle
-        email = f"{data.get('username')}@x.local" if data.get("username") else None
+        email = f"{username}@x.local" if username else None
         return {
             "provider": provider,
-            "sub": data.get("id"),
+            "sub": _text(data.get("id")),
             "email": email,
-            "name": data.get("name"),
-            "avatar": data.get("profile_image_url"),
+            "name": _text(data.get("name")),
+            "avatar": _text(data.get("profile_image_url")),
         }
-    raise ValueError(f"Unknown provider: {provider}")  # noqa: TRY003
+    raise UnknownProviderError(provider)

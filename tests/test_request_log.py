@@ -13,7 +13,7 @@ def _prompts():
     return prompts
 
 
-def test_log_is_per_tenant():
+def test_log_is_per_tenant() -> None:
     """Two users' provider calls go to separate per-tenant logs, so the.
 
     Request log never shows one user another user's prompts/content.

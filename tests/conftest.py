@@ -120,6 +120,7 @@ def _tenant(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> 
         name="Admin",
         password_hash=None,
         api_keys_json=None,
+        upload_prefs_json=None,
     )
 
     # Match the real 1-arg signature so a stale multi-arg call fails here too.
@@ -154,7 +155,7 @@ def _no_outbound_http(monkeypatch: pytest.MonkeyPatch) -> None:
 
     def blocked(*args: object, **kwargs: object) -> NoReturn:
         target = args[1] if len(args) > 1 else (args[0] if args else kwargs.get("url", "?"))
-        raise AssertionError(f"a test tried to reach the network: {target}")  # noqa: TRY003
+        pytest.fail(f"a test tried to reach the network: {target}")
 
     for name in ("request", "get", "post", "put", "delete", "head"):
         monkeypatch.setattr(requests, name, blocked, raising=False)

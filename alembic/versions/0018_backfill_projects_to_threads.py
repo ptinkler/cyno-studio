@@ -45,8 +45,8 @@ def downgrade() -> None:
     # Remove any threads the original backfill created (by raw SQL, since the
     # ORM models are gone).
     bind = op.get_bind()
-    bind.exec_driver_sql(
-        "DELETE FROM chat_messages WHERE conversation_id IN "
-        f"(SELECT id FROM chat_conversations WHERE import_source = '{IMPORT_SOURCE}')"
-    )
-    bind.exec_driver_sql(f"DELETE FROM chat_conversations WHERE import_source = '{IMPORT_SOURCE}'")
+    convs = sa.table("chat_conversations", sa.column("id", sa.String()), sa.column("import_source", sa.String()))
+    messages = sa.table("chat_messages", sa.column("conversation_id", sa.String()))
+    migrated = sa.select(convs.c.id).where(convs.c.import_source == IMPORT_SOURCE)
+    bind.execute(sa.delete(messages).where(messages.c.conversation_id.in_(migrated)))
+    bind.execute(sa.delete(convs).where(convs.c.import_source == IMPORT_SOURCE))

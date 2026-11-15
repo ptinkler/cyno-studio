@@ -22,6 +22,7 @@ Video job ids are "venice:<model>:<queue_id>" — retrieve needs the model.
 import base64
 import contextlib
 import json
+import logging
 import mimetypes
 import os
 import re
@@ -29,10 +30,11 @@ import shutil
 import tempfile
 import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import NamedTuple
 
 import httpx
 
@@ -40,9 +42,51 @@ from web import keyctx, request_log, sse
 from web.caches import on_keys_changed
 from web.core.cache import MISS, TTLCache
 from web.core.metadata import current_tenant
-from web.providers.openrouter import CHAT_TIMEOUT, IMAGE_TIMEOUT, OpenRouterError, keepalive_socket_options
-from web.types import ChatChunk, JsonValue
+from web.jsonutil import as_list, as_number, as_object, as_objects, as_str, body_of
+from web.providers.openrouter import CHAT_TIMEOUT, IMAGE_TIMEOUT, keepalive_socket_options
+from web.providers.venice_errors import (
+    AnswerTimeoutError,
+    ApiKeyMissingError,
+    ConnectionDroppedError,
+    ContentViolationError,
+    EditOnlyModelError,
+    FirstAndLastFrameRequiredError,
+    ImageToAnimateRequiredError,
+    MotionImageRequiredError,
+    NoImageReturnedError,
+    NoJobIdError,
+    PollDroppedError,
+    ReferenceImagesRequiredError,
+    RequestRejectedError,
+    SourceVideoRequiredError,
+    StreamDroppedError,
+    TextToVideoOnlyError,
+    UnknownModelError,
+    VeniceError,
+    VideoCheckFailedError,
+    VideoDownloadFailedError,
+    VideoNotReadyError,
+)
+from web.providers.venice_types import (
+    Catalogue,
+    Entry,
+    ImageEntry,
+    ImageSettings,
+    ImageTarget,
+    Model,
+    PriceSpec,
+    TextEntry,
+    VideoConstraints,
+    VideoEntry,
+    VideoTarget,
+    max_input_images,
+    parse_model,
+    strs,
+    video_constraints,
+)
+from web.types import ChatChunk, JsonValue, ModelEntry, VideoJob
 
+log = logging.getLogger(__name__)
 VENICE_BASE = os.getenv("VENICE_BASE_URL", "https://api.venice.ai/api/v1").rstrip("/")
 PREFIX = "venice/"
 JOB_PREFIX = "venice:"
@@ -67,32 +111,36 @@ FAMILY_LABELS = {
     "upscale": "upscale",
 }
 # Multi-angle models need a camera path; chat uses a slow quarter orbit
-DEFAULT_CAMERA_TRAJECTORY = [
+DEFAULT_CAMERA_TRAJECTORY: list[dict[str, int]] = [
     {"time": 0, "azimuth": 0, "elevation": 0, "distance": 1},
     {"time": 1, "azimuth": 90, "elevation": 10, "distance": 1},
 ]
 
+
+@dataclass(slots=True)
+class _CachedCatalogue:
+    at: float
+    data: Catalogue
+
+
 _client = httpx.Client(transport=httpx.HTTPTransport(socket_options=keepalive_socket_options()))
 # Per tenant: the catalogue is built with the requesting user's key, and the
 # balance is that account's (see _tenant()).
-_catalogue: dict[str, dict[str, Any]] = {}
+_catalogue: dict[str, _CachedCatalogue] = {}
 _catalogue_lock = threading.Lock()
 _balance: dict[str, float | None] = {}  # tenant -> the x-venice-balance-usd header's last value
 # Per-job state the poller needs after submit. A job is followed for minutes,
 # not days, so JOB_STATE_TTL is generous; the cap stops a long-lived process
 # accumulating an entry per video ever made.
 JOB_STATE_TTL = 24 * 3600
-_video_quotes = TTLCache(JOB_STATE_TTL, maxsize=2048)  # job id -> quoted USD, its cost once done
-_download_urls = TTLCache(JOB_STATE_TTL, maxsize=2048)  # job id -> download link (private models)
+_video_quotes: TTLCache[str, float] = TTLCache(JOB_STATE_TTL, maxsize=2048)  # job id -> quoted USD, its cost once done
+_download_urls: TTLCache[str, str] = TTLCache(JOB_STATE_TTL, maxsize=2048)  # job id -> download link (private models)
 # Finished videos live here between retrieve and download
 _VIDEO_DIR = Path(tempfile.gettempdir()) / "venice-videos"
 QUOTE_TTL = 24 * 3600
 QUOTE_SECONDS = 5  # videos are priced (for sorting) at ~5s, lowest resolution
-_quotes = TTLCache(QUOTE_TTL, maxsize=1024)  # (model, duration, resolution) -> USD, or None if unpriced
-
-
-class VeniceError(OpenRouterError):
-    """A Venice failure. Subclasses OpenRouterError so chat handles it the same way."""
+# (model, duration, resolution) -> USD, or None if unpriced
+_quotes: TTLCache[tuple[str, int | None, str | None], float | None] = TTLCache(QUOTE_TTL, maxsize=1024)
 
 
 def get_api_key() -> str:
@@ -106,7 +154,7 @@ def _tenant() -> str:
     Outside a request, return an empty string; background pollers use the
     owner's key for each job.
     """
-    return current_tenant()
+    return current_tenant() or ""
 
 
 def is_configured() -> bool:
@@ -114,7 +162,7 @@ def is_configured() -> bool:
     return bool(get_api_key())
 
 
-NAME = "venice"
+NAME: str = "venice"
 
 
 def is_venice(model_id: str | None) -> bool:
@@ -130,31 +178,38 @@ def is_venice_job(job_id: str | None) -> bool:
 def _headers() -> dict[str, str]:
     key = get_api_key()
     if not key:
-        raise VeniceError("No Venice API key set — add one in Settings → Keys", 503)
+        raise ApiKeyMissingError
     return {"Authorization": f"Bearer {key}"}
 
 
 def _note_balance(resp: httpx.Response) -> None:
-    value = resp.headers.get("x-venice-balance-usd")
+    value: str = resp.headers.get("x-venice-balance-usd") or ""
     if value:
         with contextlib.suppress(ValueError):
             _balance[_tenant()] = float(value)
+
+
+def _error_message(resp: httpx.Response) -> str | None:
+    """Venice's own explanation of an error reply, if it gave one."""
+    try:
+        body = body_of(resp)
+    except ValueError:
+        return resp.text[:500]
+    if not isinstance(body, Mapping):
+        return resp.text[:500]
+    err = body.get("error") or body.get("message") or body
+    message = as_str(err.get("message")) if isinstance(err, Mapping) else str(err)
+    details = body.get("details")
+    if details and isinstance(details, (Mapping, list)):
+        message = f"{message}: {json.dumps(details)[:300]}"
+    return message
 
 
 def _raise_for_response(resp: httpx.Response) -> None:
     _note_balance(resp)
     if resp.status_code < 400:
         return
-    try:
-        body = resp.json()
-        err = body.get("error") or body.get("message") or body
-        message = err.get("message") if isinstance(err, dict) else str(err)
-        details = body.get("details") if isinstance(body, dict) else None
-        if details and isinstance(details, (dict, list)):
-            message = f"{message}: {json.dumps(details)[:300]}"
-    except (ValueError, AttributeError):
-        message = resp.text[:500]
-    raise VeniceError(f"Venice: {message or f'HTTP {resp.status_code}'}", resp.status_code)
+    raise RequestRejectedError(_error_message(resp), resp.status_code)
 
 
 def _request(
@@ -164,13 +219,14 @@ def _request(
     timeout: httpx.Timeout = DEFAULT_TIMEOUT,
     waiting_for: str = "response",
     log: bool = False,
-    **kw: JsonValue,
+    json_body: JsonValue = None,
+    params: dict[str, str] | None = None,
 ) -> httpx.Response:
     """One Venice call. `log`: record it in the request log (web/request_log.py)."""
     if not log:
-        return _send(method, path, timeout, waiting_for, **kw)
-    with request_log.logged("venice", method, path, kw.get("json")) as outcome:
-        resp = _send(method, path, timeout, waiting_for, check=False, **kw)
+        return _send(method, path, timeout, waiting_for, json_body=json_body, params=params)
+    with request_log.logged("venice", method, path, json_body) as outcome:
+        resp = _send(method, path, timeout, waiting_for, check=False, json_body=json_body, params=params)
         outcome["status"] = resp.status_code
         outcome["flags"] = {k: v for k, v in resp.headers.items() if k.startswith("x-venice-is-")}
         outcome["response"] = request_log.response_of(resp)
@@ -184,19 +240,18 @@ def _send(
     timeout: httpx.Timeout,
     waiting_for: str,
     check: bool = True,
-    **kw: JsonValue,
+    json_body: JsonValue = None,
+    params: dict[str, str] | None = None,
 ) -> httpx.Response:
     start = time.monotonic()
     try:
-        resp = _client.request(method, f"{VENICE_BASE}{path}", headers=_headers(), timeout=timeout, **kw)
+        resp = _client.request(
+            method, f"{VENICE_BASE}{path}", headers=_headers(), timeout=timeout, json=json_body, params=params
+        )
     except (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError, httpx.ConnectError) as e:
-        raise VeniceError(
-            f"The connection to Venice dropped after {round(time.monotonic() - start)}s waiting "
-            f"for the {waiting_for} ({type(e).__name__}) — usually a network/VPN closing idle "
-            "connections. It may still have been billed."
-        ) from e
+        raise ConnectionDroppedError(round(time.monotonic() - start), waiting_for, e) from e
     except httpx.TimeoutException as e:
-        raise VeniceError(f"Venice didn't answer in time ({type(e).__name__})", 504) from e
+        raise AnswerTimeoutError(e) from e
     if check:  # else the caller checks, after logging the response
         _raise_for_response(resp)
     return resp
@@ -207,43 +262,49 @@ def _data_url(path: Path) -> str:
     return f"data:{media_type};base64,{base64.b64encode(path.read_bytes()).decode()}"
 
 
-def _fetch_models(kind: str) -> list[dict]:
-    return [
-        m
-        for m in _request("GET", "/models", params={"type": kind}).json().get("data", [])
-        if not (m.get("model_spec") or {}).get("offline")
-    ]
+def _fetch_models(kind: str) -> list[Model]:
+    """Venice's online models of one kind."""
+    data = as_object(body_of(_request("GET", "/models", params={"type": kind}))).get("data")
+    return [model for raw in as_objects(data) if (model := parse_model(raw)) is not None]
 
 
-def _usd(price: float | str | dict[str, object] | None) -> float | None:
-    if isinstance(price, dict):
+def _float(value: JsonValue) -> float | None:
+    """The value as a float when it is a number or numeric text, else None."""
+    if isinstance(value, (int, float, str)):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _usd(price: JsonValue) -> float | None:
+    """A price as USD: a plain number, numeric text, or an object with a ``usd`` field."""
+    if isinstance(price, Mapping):
         price = price.get("usd")
-    try:
-        return float(price) if price is not None else None
-    except (TypeError, ValueError):
-        return None
+    return _float(price)
 
 
-def _seconds(values: list[str | int] | None) -> list[int]:
-    out = []
-    for v in values or []:
+def _seconds(values: list[str]) -> list[int]:
+    out: list[int] = []
+    for v in values:
         with contextlib.suppress(ValueError):  # "auto", "1 gen" — not a length chat can ask for
-            out.append(int(str(v).lower().rstrip("s")))
+            out.append(int(v.lower().rstrip("s")))
     return sorted(set(out))
 
 
-def _uncensored(*models: dict | None) -> bool | None:
+def _uncensored(*models: Model | None) -> bool | None:
     """Venice's own "uncensored" flag on a model (on any of a pair)."""
-    return any((m.get("model_spec") or {}).get("uncensored") for m in models if m) or None
+    return any(m.uncensored for m in models if m) or None
 
 
-def _privacy(*models: dict | None) -> str | None:
+def _privacy(*models: Model | None) -> str | None:
     """Return the least-private level across a model pair.
 
     Venice reports ``private`` for its own servers and ``anonymized`` for
     third-party providers that receive requests without user identity.
     """
-    levels = {(m.get("model_spec") or {}).get("privacy") for m in models if m} - {None}
+    levels = {m.privacy for m in models if m} - {None}
     return "anonymized" if "anonymized" in levels else ("private" if levels else None)
 
 
@@ -258,228 +319,235 @@ def _edit_model_for(image_id: str, edit_ids: set[str]) -> str | None:
     return None
 
 
-def _build_catalogue() -> dict[str, Any]:
-    text = []
-    for m in _fetch_models("text"):
-        spec = m.get("model_spec") or {}
-        caps = spec.get("capabilities") or {}
-        pricing = spec.get("pricing") or {}
-        prompt_price, completion_price = _usd(pricing.get("input")), _usd(pricing.get("output"))
-        text.append(
-            {
-                "id": PREFIX + m["id"],
-                "name": f"Venice: {spec.get('name') or m['id']}",
-                "context_length": spec.get("availableContextTokens") or m.get("context_length"),
-                "input_modalities": ["text", "image"] if caps.get("supportsVision") else ["text"],
-                "supports_tools": bool(caps.get("supportsFunctionCalling")),
-                "uncensored": _uncensored(m),
-                "privacy": _privacy(m),
-                # Venice prices per million tokens; the picker expects per token
-                "prompt_price": prompt_price / 1e6 if prompt_price is not None else None,
-                "completion_price": completion_price / 1e6 if completion_price is not None else None,
-                "created": m.get("created"),
-            }
-        )
+def _text_entry(m: Model) -> TextEntry:
+    caps = m.capabilities
+    prompt_usd, completion_usd = _usd(m.pricing.get("input")), _usd(m.pricing.get("output"))
+    # Venice prices per million tokens; the picker expects per token
+    prompt_price = prompt_usd / 1e6 if prompt_usd is not None else None
+    completion_price = completion_usd / 1e6 if completion_usd is not None else None
+    public: ModelEntry = {
+        "id": PREFIX + m.id,
+        "name": f"Venice: {m.name}",
+        "context_length": m.context_length,
+        "input_modalities": ["text", "image"] if caps.get("supportsVision") else ["text"],
+        "supports_tools": bool(caps.get("supportsFunctionCalling")),
+        "uncensored": _uncensored(m),
+        "privacy": _privacy(m),
+        "prompt_price": prompt_price,
+        "completion_price": completion_price,
+        "created": m.created,
+        "price": _price_tag(completion_price * 1e6, "per 1M output tokens") if completion_price is not None else None,
+    }
+    return TextEntry(PREFIX + m.id, public, prompt_price, completion_price)
 
-    edits = {m["id"]: m for m in _fetch_models("inpaint")}
-    image, paired = [], set()
+
+def _image_entry(m: Model, edit: Model | None) -> ImageEntry:
+    """A text-to-image model, with its edit twin when it has one."""
+    c = m.constraints
+    default_res = as_str(c.get("defaultResolution"))
+    generate = ImageTarget(m.id, PriceSpec("generation", m.pricing, default_res))
+    edit_target = (
+        ImageTarget(edit.id, PriceSpec("inpaint", edit.pricing, as_str(edit.constraints.get("defaultResolution"))))
+        if edit
+        else None
+    )
+    max_refs = max_input_images(edit.constraints) if edit else 1
+    aspect_ratios, resolutions = strs(c.get("aspectRatios")), strs(c.get("resolutions"))
+    public: ModelEntry = {
+        "id": PREFIX + m.id,
+        "name": f"Venice: {m.name}",
+        "input_modalities": ["text", "image"] if edit else ["text"],
+        "uncensored": _uncensored(m, edit),
+        "privacy": _privacy(m, edit),
+        "aspect_ratios": aspect_ratios,
+        "resolutions": resolutions,
+        "created": m.created,
+        "conversational": False,
+        # Reference images its edit twin takes (one when Venice doesn't say)
+        "max_refs": max_refs if edit else None,
+        "price": _price_tag(_image_price(m.pricing, "generation", None, default_res), default_res),
+    }
+    return ImageEntry(PREFIX + m.id, public, generate, edit_target, max_refs, aspect_ratios or [], resolutions or [])
+
+
+def _edit_only_entry(m: Model) -> ImageEntry:
+    """An edit model with no text-to-image twin: it only works on a reference image."""
+    c = m.constraints
+    default_res = as_str(c.get("defaultResolution"))
+    max_refs = max_input_images(c)
+    aspect_ratios, resolutions = strs(c.get("aspectRatios")), strs(c.get("resolutions"))
+    public: ModelEntry = {
+        "id": PREFIX + m.id,
+        "name": f"Venice: {m.name} (edit only)",
+        "input_modalities": ["text", "image"],
+        "uncensored": _uncensored(m),
+        "privacy": _privacy(m),
+        "aspect_ratios": aspect_ratios,
+        "resolutions": resolutions,
+        "created": m.created,
+        "conversational": False,
+        "max_refs": max_refs,
+        "price": _price_tag(_image_price(m.pricing, "inpaint", None, default_res), default_res),
+    }
+    edit_target = ImageTarget(m.id, PriceSpec("inpaint", m.pricing, default_res))
+    return ImageEntry(PREFIX + m.id, public, None, edit_target, max_refs, aspect_ratios or [], resolutions or [])
+
+
+def _build_catalogue() -> Catalogue:
+    text = [_text_entry(m) for m in _fetch_models("text")]
+
+    edits = {m.id: m for m in _fetch_models("inpaint")}
+    image: list[ImageEntry] = []
+    paired: set[str] = set()
     for m in _fetch_models("image"):
-        spec = m.get("model_spec") or {}
-        c = spec.get("constraints") or {}
-        edit_id = _edit_model_for(m["id"], set(edits))
+        edit_id = _edit_model_for(m.id, set(edits))
+        edit = edits.get(edit_id) if edit_id else None
         if edit_id:
             paired.add(edit_id)
-        image.append(
-            {
-                "id": PREFIX + m["id"],
-                "name": f"Venice: {spec.get('name') or m['id']}",
-                "input_modalities": ["text", "image"] if edit_id else ["text"],
-                "uncensored": _uncensored(m, edits.get(edit_id)),
-                "privacy": _privacy(m, edits.get(edit_id)),
-                "aspect_ratios": c.get("aspectRatios"),
-                "resolutions": c.get("resolutions"),
-                "created": m.get("created"),
-                "conversational": False,
-                "_generate": m["id"],
-                "_edit": edit_id,
-                # Reference images its edit twin takes (one when Venice doesn't say)
-                "max_refs": ((edits[edit_id].get("model_spec") or {}).get("constraints") or {}).get("maxInputImages")
-                or 1
-                if edit_id
-                else None,
-                "price": _price_tag(
-                    _image_price(spec.get("pricing") or {}, "generation", None, c.get("defaultResolution")),
-                    c.get("defaultResolution"),
-                ),
-                "_pricing": ("generation", spec.get("pricing") or {}, c.get("defaultResolution")),
-                "_edit_pricing": (
-                    "inpaint",
-                    (edits[edit_id].get("model_spec") or {}).get("pricing") or {},
-                    ((edits[edit_id].get("model_spec") or {}).get("constraints") or {}).get("defaultResolution"),
-                )
-                if edit_id
-                else None,
-            }
-        )
+        image.append(_image_entry(m, edit))
     # Edit models with no text-to-image twin: they only work on a reference image
-    for edit_id, m in edits.items():
-        if edit_id in paired:
-            continue
-        spec = m.get("model_spec") or {}
-        c = spec.get("constraints") or {}
-        image.append(
-            {
-                "id": PREFIX + edit_id,
-                "name": f"Venice: {spec.get('name') or edit_id} (edit only)",
-                "input_modalities": ["text", "image"],
-                "uncensored": _uncensored(m),
-                "privacy": _privacy(m),
-                "aspect_ratios": c.get("aspectRatios"),
-                "resolutions": c.get("resolutions"),
-                "created": m.get("created"),
-                "conversational": False,
-                "_generate": None,
-                "_edit": edit_id,
-                "max_refs": c.get("maxInputImages") or 1,
-                "price": _price_tag(
-                    _image_price(spec.get("pricing") or {}, "inpaint", None, c.get("defaultResolution")),
-                    c.get("defaultResolution"),
-                ),
-                "_pricing": None,
-                "_edit_pricing": ("inpaint", spec.get("pricing") or {}, c.get("defaultResolution")),
-            }
-        )
+    image.extend(_edit_only_entry(m) for edit_id, m in edits.items() if edit_id not in paired)
 
     # Plain models: pair "…-text-to-video…" with "…-image-to-video…" under
     # one entry. Every other family is listed as it is.
-    groups: dict[str, dict[str, dict]] = {}
-    video = []
+    groups: dict[str, dict[str | None, Model]] = {}
+    video: list[VideoEntry] = []
     for m in _fetch_models("video"):
         family = _video_family(m)
         if family == "standard":
-            mtype = ((m.get("model_spec") or {}).get("constraints") or {}).get("model_type")
-            key = m["id"].replace("text-to-video", "*").replace("image-to-video", "*")
-            groups.setdefault(key, {})[mtype] = m
+            key = m.id.replace("text-to-video", "*").replace("image-to-video", "*")
+            groups.setdefault(key, {})[as_str(m.constraints.get("model_type"))] = m
         else:
-            video.append(_video_entry(family, m, None))
+            video.append(_video_entry(family, m, m, None))
     for pair in groups.values():
         t2v, i2v = pair.get("text-to-video"), pair.get("image-to-video")
-        video.append(_video_entry("standard", t2v, i2v))
+        first = t2v or i2v
+        if first is not None:
+            video.append(_video_entry("standard", first, t2v, i2v))
     _price_videos(video)
-    for m in text:
-        m["price"] = (
-            _price_tag(m["completion_price"] * 1e6, "per 1M output tokens")
-            if m.get("completion_price") is not None
-            else None
-        )
-    return {"text": _by_price(text), "image": _by_price(image), "video": _by_price(video)}
+    return Catalogue(text=_by_price(text), image=_by_price(image), video=_by_price(video))
 
 
-def _by_price(models: list[dict]) -> list[dict]:
+def _by_price[E: Entry](models: list[E]) -> list[E]:
     """Uncensored first (as the user asked), then cheapest first; unpriced last."""
 
-    def key(m: dict[str, object]) -> tuple[bool, bool, int | float, str]:
-        usd = (m.get("price") or {}).get("usd")
-        return (not m.get("uncensored"), usd is None, usd or 0, m["name"].lower())
+    def key(m: E) -> tuple[bool, bool, int | float, str]:
+        usd = as_number(as_object(m.public.get("price")).get("usd"))
+        return (not m.public.get("uncensored"), usd is None, usd or 0, (as_str(m.public.get("name")) or "").lower())
 
     return sorted(models, key=key)
 
 
-def _price_tag(usd: float | None, basis: str | None = None) -> dict | None:
+def _price_tag(usd: float | None, basis: str | None = None) -> dict[str, JsonValue] | None:
     return {"usd": round(usd, 4), "basis": basis or ""} if usd is not None else None
 
 
-def _image_price(pricing: dict, key: str, resolution: str | None, default_res: str | None) -> float | None:
+def _image_price(
+    pricing: dict[str, JsonValue], key: str, resolution: str | None, default_res: str | None
+) -> float | None:
     """One image's USD price: the resolution's tier if priced that way, else the flat price."""
-    tiers = pricing.get("resolutions") or {}
+    tiers = as_object(pricing.get("resolutions"))
     for res in (resolution, None, default_res):
         if res is None:
             flat = _usd(pricing.get(key))
             if flat is not None:
                 return flat
-        elif res in tiers and _usd(tiers[res]) is not None:
-            return _usd(tiers[res])
+        elif res in tiers:
+            tier = _usd(tiers[res])
+            if tier is not None:
+                return tier
     prices = [p for p in (_usd(v) for v in tiers.values()) if p is not None]
     return min(prices) if prices else None
 
 
 def _res_rank(res: str) -> int:
     """Rough vertical pixels, to find a model's lowest resolution ("480p", "768P", "2K", "4k")."""
-    s = str(res).lower()
+    s = res.lower()
     if m := re.match(r"(\d+)p", s):
         return int(m.group(1))
     return {"1k": 1080, "2k": 1440, "4k": 2160}.get(s, 10_000)
 
 
-def _price_videos(video: list[dict]) -> None:
+class _QuoteJob(NamedTuple):
+    entry: VideoEntry
+    model: str
+    duration: int | None
+    resolution: str | None
+
+
+def _quote_video(job: _QuoteJob) -> float | None:
+    """One video's quoted USD price, cached for a day."""
+    key = (job.model, job.duration, job.resolution)
+    cached = _quotes.get(key, MISS)
+    if cached is not MISS:
+        return cached
+    body: dict[str, JsonValue] = {"model": job.model, "duration": f"{job.duration}s" if job.duration else "auto"}
+    if job.resolution:
+        body["resolution"] = job.resolution
+    try:
+        usd = _quote_of(_request("POST", "/video/quote", json_body=body))
+    except VeniceError:
+        usd = None
+    _quotes.put(key, usd)
+    return usd
+
+
+def _quote_of(resp: httpx.Response) -> float | None:
+    """The USD price in a ``/video/quote`` reply."""
+    return _usd(as_object(body_of(resp)).get("quote"))
+
+
+def _price_videos(video: list[VideoEntry]) -> None:
     """Set video prices from Venice quotes at about five seconds.
 
     Quotes use each model's lowest resolution and are cached for a day.
     Models that work on a chat video remain unpriced because its duration is
     unknown up front.
     """
-    jobs = []
-    for m in video:
-        if m["video_input"]:
-            m["price"] = None
+    jobs: list[_QuoteJob] = []
+    for entry in video:
+        target = entry.text or entry.image
+        if entry.video_input or target is None:
+            entry.public["price"] = None
             continue
-        model = m["_text"] or m["_image"]
-        c = m["_constraints"]["text" if m["_text"] else "image"]
-        seconds = _seconds(c.get("durations"))
+        c = target.constraints
+        seconds = _seconds(c.durations)
         duration = min(seconds, key=lambda d: (abs(d - QUOTE_SECONDS), d)) if seconds else None
-        res = min(c.get("resolutions") or [], key=_res_rank, default=None)
-        jobs.append((m, model, duration, res))
-
-    def quote(job: tuple[dict[str, object], str, int | None, str | None]) -> float | None:
-        _, model, duration, res = job
-        key = (model, duration, res)
-        cached = _quotes.get(key, MISS)
-        if cached is not MISS:
-            return cached
-        body = {"model": model, "duration": f"{duration}s" if duration else "auto"}
-        if res:
-            body["resolution"] = res
-        try:
-            usd = _usd(_request("POST", "/video/quote", json=body).json().get("quote"))
-        except VeniceError:
-            usd = None
-        _quotes.put(key, usd)
-        return usd
+        res = min(c.resolutions, key=_res_rank, default=None)
+        jobs.append(_QuoteJob(entry, target.model, duration, res))
 
     with ThreadPoolExecutor(max_workers=8) as pool:
-        for (m, _, duration, res), usd in zip(jobs, pool.map(quote, jobs), strict=False):
-            basis = " · ".join(x for x in (f"{duration}s" if duration else "", res or "") if x)
-            m["price"] = _price_tag(usd, basis)
+        for job, usd in zip(jobs, pool.map(_quote_video, jobs), strict=False):
+            basis = " · ".join(x for x in (f"{job.duration}s" if job.duration else "", job.resolution or "") if x)
+            job.entry.public["price"] = _price_tag(usd, basis)
 
 
-def _video_family(m: dict) -> str:
-    mid = m["id"]
-    mtype = ((m.get("model_spec") or {}).get("constraints") or {}).get("model_type")
-    if "reference-to-video" in mid:
+def _video_family(m: Model) -> str:
+    mtype = as_str(m.constraints.get("model_type"))
+    if "reference-to-video" in m.id:
         return "reference"
-    if "first-last-frame" in mid or "transition" in mid:
+    if "first-last-frame" in m.id or "transition" in m.id:
         return "frames"
-    if "multi-angle" in mid:
+    if "multi-angle" in m.id:
         return "angles"
-    if "upscale" in mid:
+    if "upscale" in m.id:
         return "upscale"
-    if "motion-control" in mid:
+    if "motion-control" in m.id:
         return "motion"
     if mtype == "video":
         return "video"
     return "standard"
 
 
-def _video_entry(family: str, main: dict | None, i2v: dict | None) -> dict:
+def _video_entry(family: str, first: Model, main: Model | None, i2v: Model | None) -> VideoEntry:
     """Build one catalogue entry from a video model family.
 
-    For ``standard``, ``main`` is the text-to-video model (or None if only an
-    image-to-video model exists), and ``i2v`` is its twin.
+    ``first`` is the model that names the entry. For ``standard``, ``main`` is
+    the text-to-video model (or None if only an image-to-video model exists),
+    and ``i2v`` is its twin.
     """
-    first = main or i2v
-    spec = first.get("model_spec") or {}
-    c = spec.get("constraints") or {}
-    name = f"Venice: {spec.get('name') or first['id']}"
+    c = video_constraints(first.constraints)
+    name = f"Venice: {first.name}"
     if family == "standard" and not main:
         name += " (image→video only)"
     elif family != "standard":
@@ -490,39 +558,39 @@ def _video_entry(family: str, main: dict | None, i2v: dict | None) -> dict:
         "angles": ["first_frame"],
         "motion": ["first_frame"],
     }.get(family, [])
-    return {
-        "id": PREFIX + first["id"],
+    video_input = family in ("video", "motion", "upscale")
+    public: ModelEntry = {
+        "id": PREFIX + first.id,
         "name": name,
         "family": family,
         "family_hint": VIDEO_FAMILIES[family],
-        "durations": _seconds(c.get("durations")) or None,
-        "resolutions": c.get("resolutions") or None,
-        "aspect_ratios": c.get("aspect_ratios") or None,
+        "durations": _seconds(c.durations) or None,
+        "resolutions": c.resolutions or None,
+        "aspect_ratios": c.aspect_ratios or None,
         "frame_images": frames,
         "reference_images": family == "reference",
-        "video_input": family in ("video", "motion", "upscale"),
+        "video_input": video_input,
         "uncensored": _uncensored(main, i2v),
         "privacy": _privacy(main, i2v),
-        "generate_audio": bool(c.get("audio_configurable")),
-        "created": first.get("created"),
-        "_text": main["id"] if main and family == "standard" else None,
-        "_image": i2v["id"] if i2v else (None if family == "standard" else first["id"]),
-        "_constraints": {
-            k: (v.get("model_spec") or {}).get("constraints") or {} for k, v in (("text", main), ("image", i2v)) if v
-        }
-        if family == "standard"
-        else {"image": c},
+        "generate_audio": c.audio_configurable,
+        "created": first.created,
     }
+    if family == "standard":
+        text = VideoTarget(main.id, video_constraints(main.constraints)) if main else None
+        image = VideoTarget(i2v.id, video_constraints(i2v.constraints)) if i2v else None
+    else:
+        text, image = None, VideoTarget(first.id, c)
+    return VideoEntry(PREFIX + first.id, public, family, video_input, text, image)
 
 
-def _get_catalogue(refresh: bool = False) -> dict[str, Any]:
+def _get_catalogue(refresh: bool = False) -> Catalogue:
     key = _tenant()
     with _catalogue_lock:
-        entry = _catalogue.get(key)
-        if refresh or not entry or time.time() - entry["at"] > CATALOGUE_TTL:
-            entry = {"at": time.time(), "data": _build_catalogue()}
-            _catalogue[key] = entry
-        return entry["data"]
+        cached = _catalogue.get(key)
+        if refresh or not cached or time.time() - cached.at > CATALOGUE_TTL:
+            cached = _CachedCatalogue(time.time(), _build_catalogue())
+            _catalogue[key] = cached
+        return cached.data
 
 
 @on_keys_changed
@@ -539,27 +607,36 @@ def clear_caches() -> None:
     _balance.clear()
 
 
-def _public(models: list[dict]) -> list[dict]:
-    return [{k: v for k, v in m.items() if not k.startswith("_")} for m in models]
+def _entries(catalogue: Catalogue, kind: str) -> Sequence[Entry]:
+    """The catalogue's entries of one kind (none for a kind Venice doesn't list)."""
+    match kind:
+        case "text":
+            return catalogue.text
+        case "image":
+            return catalogue.image
+        case "video":
+            return catalogue.video
+        case _:
+            return []
 
 
-def list_models(kind: str, refresh: bool = False) -> list[dict[str, Any]]:
-    """Venice's models of one kind (text | image | video), shaped like openrouter.list_*_models()."""
-    if not is_configured() or kind not in ("text", "image", "video"):
-        return []
-    return _public(_get_catalogue(refresh)[kind])
-
-
-def _entry(kind: str, model_id: str) -> dict:
-    entry = next((m for m in _get_catalogue()[kind] if m["id"] == model_id), None)
-    if not entry:
-        raise VeniceError(f"Unknown Venice {kind} model: {model_id[len(PREFIX) :]}")
+def _find[E: Entry](entries: Sequence[E], kind: str, model_id: str) -> E:
+    entry = next((m for m in entries if m.id == model_id), None)
+    if entry is None:
+        raise UnknownModelError(kind, model_id[len(PREFIX) :])
     return entry
 
 
-def model_info(kind: str, model_id: str) -> dict[str, Any]:
+def list_models(kind: str, refresh: bool = False) -> list[ModelEntry]:
+    """Venice's models of one kind (text | image | video), shaped like openrouter.list_*_models()."""
+    if not is_configured() or kind not in ("text", "image", "video"):
+        return []
+    return [dict(m.public) for m in _entries(_get_catalogue(refresh), kind)]
+
+
+def model_info(kind: str, model_id: str) -> ModelEntry:
     """One model's public catalogue entry (raises VeniceError if unknown)."""
-    return _public([_entry(kind, model_id)])[0]
+    return dict(_find(_entries(_get_catalogue(), kind), kind, model_id).public)
 
 
 def get_balances() -> dict[str, float | None]:
@@ -574,21 +651,20 @@ def get_balances() -> dict[str, float | None]:
     """
     key = _tenant()
     try:
-        data = _request("GET", "/api_keys/rate_limits").json()
+        data = as_object(body_of(_request("GET", "/api_keys/rate_limits")))
     except VeniceError:
         return {"usd": _balance.get(key), "credits": None}
-    balances = (data.get("data") or data).get("balances") or {}
-    usd = balances.get("USD")
+    balances = as_object(as_object(data.get("data") or data).get("balances"))
+    usd = _float(balances.get("USD"))
     if usd is not None:
-        _balance[key] = float(usd)
-    credits = balances.get("BUNDLED_CREDITS")
-    return {"usd": _balance.get(key), "credits": float(credits) if credits is not None else None}
+        _balance[key] = usd
+    return {"usd": _balance.get(key), "credits": _float(balances.get("BUNDLED_CREDITS"))}
 
 
 def stream_chat(
     model_id: str,
-    messages: list[dict],
-    tools: list[dict] | None = None,
+    messages: list[dict[str, JsonValue]],
+    tools: list[dict[str, JsonValue]] | None = None,
     session_id: str | None = None,
     max_seconds: float | None = None,
     should_stop: Callable[[], bool] | None = None,
@@ -596,8 +672,10 @@ def stream_chat(
     """Yield chat-completion chunks with usage cost in USD.
 
     Cost comes from Venice's reported value or token counts and model prices.
+    Venice has no session concept, so ``session_id`` only labels the request in the debug log.
     """
-    body: dict[str, Any] = {
+    log.debug("venice chat %s (session %s)", model_id, session_id)
+    body: dict[str, JsonValue] = {
         "model": model_id[len(PREFIX) :],
         "messages": messages,
         "stream": True,
@@ -623,12 +701,10 @@ def stream_chat(
             for chunk in request_log.chat_reply(chunks, outcome):
                 usage = chunk.get("usage")
                 if usage:
-                    chunk["usage"] = {**usage, "cost": _chat_cost(model_id, usage, chunk.get("cost"))}
+                    chunk["usage"] = {**usage, "cost": _chat_cost(model_id, usage, as_object(chunk).get("cost"))}
                 yield chunk
     except (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError) as e:
-        raise VeniceError(
-            f"The connection to Venice dropped after {round(time.monotonic() - start)}s ({type(e).__name__})"
-        ) from e
+        raise StreamDroppedError(round(time.monotonic() - start), e) from e
 
 
 def _stream_error(message: str, status: int | None) -> VeniceError:
@@ -636,23 +712,19 @@ def _stream_error(message: str, status: int | None) -> VeniceError:
     return VeniceError(message if status else f"Venice: {message}", status)
 
 
-def _chat_cost(
-    model_id: str,
-    usage: dict,
-    top_level_cost: float | str | dict[str, object] | None = None,
-) -> float | None:
+def _chat_cost(model_id: str, usage: dict[str, JsonValue], top_level_cost: JsonValue = None) -> float | None:
     cost = _usd(usage.get("cost")) if usage.get("cost") is not None else _usd(top_level_cost)
     if cost is not None:
         return cost
     try:
-        info = _entry("text", model_id)
+        info = _find(_get_catalogue().text, "text", model_id)
     except VeniceError:
         return None
-    if info.get("prompt_price") is None or info.get("completion_price") is None:
+    if info.prompt_price is None or info.completion_price is None:
         return None
     return round(
-        (usage.get("prompt_tokens") or 0) * info["prompt_price"]
-        + (usage.get("completion_tokens") or 0) * info["completion_price"],
+        (as_number(usage.get("prompt_tokens")) or 0) * info.prompt_price
+        + (as_number(usage.get("completion_tokens")) or 0) * info.completion_price,
         6,
     )
 
@@ -663,9 +735,7 @@ def _check_violation(resp: httpx.Response) -> None:
     The violation flag means the response is not the requested image.
     """
     if (resp.headers.get("x-venice-is-content-violation") or "").lower() == "true":
-        raise VeniceError(
-            "Blocked by Venice's content filter (it flagged the image as a content violation)", status=403
-        )
+        raise ContentViolationError
 
 
 def generate_image(
@@ -674,59 +744,68 @@ def generate_image(
     aspect_ratio: str | None = None,
     resolution: str | None = None,
     ref_paths: list[Path] | None = None,
-) -> tuple[list[tuple[bytes, str]], float | None, dict]:
+) -> tuple[list[tuple[bytes, str]], float | None, ImageSettings]:
     """Generate an image and return its bytes, cost, and sent settings.
 
     Reference images use the model's edit twin; otherwise the text-to-image
     model runs.
     """
-    info = _entry("image", model_id)
-    aspect_ratio = _snap(aspect_ratio, info.get("aspect_ratios") or [])
-    resolution = _snap(resolution, info.get("resolutions") or [])
-    size = {k: v for k, v in (("aspect_ratio", aspect_ratio), ("resolution", resolution)) if v}
-    sent: dict[str, Any] = {"aspect_ratio": aspect_ratio, "resolution": resolution}
+    info = _find(_get_catalogue().image, "image", model_id)
+    aspect_ratio = _snap(aspect_ratio, info.aspect_ratios)
+    resolution = _snap(resolution, info.resolutions)
+    size: dict[str, str] = {}
+    if aspect_ratio:
+        size["aspect_ratio"] = aspect_ratio
+    if resolution:
+        size["resolution"] = resolution
+    sent = ImageSettings(aspect_ratio=aspect_ratio, resolution=resolution)
     refs = [p for p in ref_paths or [] if p.is_file()]
-    if refs and info["_edit"]:
-        refs = refs[: info.get("max_refs") or 1]
-        images, cost = _edit_image(info, prompt, refs, size)
-        return images, cost, {**sent, "refs_used": len(refs)}
-    if not info["_generate"]:
-        raise VeniceError("This Venice model only edits images: attach, pin or reference an image first")
-    return *_new_image(info, prompt, size), sent
+    if refs and info.edit:
+        refs = refs[: info.max_refs]
+        images, cost = _edit_image(info.edit, prompt, refs, size)
+        sent["refs_used"] = len(refs)
+        return images, cost, sent
+    if not info.generate:
+        raise EditOnlyModelError
+    images, cost = _new_image(info.generate, prompt, size)
+    return images, cost, sent
 
 
-def _edit_image(info: dict, prompt: str, refs: list[Path], size: dict) -> tuple[list[tuple[bytes, str]], float | None]:
-    body = {
-        "modelId": info["_edit"],
+def _edit_image(
+    target: ImageTarget, prompt: str, refs: list[Path], size: dict[str, str]
+) -> tuple[list[tuple[bytes, str]], float | None]:
+    body: dict[str, JsonValue] = {
+        "modelId": target.model,
         "prompt": prompt,
         "safe_mode": False,
         "images": [_data_url(p) for p in refs],
         **size,
     }
-    resp = _request("POST", "/image/multi-edit", json=body, timeout=IMAGE_TIMEOUT, waiting_for="image", log=True)
+    resp = _request("POST", "/image/multi-edit", json_body=body, timeout=IMAGE_TIMEOUT, waiting_for="image", log=True)
     _check_violation(resp)
     media_type = (resp.headers.get("content-type") or "image/png").split(";")[0].strip()
     if not media_type.startswith("image/"):
-        raise VeniceError("Venice returned no image")
-    key, pricing, default_res = info["_edit_pricing"]
+        raise NoImageReturnedError
+    key, pricing, default_res = target.price
     return [(resp.content, media_type)], _image_price(pricing, key, size.get("resolution"), default_res)
 
 
-def _new_image(info: dict, prompt: str, size: dict) -> tuple[list[tuple[bytes, str]], float | None]:
-    body = {
-        "model": info["_generate"],
+def _new_image(target: ImageTarget, prompt: str, size: dict[str, str]) -> tuple[list[tuple[bytes, str]], float | None]:
+    body: dict[str, JsonValue] = {
+        "model": target.model,
         "prompt": prompt,
         "safe_mode": False,
         "hide_watermark": True,
         "format": "png",
         **size,
     }
-    resp = _request("POST", "/image/generate", json=body, timeout=IMAGE_TIMEOUT, waiting_for="image", log=True)
+    resp = _request("POST", "/image/generate", json_body=body, timeout=IMAGE_TIMEOUT, waiting_for="image", log=True)
     _check_violation(resp)
-    images = [(base64.b64decode(b64), "image/png") for b64 in resp.json().get("images") or [] if b64]
+    encoded = as_list(as_object(body_of(resp)).get("images"))
+    images = [(base64.b64decode(b64), "image/png") for b64 in encoded if isinstance(b64, str) and b64]
     if not images:
-        raise VeniceError("Venice returned no image")
-    key, pricing, default_res = info["_pricing"]
+        raise NoImageReturnedError
+    key, pricing, default_res = target.price
     return images, _image_price(pricing, key, size.get("resolution"), default_res)
 
 
@@ -750,44 +829,56 @@ def submit_video(
     last_frame: Path | None = None,
     refs: list[Path] | None = None,
     source_video: Path | None = None,
-) -> dict:
+) -> VideoJob:
     """Queue a video and return its id and sent settings.
 
     Reference models take ``refs`` (the first frame joins them if empty),
     first/last-frame models take both frames, and video models take
     ``source_video`` (motion control also takes an image).
     """
-    info = _entry("video", model_id)
-    family = info.get("family", "standard")
-    model, c = _video_model(info, family, first_frame)
+    info = _find(_get_catalogue().video, "video", model_id)
+    family = info.family
+    target = _video_model(info, first_frame)
+    c = target.constraints
     frames = _VideoFrames(first_frame, last_frame, [p for p in refs or [] if p.is_file()], source_video)
     inputs, sent, image_used = _VIDEO_INPUTS.get(family, _standard_inputs)(frames)
-    body: dict[str, Any] = {"model": model, "prompt": prompt, **inputs}
+    body: dict[str, JsonValue] = {"model": target.model, "prompt": prompt, **inputs}
     if family == "angles":
         body["camera_trajectory"] = DEFAULT_CAMERA_TRAJECTORY
 
     duration, body["duration"] = _video_duration(c, duration)
     resolution = _video_resolution(body, family, c, resolution)
-    aspect_ratio = _snap(aspect_ratio, c.get("aspect_ratios") or [])
-    if image_used and not c.get("aspect_ratios"):
+    aspect_ratio = _snap(aspect_ratio, c.aspect_ratios)
+    if image_used and not c.aspect_ratios:
         aspect_ratio = None  # the image sets the shape
     if aspect_ratio:
         body["aspect_ratio"] = aspect_ratio
-    if c.get("audio_configurable") and generate_audio is not None:
-        body["audio"] = bool(generate_audio)
+    if c.audio_configurable and generate_audio is not None:
+        body["audio"] = generate_audio
 
     quote = _video_quote(body)
-    data = _request(
-        "POST", "/video/queue", json=body, timeout=IMAGE_TIMEOUT, waiting_for="video job to start", log=True
-    ).json()
-    if not data.get("queue_id"):
-        raise VeniceError("Venice didn't return a job id")
-    job_id = f"{JOB_PREFIX}{model}:{data['queue_id']}"
-    if data.get("download_url"):
-        _download_urls.put(job_id, data["download_url"])
+    data = as_object(
+        body_of(
+            _request(
+                "POST",
+                "/video/queue",
+                json_body=body,
+                timeout=IMAGE_TIMEOUT,
+                waiting_for="video job to start",
+                log=True,
+            )
+        )
+    )
+    queue_id = data.get("queue_id")
+    if not queue_id:
+        raise NoJobIdError
+    job_id = f"{JOB_PREFIX}{target.model}:{queue_id}"
+    download_url = as_str(data.get("download_url"))
+    if download_url:
+        _download_urls.put(job_id, download_url)
     if quote is not None:
         _video_quotes.put(job_id, quote)
-    audio = body.get("audio", bool(c.get("audio")) or None)
+    audio = body.get("audio", c.audio or None)
     return {
         "id": job_id,
         "params": {
@@ -800,57 +891,48 @@ def submit_video(
     }
 
 
-def _video_model(info: dict, family: str, first_frame: Path | None) -> tuple[str, dict]:
+def _video_model(info: VideoEntry, first_frame: Path | None) -> VideoTarget:
     """Select the Venice model and constraints for a video family.
 
     Standard families pair text-to-video with image-to-video; others use one
     model.
     """
-    if family != "standard":
-        return info["_image"], info["_constraints"]["image"]
-    model = info["_image"] if first_frame else info["_text"]
-    if not model:
-        raise VeniceError(
-            "This Venice model needs an image to animate"
-            if not first_frame
-            else "This Venice model can't animate an image — pick an image→video model"
-        )
-    return model, info["_constraints"]["image" if first_frame else "text"]
+    target = info.image if info.family != "standard" or first_frame else info.text
+    if target is None:
+        raise TextToVideoOnlyError if first_frame else ImageToAnimateRequiredError
+    return target
 
 
+@dataclass(frozen=True, slots=True)
 class _VideoFrames:
-    def __init__(self, first: Path | None, last: Path | None, refs: list[Path], source_video: Path | None) -> None:
-        self.first, self.last, self.refs, self.source_video = first, last, refs, source_video
+    """The media the chat has on hand for a video request."""
+
+    first: Path | None
+    last: Path | None
+    refs: list[Path]
+    source_video: Path | None
 
 
 # Each family's inputs: (body fields, settings to report, whether an image sets the shape)
-VideoInputs = tuple[dict[str, Any], dict[str, Any], bool]
+VideoInputs = tuple[dict[str, JsonValue], dict[str, JsonValue], bool]
 
 
 def _reference_inputs(f: _VideoFrames) -> VideoInputs:
     refs = (f.refs or ([f.first] if f.first else []))[:MAX_VIDEO_REFS]
     if not refs:
-        raise VeniceError(
-            "This Venice model makes a video from reference images: attach a character, "
-            "pin an image or attach one first"
-        )
+        raise ReferenceImagesRequiredError
     return {"reference_image_urls": [_data_url(p) for p in refs]}, {"refs_used": len(refs)}, False
 
 
 def _frames_inputs(f: _VideoFrames) -> VideoInputs:
     if not (f.first and f.last):
-        raise VeniceError(
-            "This Venice model needs a first and a last frame: attach two images "
-            "(the first is the start, the second the end)"
-        )
+        raise FirstAndLastFrameRequiredError
     return {"image_url": _data_url(f.first), "end_image_url": _data_url(f.last)}, {}, True
 
 
 def _source_video_inputs(f: _VideoFrames) -> VideoInputs:
     if not f.source_video or not f.source_video.is_file():
-        raise VeniceError(
-            "This Venice model works on a video: make or keep a video in this chat first (it uses the latest one)"
-        )
+        raise SourceVideoRequiredError
     return {"video_url": _data_url(f.source_video)}, {"source_video": f.source_video.name}, False
 
 
@@ -858,7 +940,7 @@ def _motion_inputs(f: _VideoFrames) -> VideoInputs:
     body, sent, _ = _source_video_inputs(f)
     image = f.first or (f.refs[0] if f.refs else None)
     if not image:
-        raise VeniceError("Motion control needs an image of who should move: attach or pin one")
+        raise MotionImageRequiredError
     return {**body, "image_url": _data_url(image)}, sent, True
 
 
@@ -867,7 +949,7 @@ def _standard_inputs(f: _VideoFrames) -> VideoInputs:
     return ({"image_url": _data_url(f.first)}, {}, True) if f.first else ({}, {}, False)
 
 
-_VIDEO_INPUTS = {
+_VIDEO_INPUTS: dict[str, Callable[[_VideoFrames], VideoInputs]] = {
     "reference": _reference_inputs,
     "frames": _frames_inputs,
     "video": _source_video_inputs,
@@ -876,13 +958,13 @@ _VIDEO_INPUTS = {
 }
 
 
-def _video_duration(c: dict, duration: int | None) -> tuple[int | None, str]:
+def _video_duration(c: VideoConstraints, duration: int | None) -> tuple[int | None, str]:
     """Return the selected duration and its API representation.
 
     The requested value snaps to the nearest allowed length; unset values
     default to five seconds when supported.
     """
-    allowed = c.get("durations") or []
+    allowed = c.durations
     seconds = _seconds(allowed)
     if not seconds:
         return None, allowed[0] if allowed else "auto"  # e.g. "Auto": follows the source video
@@ -892,24 +974,25 @@ def _video_duration(c: dict, duration: int | None) -> tuple[int | None, str]:
     return duration, f"{duration}s"
 
 
-def _video_resolution(body: dict, family: str, c: dict, resolution: str | None) -> str | None:
+def _video_resolution(
+    body: dict[str, JsonValue], family: str, c: VideoConstraints, resolution: str | None
+) -> str | None:
     """Put the resolution (an upscale's factor) on the body; the setting to report."""
     if family == "upscale":
-        body["upscale_factor"] = {"2x": 2, "4x": 4}.get(str(resolution).lower()) or 2
-        return f"{body['upscale_factor']}x"
-    resolution = _snap(resolution, c.get("resolutions") or [])
+        factor = {"2x": 2, "4x": 4}.get(str(resolution).lower()) or 2
+        body["upscale_factor"] = factor
+        return f"{factor}x"
+    resolution = _snap(resolution, c.resolutions)
     if resolution:
         body["resolution"] = resolution
     return resolution
 
 
-def _video_quote(body: dict) -> float | None:
+def _video_quote(body: dict[str, JsonValue]) -> float | None:
     """What Venice says the video will cost — nice to show, not needed to generate."""
     try:
-        return _usd(
-            _request("POST", "/video/quote", json={k: v for k, v in body.items() if k in QUOTED_FIELDS})
-            .json()
-            .get("quote")
+        return _quote_of(
+            _request("POST", "/video/quote", json_body={k: v for k, v in body.items() if k in QUOTED_FIELDS})
         )
     except VeniceError:
         return None
@@ -924,14 +1007,19 @@ def _video_file(job_id: str) -> Path:
     return _VIDEO_DIR / f"{_split_job(job_id)[1]}.mp4"
 
 
-def get_video(job_id: str) -> dict:
+def _completed(job_id: str) -> dict[str, JsonValue]:
+    """The poll result for a finished job, with its quoted cost."""
+    return {"status": "completed", "usage": {"cost": _video_quotes.get(job_id)}}
+
+
+def get_video(job_id: str) -> dict[str, JsonValue]:
     """Return Venice job status in OpenRouter's shape.
 
     The finished MP4 is held until ``download_video`` collects it.
     Network trouble and 5xx raise, for the poller's error budget.
     """
     if _video_file(job_id).is_file():
-        return {"status": "completed", "usage": {"cost": _video_quotes.get(job_id)}}
+        return _completed(job_id)
     model, queue_id = _split_job(job_id)
     start = time.monotonic()
     try:
@@ -944,7 +1032,7 @@ def get_video(job_id: str) -> dict:
         ) as resp:
             if resp.status_code >= 500 or resp.status_code == 429:
                 resp.read()
-                raise VeniceError(f"Venice: HTTP {resp.status_code} while checking the video")
+                raise VideoCheckFailedError(resp.status_code)
             if resp.status_code >= 400:
                 resp.read()
                 try:
@@ -957,23 +1045,21 @@ def get_video(job_id: str) -> dict:
                 with part.open("wb") as f:
                     f.writelines(resp.iter_bytes())
                 part.replace(_video_file(job_id))
-                return {"status": "completed", "usage": {"cost": _video_quotes.get(job_id)}}
+                return _completed(job_id)
             resp.read()
             _note_balance(resp)
-            data = resp.json()
+            data = as_object(body_of(resp))
     except (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError, httpx.ConnectError) as e:
-        raise VeniceError(
-            f"Venice connection dropped after {round(time.monotonic() - start)}s ({type(e).__name__})"
-        ) from e
+        raise PollDroppedError(round(time.monotonic() - start), e) from e
     status = str(data.get("status") or "").upper()
     if status in ("FAILED", "ERROR", "CANCELLED"):
         return {"status": "failed", "error": f"Venice: {data.get('error') or data.get('message') or 'video failed'}"}
     if status == "COMPLETED" and _download_urls.get(job_id) is not None:
-        return {"status": "completed", "usage": {"cost": _video_quotes.get(job_id)}}
+        return _completed(job_id)
     return {"status": "in_progress"}
 
 
-def download_video(job_id: str, dest: Path, index: int = 0) -> None:
+def download_video(job_id: str, dest: Path) -> None:
     """Copy a completed Venice video to ``dest``."""
     src = _video_file(job_id)
     if not src.is_file():
@@ -983,12 +1069,12 @@ def download_video(job_id: str, dest: Path, index: int = 0) -> None:
             with _client.stream("GET", url, timeout=IMAGE_TIMEOUT, follow_redirects=True) as resp:
                 if resp.status_code >= 400:
                     resp.read()
-                    raise VeniceError(f"Couldn't download the Venice video (HTTP {resp.status_code})")
+                    raise VideoDownloadFailedError(resp.status_code)
                 with tmp.open("wb") as f:
                     f.writelines(resp.iter_bytes())
             tmp.replace(dest)
             return
         if get_video(job_id)["status"] != "completed" or not src.is_file():
-            raise VeniceError("The Venice video isn't ready")
+            raise VideoNotReadyError
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(src, dest)  # the temp dir may be on another filesystem

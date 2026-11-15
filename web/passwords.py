@@ -13,6 +13,7 @@ import hmac
 import os
 
 from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHashError, VerificationError
 
 _hasher = PasswordHasher()
 
@@ -47,7 +48,7 @@ def verify_password(stored_hash: str | None, password: str) -> bool:
         return False
     try:
         return _hasher.verify(stored_hash, _peppered(password))
-    except Exception:  # noqa: BLE001 — malformed/foreign hashes are simply a mismatch
+    except (VerificationError, InvalidHashError):  # malformed/foreign hashes are simply a mismatch
         return False
 
 
@@ -58,5 +59,5 @@ def needs_rehash(stored_hash: str) -> bool:
     """
     try:
         return _hasher.check_needs_rehash(stored_hash)
-    except Exception:  # noqa: BLE001 — malformed/foreign hashes need an upgrade
+    except InvalidHashError:  # malformed/foreign hashes need an upgrade
         return False
