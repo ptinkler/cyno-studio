@@ -2,6 +2,7 @@
      folders, recents) with per-thread hover actions. Presentational — all
      state/actions come from props/emits. -->
 <script setup>
+import SidebarSpaceFolder from './SidebarSpaceFolder.vue'
 import SidebarThreadRow from './SidebarThreadRow.vue'
 import { ref, computed } from 'vue'
 
@@ -46,7 +47,6 @@ function toggleSpace(id) {
 // Inline rename (no modal / prompt)
 const renamingId = ref(null)
 const renameText = ref('')
-const vFocusSelect = { mounted: el => (el.focus(), el.select()) }
 function startRename(t) {
   renamingId.value = t.id
   renameText.value = t.title || ''
@@ -217,65 +217,25 @@ const bySpace = computed(() => {
           </button>
         </div>
         <template v-for="g in bySpace.groups" :key="g.space.id">
-          <div
+          <SidebarSpaceFolder
             v-show="spacesSectionOpen"
-            class="folder"
-            :class="{ open: openSpaces.has(g.space.id), drop: dropOn === g.space.id }"
-            @dragover.prevent="dropOn = g.space.id"
+            v-model:rename-text="renameText"
+            :space="g.space"
+            :count="g.items.length"
+            :open="openSpaces.has(g.space.id)"
+            :drop="dropOn === g.space.id"
+            :renaming="renamingId === spaceKey(g.space)"
+            @toggle="toggleSpace(g.space.id)"
+            @open="emit('open-space', g.space)"
+            @start-rename="startRenameSpace(g.space)"
+            @commit-rename="commitRenameSpace(g.space)"
+            @cancel-rename="cancelRename"
+            @settings="emit('space-settings', g.space)"
+            @delete="emit('delete-space', g.space)"
+            @dragover="dropOn = g.space.id"
             @dragleave="dropOn = null"
-            @drop.prevent="onDrop(g.space.id)"
-          >
-            <button class="fchev" @click="toggleSpace(g.space.id)">
-              <svg class="ic sm"><use href="#s-chev" /></svg>
-            </button>
-            <input
-              v-if="renamingId === spaceKey(g.space)"
-              v-focus-select
-              class="nrename"
-              :value="renameText"
-              @input="renameText = $event.target.value"
-              @keydown.enter.prevent="commitRenameSpace(g.space)"
-              @keydown.esc="cancelRename"
-              @blur="cancelRename"
-            />
-            <a v-else class="fmain" :href="`/space/${g.space.id}`" @click.prevent="emit('open-space', g.space)">
-              <svg class="ic"><use href="#s-folder" /></svg><span class="lbl">{{ g.space.name }}</span
-              ><span class="count">{{ g.items.length }}</span>
-            </a>
-            <div class="nactions">
-              <template v-if="renamingId === spaceKey(g.space)">
-                <button
-                  class="nact"
-                  title="Confirm rename"
-                  aria-label="Confirm rename"
-                  @mousedown.prevent
-                  @click="commitRenameSpace(g.space)"
-                >
-                  <svg class="ic sm"><use href="#s-check" /></svg>
-                </button>
-                <button
-                  class="nact"
-                  title="Cancel rename"
-                  aria-label="Cancel rename"
-                  @mousedown.prevent
-                  @click="cancelRename"
-                >
-                  <svg class="ic sm"><use href="#s-close" /></svg>
-                </button>
-              </template>
-              <template v-else>
-                <button class="nact" title="Rename" @click.stop="startRenameSpace(g.space)">
-                  <svg class="ic sm"><use href="#s-pencil" /></svg>
-                </button>
-                <button class="nact" title="Space defaults" @click.stop="emit('space-settings', g.space)">
-                  <svg class="ic sm"><use href="#s-cog" /></svg>
-                </button>
-                <button class="nact danger" title="Delete" @click.stop="emit('delete-space', g.space)">
-                  <svg class="ic sm"><use href="#s-trash" /></svg>
-                </button>
-              </template>
-            </div>
-          </div>
+            @drop="onDrop(g.space.id)"
+          />
           <div v-show="spacesSectionOpen && openSpaces.has(g.space.id)" class="fkids">
             <div
               v-for="t in g.items"
@@ -367,7 +327,6 @@ const bySpace = computed(() => {
   text-decoration: none;
   box-sizing: border-box;
 }
-
 .brand {
   display: flex;
   align-items: center;
@@ -496,57 +455,6 @@ const bySpace = computed(() => {
   padding: 6px 10px;
   font-size: 13px;
 }
-.folder {
-  display: flex;
-  align-items: center;
-  border-radius: 9px;
-}
-.folder:hover {
-  background: var(--shover);
-}
-.fchev {
-  width: 26px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  color: var(--sfaint);
-  background: none;
-  border: none;
-  cursor: pointer;
-}
-.fchev .ic {
-  transition: transform 0.15s;
-}
-.folder.open .fchev .ic {
-  transform: rotate(90deg);
-}
-.fmain {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  flex: 1;
-  min-width: 0;
-  padding: 7px 10px 7px 0;
-  color: var(--smuted);
-  background: none;
-  border: none;
-  cursor: pointer;
-  text-align: left;
-}
-.fmain .ic {
-  color: var(--sfaint);
-}
-.fmain .lbl {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.fmain .count {
-  font-size: 11px;
-  color: var(--sfaint);
-}
 .side :deep(.nactions) {
   display: flex;
   align-items: center;
@@ -581,17 +489,9 @@ const bySpace = computed(() => {
 .side :deep(.nact.danger:hover) {
   background: color-mix(in srgb, var(--sdanger) 12%, var(--sbg2));
 }
-.folder:hover :deep(.nactions),
-.folder:focus-within :deep(.nactions) {
-  visibility: visible;
-}
 .nrow:hover :deep(.nactions),
 .nrow:focus-within :deep(.nactions) {
   visibility: visible;
-}
-.folder.drop {
-  background: var(--saccent-soft);
-  box-shadow: inset 0 0 0 1px var(--saccent);
 }
 .fkids {
   padding-left: 8px;

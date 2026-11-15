@@ -13,10 +13,10 @@ export const TAG_LABELS = {
   motion: 'Motion / recast',
   lipsync: 'Lip sync',
   upscale: 'Upscale',
-  audio: 'Makes audio',
   bg_remove: 'Background remove',
   subtitle_remove: 'Subtitle remove',
   face_swap: 'Face swap',
+  audio: 'Makes audio',
   tts: 'Text→Speech',
   music: 'Music',
   text2img: 'Text→Image',
@@ -42,4 +42,17 @@ export const PROVIDER_COLOR = {
   pollo: 'var(--p-pollo)',
   venice: 'var(--p-venice)',
   openrouter: 'var(--p-openrouter)',
+}
+
+// Providers: Pollo ("pollo/…", billed in Pollo credits), Venice ("venice/…",
+// billed to the Venice account) and OpenRouter (everything else).
+export const ALL_PROVIDERS = {
+  pollo: { label: 'Pollo', title: 'Runs on your Pollo account (billed in Pollo credits)' },
+  venice: { label: 'Venice', title: 'Runs on your Venice account (billed in Venice credit)' },
+  openrouter: { label: 'OpenRouter', title: 'Runs on OpenRouter (billed in OpenRouter credits)' },
+}
+
+export const providerOf = id => {
+  const prefix = (id || '').split('/')[0]
+  return prefix === 'pollo' || prefix === 'venice' ? prefix : 'openrouter'
 }

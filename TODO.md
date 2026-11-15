@@ -23,7 +23,7 @@ Status as of 2026-11-15. Measured numbers are from running the tools, not estima
 ## 2. Complexity ratchet: DONE (backend)
 
 - [x] All 40 functions over 7 were split (helpers extracted, behaviour unchanged) and `max-complexity` is now 7 in `pyproject.toml`.
-- [ ] Frontend: ESLint `complexity` is still 12; tighten it once the big frontend files (section 5) are split.
+- [x] Frontend: ESLint `complexity` is now 10 (tests exempt) and `max-lines` is 600 for source files. Nine functions were split to get there. Going lower (the backend uses 7) is optional.
 - Found and fixed on the way: `scripts/audit_pollo_models.py --write` pointed at `v1_video.py`, which no longer exists (now `video/models.py`).
 
 ## 3. Stricter lint rules
@@ -44,11 +44,13 @@ Done: `pollo_engine/video/` package; the Python provider and importer splits (`p
 
 ## 5. Frontend
 
-- [ ] Split `composables/useStudio.js` (1054 lines) into focused composables (queue, models, uploads, presets, usage); it has no component-level seams today.
-- [ ] Split the 700+ line components: `ModelPicker.vue` (910), `StudioComposer.vue` (762), `StudioView.vue` (750), `ChatMessage.vue` (738), `StudioSidebar.vue` (657).
+- [x] `composables/useStudio.js` (was 1054) is a 340-line composition root over `useStudioAttachments`, `useStudioThreads`, `useStudioTurns`, `useStudioPrompt` (estimate + enhance), `useStudioReuse`, plus the existing media/sidebar/defaults ones and the pure `studioDelete.js`. `studio.test.js` pins its public surface and the send/open/delete/reuse flows.
+- [x] The 700+ line components are split: `ModelPicker` (910 -> 450: `ModelRow`, `ModelBadge`, `useModelList`, `usePopPlacement`, `utils/modelBadges`), `StudioComposer` (762 -> 350: `ComposerAttachments`, `useMentionEditor`, `utils/refItems`), `StudioView` (750 -> 500: `useStudioRoutes`, `useGalleryModal`, `useThreadView`, `useStudioTheme`, `useAttachmentPicker`), `ChatMessage` (738 -> 360: `ChatMediaCard`, `ChatAttachments`, `PromptBox`, `PinButton`), `StudioSidebar` (657 -> 560: `SidebarSpaceFolder`). Scoped CSS moved with the markup; not yet looked at in a browser (see below).
+- [ ] Eyeball the split components in a browser (model picker badges and folded dots, composer attachment strip, chat media cards, sidebar space folders): the unit tests cover behaviour, not the moved scoped CSS.
 - [ ] Add type safety. The Python side is strict-typed end to end but the frontend is plain JS with no type check. Cheapest step: JSDoc plus `checkJs` in a `tsconfig`; fuller step: migrate to TypeScript starting with `composables/` and `utils/`.
-- [ ] Stop hand-mirroring the model tags: `composables/modelTags.js` `TAG_LABELS` copies `src/py/web/providers/model_tags.py` `TAGS` "in the same order". Serve the labels from the backend catalogue instead, or add a test that fails when they drift.
-- [ ] ESLint is `js.configs.recommended` + Vue recommended only. Consider `vue/flat/strongly-recommended` rules and `eslint-plugin-vue` `no-undef-components`, plus a `max-lines` limit to stop the files above regrowing.
+- [x] `modelTags.test.js` reads `model_tags.py` and fails when `TAG_LABELS` drifts (it caught an existing ordering mismatch for `audio`, now fixed). Serving the labels from the backend instead remains an option.
+- [x] ESLint also enforces `eqeqeq`, `no-var`, `prefer-const`, `no-shadow`, `no-console` (warn/error allowed), `vue/no-undef-components` and `vue/no-unused-refs`, plus the complexity and `max-lines` limits above.
+- [ ] Consider `vue/flat/strongly-recommended` and `vue/define-macros-order` (3 files to touch).
 
 ## 6. Maintenance
 

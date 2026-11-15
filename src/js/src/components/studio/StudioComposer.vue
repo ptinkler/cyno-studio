@@ -3,8 +3,11 @@
      The prompt is a contenteditable so reference mentions ([@name]) show as
      inline pills; the [@name] text remains the source of truth. -->
 <script setup>
-import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed } from 'vue'
 import { fmtCost, creditsToUsd } from '../../utils/format'
+import { buildRefItems } from '../../utils/refItems'
+import { useMentionEditor } from '../../composables/useMentionEditor'
+import ComposerAttachments from './ComposerAttachments.vue'
 
 const props = defineProps({
   modes: { type: Array, default: () => [] },
@@ -30,22 +33,12 @@ const props = defineProps({
 const emit = defineEmits(['update:draft', 'update:mode', 'send', 'files', 'remove', 'clear', 'library', 'enhance'])
 
 const drag = ref(false)
-const ed = ref(null) // the contenteditable prompt
 const aud = ref(null) // hidden audio-clip file input (audio mode)
-const atMenu = ref(false) // the @-mention picker
-const mentionRange = ref(null)
-const onEsc = e => {
-  if (e.key === 'Escape') {
-    atMenu.value = false
-    mentionRange.value = null
-  }
-}
-onMounted(() => document.addEventListener('keydown', onEsc))
-onBeforeUnmount(() => document.removeEventListener('keydown', onEsc))
 // Audio mode with a voice-clone model: the only attachment is the reference clip
 const audioClip = computed(() => props.mode === 'audio' && props.audioInput)
 const mediaMode = computed(() => props.mode === 'image' || props.mode === 'video')
 const refsActive = computed(() => !!props.refMode && props.mode === 'video')
+const refItems = computed(() => (refsActive.value ? buildRefItems(props.attachments, props.refMode) : []))
 const placeholder = computed(() =>
   refsActive.value && refItems.value.length
     ? 'Describe what to change… Type @ to add a reference'
@@ -54,262 +47,32 @@ const placeholder = computed(() =>
 function removeUnused() {
   props.attachments.filter(a => props.unused.has(a.key)).forEach(a => emit('remove', a))
 }
-const cap = s => s.charAt(0).toUpperCase() + s.slice(1)
-const attType = a => (a.audio ? 'audio' : a.video ? 'video' : 'image')
 
-// Reference-to-video: each allowed attachment becomes a mentionable ref named
-// by type + order (image1, video1, audio1…) — the handle the prompt uses as
-// [@name]. Caps come from the model's ref_mode; ordering matches the backend
-// (web/chat/turn.py _ref_items) so a pill always resolves to the same
-// attachment.
-const refItems = computed(() => {
-  if (!refsActive.value) return []
-  const types = new Set(props.refMode.types || ['image', 'video', 'audio'])
-  const limits = props.refMode.limits || {}
-  const counts = {}
-  const out = []
-  for (const a of props.attachments) {
-    const type = attType(a)
-    const n = (counts[type] || 0) + 1
-    if (a.uploading || !types.has(type) || (limits[type] && n > limits[type])) continue
-    counts[type] = n
-    out.push({ key: a.key, name: `${type}${n}`, label: `${cap(type)} ${n}`, type, preview: a.preview })
-    if (props.refMode.max && out.length >= props.refMode.max) break
-  }
-  return out
-})
+const { ed, atMenu, insertMention, toggleMentionMenu, syncDraft, onKey, onCopy, onCut, onPaste, focusPrompt } =
+  useMentionEditor({
+    draft: () => props.draft,
+    refItems,
+    canMention: () => refsActive.value && refItems.value.length > 0,
+    onUpdate: text => emit('update:draft', text),
+    onFiles: files => emit('files', files),
+    onSend: () => emit('send'),
+  })
+
 // Click-to-insert: map each attachment to its ref so clicking its thumbnail
 // drops the [@name] pill into the prompt.
 const refByKey = computed(() => Object.fromEntries(refItems.value.map(r => [r.key, r])))
-const canInsert = a => !a.uploading && !!refByKey.value[a.key]
 function insertAtt(a) {
   const r = refByKey.value[a.key]
   if (r) insertMention(r)
 }
 
-// ― contenteditable plumbing: [@name] text is the source of truth; a pill is
-// just how a known mention is shown. We edit the DOM imperatively (re-rendering
-// on every keystroke would fight the caret) and serialize back to [@name]. ―
-const MENTION = /\[@([a-zA-Z0-9_]+)\]/g
-
-// Pills are built imperatively, so Vue's scoped CSS can't reach them — style
-// them inline (CSS vars resolve against the app root).
-const PILL_CSS =
-  'display:inline-flex;align-items:center;gap:6px;vertical-align:middle;margin:0 2px;' +
-  'padding:1px 8px 1px 3px;border:1px solid var(--sborder);border-radius:8px;' +
-  'background:var(--saccent-soft);color:var(--saccent);font-size:0.85em;line-height:1.5;' +
-  'user-select:none;white-space:nowrap'
-function makePill(refItem) {
-  const span = document.createElement('span')
-  span.className = 'pill'
-  span.contentEditable = 'false'
-  span.dataset.name = refItem.name
-  span.style.cssText = PILL_CSS
-  if (refItem.type === 'image' && refItem.preview) {
-    const im = document.createElement('img')
-    im.src = refItem.preview
-    im.style.cssText = 'width:18px;height:18px;border-radius:4px;object-fit:cover;flex:none'
-    span.appendChild(im)
-  } else {
-    const ic = document.createElement('span')
-    ic.textContent = refItem.type === 'audio' ? '🔊' : '🎞'
-    ic.style.fontSize = '13px'
-    span.appendChild(ic)
-  }
-  span.appendChild(document.createTextNode(refItem.label))
-  return span
-}
-
-// Text → nodes: [@name] becomes a pill when that reference is attached, else stays text
-function draftNodes(text) {
-  const nodes = []
-  let last = 0
-  let m
-  MENTION.lastIndex = 0
-  while ((m = MENTION.exec(text))) {
-    if (m.index > last) nodes.push(document.createTextNode(text.slice(last, m.index)))
-    const refItem = refItems.value.find(r => r.name === m[1])
-    nodes.push(refItem ? makePill(refItem) : document.createTextNode(m[0]))
-    last = MENTION.lastIndex
-  }
-  if (last < text.length) nodes.push(document.createTextNode(text.slice(last)))
-  return nodes
-}
-function renderDraft(text) {
-  const el = ed.value
-  if (!el) return
-  el.textContent = ''
-  for (const node of draftNodes(text)) el.appendChild(node)
-}
-
-function nodeText(node) {
-  if (node.nodeType === Node.TEXT_NODE) return node.textContent
-  if (node.nodeName === 'BR') return '\n'
-  if (node.classList?.contains('pill')) return `[@${node.dataset.name}]`
-  let t = ''
-  for (const c of node.childNodes) t += nodeText(c)
-  return t
-}
-function serialize() {
-  let out = ''
-  for (const node of ed.value?.childNodes || []) out += nodeText(node)
-  return out
-}
-function syncDraft() {
-  emit('update:draft', serialize())
-}
-
-function placeCaretEnd() {
-  const el = ed.value
-  if (!el) return
-  const range = document.createRange()
-  range.selectNodeContents(el)
-  range.collapse(false)
-  const sel = window.getSelection()
-  sel.removeAllRanges()
-  sel.addRange(range)
-}
-
-function saveMentionRange() {
-  const sel = window.getSelection()
-  if (sel?.rangeCount && ed.value?.contains(sel.anchorNode)) mentionRange.value = sel.getRangeAt(0).cloneRange()
-}
-
-function insertNode(node, trailingSpace = false) {
-  const el = ed.value
-  const sel = window.getSelection()
-  let range
-  const savedRange = mentionRange.value
-  if (savedRange && el.contains(savedRange.commonAncestorContainer)) {
-    el.focus()
-    sel.removeAllRanges()
-    sel.addRange(savedRange)
-    mentionRange.value = null
-    range = sel.getRangeAt(0)
-  } else if (sel.rangeCount && el.contains(sel.anchorNode)) {
-    el.focus()
-    range = sel.getRangeAt(0)
-  } else {
-    el.focus()
-    range = document.createRange()
-    range.selectNodeContents(el)
-    range.collapse(false)
-  }
-  range.deleteContents()
-  range.insertNode(node)
-  let after = node
-  if (trailingSpace) {
-    const space = document.createTextNode(' ')
-    node.after(space)
-    after = space
-  }
-  range.setStartAfter(after)
-  range.collapse(true)
-  sel.removeAllRanges()
-  sel.addRange(range)
-  syncDraft()
-}
-
-function insertMention(refItem) {
-  atMenu.value = false
-  insertNode(makePill(refItem), true)
-}
-function toggleMentionMenu() {
-  if (atMenu.value) {
-    atMenu.value = false
-    mentionRange.value = null
-  } else {
-    saveMentionRange()
-    atMenu.value = true
-  }
-}
-
-// Re-render only on external draft changes (enhance, clear, resend) — not our
-// own edits — so the caret isn't disturbed mid-type.
-watch(
-  () => props.draft,
-  v => {
-    if (ed.value && v !== serialize()) {
-      renderDraft(v)
-      nextTick(placeCaretEnd)
-    }
-  },
-)
-// Attachments changed: stale pills may need to re-pill or drop back to text.
-watch(
-  () => refItems.value.map(r => `${r.name}:${r.key}`).join(','),
-  () => {
-    if (ed.value) {
-      renderDraft(serialize())
-      syncDraft()
-    }
-  },
-)
-onMounted(() => renderDraft(props.draft))
-
 function onVideo(e) {
   emit('files', e.target.files)
   e.target.value = ''
 }
-
-function onKey(e) {
-  if (e.key === '@' && refsActive.value && refItems.value.length) {
-    e.preventDefault()
-    saveMentionRange()
-    atMenu.value = true
-  } else if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault()
-    emit('send')
-  } else if (e.key === 'Enter' && e.shiftKey) {
-    e.preventDefault()
-    insertNode(document.createTextNode('\n'))
-  }
-}
-// Copy / cut: put the selection on the clipboard as plain text with each pill
-// written as its [@name] — the browser's own copy drops the pills (they're
-// non-editable elements with no text of their own), leaving blanks.
-function selectionText() {
-  const sel = window.getSelection()
-  if (!sel?.rangeCount || sel.isCollapsed || !ed.value?.contains(sel.anchorNode)) return null
-  const holder = document.createElement('div')
-  holder.appendChild(sel.getRangeAt(0).cloneContents())
-  return nodeText(holder)
-}
-function onCopy(e) {
-  const text = selectionText()
-  if (text == null) return
-  e.clipboardData.setData('text/plain', text)
-  e.preventDefault()
-}
-function onCut(e) {
-  const text = selectionText()
-  if (text == null) return
-  e.clipboardData.setData('text/plain', text)
-  e.preventDefault()
-  window.getSelection().getRangeAt(0).deleteContents()
-  syncDraft()
-}
-// Pasted screenshots become attachments; everything else pastes as plain text
-// (so copied rich markup can't get into the contenteditable).
-function onPaste(e) {
-  const imgs = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith('image/'))
-  if (imgs.length) {
-    e.preventDefault()
-    return emit('files', imgs)
-  }
-  const text = e.clipboardData?.getData('text/plain')
-  if (text != null) {
-    e.preventDefault()
-    // [@name] in pasted text turns into pills for the references that are attached
-    for (const node of draftNodes(text)) insertNode(node)
-  }
-}
 function onDrop(e) {
   drag.value = false
   emit('files', e.dataTransfer?.files)
-}
-function focusPrompt() {
-  ed.value?.focus()
 }
 defineExpose({ focusPrompt })
 </script>
@@ -317,59 +80,19 @@ defineExpose({ focusPrompt })
 <template>
   <div class="compose" @dragover.prevent="drag = true" @dragleave.prevent="drag = false" @drop.prevent="onDrop">
     <div class="cbox" :class="{ drag }" @click.self="ed?.focus()">
-      <div v-if="attachments.length || mediaMode || audioClip" class="atts">
-        <div v-if="mediaMode || audioClip" class="plus">
-          <button
-            class="addtile"
-            :title="audioClip ? 'Upload an audio clip' : 'Add references — pick from your media or upload'"
-            @click="audioClip ? aud?.click() : emit('library')"
-          >
-            +
-          </button>
-        </div>
-        <div
-          v-for="a in attachments"
-          :key="a.key"
-          class="att"
-          :class="{ uploading: a.uploading, ins: canInsert(a), unused: unused.has(a.key) }"
-          :title="
-            unused.has(a.key)
-              ? 'This model can\'t use this — it won\'t be sent'
-              : canInsert(a)
-                ? 'Click to add this reference to the prompt'
-                : ''
-          "
-          @click="insertAtt(a)"
-        >
-          <div class="att-media">
-            <div v-if="a.audio" class="att-audio" title="Audio reference">🔊</div>
-            <video
-              v-else-if="a.video"
-              :src="a.preview"
-              muted
-              playsinline
-              disablepictureinpicture
-              preload="metadata"
-            ></video>
-            <img v-else :src="a.preview" alt="attachment" />
-          </div>
-          <button class="attx" title="Remove" @click.stop="emit('remove', a)">×</button>
-          <!-- Hover: a slightly larger still preview (no playback / PiP) -->
-          <div class="att-zoom">
-            <video v-if="a.video" :src="a.preview" muted playsinline disablepictureinpicture preload="metadata"></video>
-            <span v-else-if="a.audio" class="zoom-audio">🔊</span>
-            <img v-else :src="a.preview" alt="" />
-          </div>
-        </div>
-      </div>
-      <div v-if="unused.size" class="unused-note">
-        {{ unused.size }} attachment{{ unused.size === 1 ? '' : 's' }} won't be sent — this model can't use
-        {{ unused.size === 1 ? 'it' : 'them' }}.
-        <button class="clearall" @click="removeUnused">Remove</button>
-      </div>
-      <div v-if="attachments.length" class="clearrow">
-        <button class="clearall" title="Remove every attached image and video" @click="emit('clear')">Clear all</button>
-      </div>
+      <ComposerAttachments
+        :attachments="attachments"
+        :unused="unused"
+        :insertable="refByKey"
+        :media-mode="mediaMode"
+        :audio-clip="audioClip"
+        @add-clip="aud?.click()"
+        @library="emit('library')"
+        @insert="insertAtt"
+        @remove="a => emit('remove', a)"
+        @clear="emit('clear')"
+        @remove-unused="removeUnused"
+      />
 
       <div
         ref="ed"
@@ -450,26 +173,6 @@ defineExpose({ focusPrompt })
 </template>
 
 <style scoped>
-.clearrow {
-  position: absolute;
-  top: 10px;
-  right: 12px;
-  z-index: 2;
-}
-.clearall {
-  border: 1px solid var(--sborder);
-  border-radius: 999px;
-  background: var(--sbg);
-  color: var(--smuted);
-  font: inherit;
-  font-size: 11px;
-  padding: 2px 9px;
-  cursor: pointer;
-}
-.clearall:hover {
-  color: var(--sdanger);
-  border-color: var(--sdanger);
-}
 .est {
   font-size: 12.5px;
   color: var(--saccent);
@@ -498,121 +201,7 @@ defineExpose({ focusPrompt })
   border-color: var(--saccent);
   background: var(--saccent-soft);
 }
-.atts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding-bottom: 8px;
-}
-.att {
-  position: relative;
-  width: 52px;
-  height: 52px;
-}
-.att.unused {
-  opacity: 0.4;
-  filter: grayscale(1);
-}
-.unused-note {
-  padding: 2px 12px 6px;
-  font-size: 12px;
-  color: var(--swarn);
-}
-.att.ins {
-  cursor: pointer;
-}
-.att-media {
-  width: 100%;
-  height: 100%;
-  border-radius: 9px;
-  overflow: hidden;
-  border: 1px solid var(--sborder);
-}
-.att.ins:hover .att-media {
-  border-color: var(--saccent);
-}
-.att-media video,
-.att-media img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.att-audio {
-  width: 100%;
-  height: 100%;
-  display: grid;
-  place-items: center;
-  font-size: 22px;
-  background: var(--saccent-soft);
-}
-/* Hover: a larger still preview floating above the thumbnail */
-.att-zoom {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
-  display: none;
-  z-index: 30;
-  padding: 3px;
-  background: var(--spanel2);
-  border: 1px solid var(--sborder);
-  border-radius: var(--r);
-  box-shadow: var(--shadow-pop);
-}
-.att:hover .att-zoom {
-  display: block;
-}
-.att-zoom img,
-.att-zoom video {
-  display: block;
-  max-width: 200px;
-  max-height: 200px;
-  border-radius: 5px;
-}
-.zoom-audio {
-  display: grid;
-  place-items: center;
-  width: 120px;
-  height: 64px;
-  font-size: 30px;
-}
-.plus {
-  position: relative;
-}
-.addtile {
-  width: 52px;
-  height: 52px;
-  border-radius: 9px;
-  border: 1px dashed var(--sborder);
-  background: var(--sbg2);
-  color: var(--smuted);
-  font-size: 22px;
-  cursor: pointer;
-}
-.addtile:hover {
-  border-color: var(--saccent);
-  color: var(--sfg);
-}
-.att.uploading {
-  opacity: 0.5;
-}
-.attx {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 17px;
-  height: 17px;
-  display: grid;
-  place-items: center;
-  border: none;
-  border-radius: 5px;
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-  cursor: pointer;
-  font-size: 13px;
-  line-height: 1;
-}
+
 .modes {
   display: flex;
   gap: 6px;

@@ -417,7 +417,7 @@ describe('ModelPicker row badges', () => {
 })
 
 describe('ModelPicker uncensored filter', () => {
-  const MODELS = [
+  const CATALOGUE = [
     { id: 'venice/lustify-v8', name: 'Venice: Lustify', uncensored: true },
     { id: 'venice/flux-2-pro', name: 'Venice: Flux 2 Pro' },
     { id: 'or/img', name: 'OpenRouter Img' },
@@ -429,7 +429,10 @@ describe('ModelPicker uncensored filter', () => {
   })
 
   it('narrows the list to uncensored models, dropping providers left empty', async () => {
-    const w = mount(ModelPicker, { attachTo: document.body, props: { models: MODELS, label: 'Image', kind: 'image' } })
+    const w = mount(ModelPicker, {
+      attachTo: document.body,
+      props: { models: CATALOGUE, label: 'Image', kind: 'image' },
+    })
     await w.find('.picker-btn').trigger('click')
     await openFilters(w)
     // Venice (uncensored + plain) and OpenRouter → two providers before filtering
@@ -450,7 +453,7 @@ describe('ModelPicker uncensored filter', () => {
   it('is only offered when the list has uncensored models', async () => {
     const w = mount(ModelPicker, {
       attachTo: document.body,
-      props: { models: MODELS.slice(1), label: 'Image', kind: 'image' },
+      props: { models: CATALOGUE.slice(1), label: 'Image', kind: 'image' },
     })
     await w.find('.picker-btn').trigger('click')
     await openFilters(w)

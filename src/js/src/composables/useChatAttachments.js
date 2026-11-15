@@ -103,10 +103,10 @@ export function useChatAttachments({
         true,
       )
     }
-    const images = [...list].filter(f => f.type.startsWith('image/'))
-    if (images.length) {
+    const pictures = [...list].filter(f => f.type.startsWith('image/'))
+    if (pictures.length) {
       attachEach(
-        images,
+        pictures,
         f => URL.createObjectURL(f),
         (f, id) => uploadChatAttachment(id, f),
       )

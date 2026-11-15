@@ -1,13 +1,13 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useDropdown } from '../../composables/useDropdown'
-import { useModelFavourites } from '../../composables/useModelFavourites'
-import { useShowHidden } from '../../composables/useShowHidden'
-import { useUncensoredOnly } from '../../composables/useUncensoredOnly'
-import { useModelFilters } from '../../composables/useModelFilters'
+import { useModelList } from '../../composables/useModelList'
+import { usePopPlacement } from '../../composables/usePopPlacement'
+import { ALL_PROVIDERS, providerOf } from '../../composables/modelTags'
+import { PRIVACY, UNCENSORED } from '../../utils/modelBadges'
+import ModelBadge from './ModelBadge.vue'
 import ModelFilterPanel from './ModelFilterPanel.vue'
-import { PROVIDER_COLOR, TAG_LABELS, tagColor } from '../../composables/modelTags'
-import { chatImageModelTakesCharacters } from '../../composables/useCharacters'
+import ModelRow from './ModelRow.vue'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -25,264 +25,55 @@ const emit = defineEmits(['update:modelValue'])
 
 const query = ref('')
 const searchInput = ref(null)
-
-const current = computed(() => props.models.find(m => m.id === props.modelValue))
-
-const { favourites, isFavourite, toggleFavourite } = useModelFavourites()
-
-// Hidden models (not enabled for this API key, or retired) only show behind "Show
-// hidden" — except the current pick, so the picker never loses it
-const { showHidden } = useShowHidden()
-const hiddenCount = computed(() => props.models.filter(m => m.hidden).length)
-// "Uncensored only" narrows the list the same way (the current pick always stays)
-const { uncensoredOnly } = useUncensoredOnly()
-const uncensoredCount = computed(() => props.models.filter(m => m.uncensored && (showHidden.value || !m.hidden)).length)
-const visibleModels = computed(() =>
-  props.models.filter(
-    m =>
-      m.id === props.modelValue ||
-      ((showHidden.value || !m.hidden) && (!uncensoredOnly.value || !uncensoredCount.value || m.uncensored)),
-  ),
-)
-
-// Providers: Pollo ("pollo/…", billed in Pollo credits), Venice ("venice/…",
-// billed to the Venice account) and OpenRouter (everything else).
-const ALL_PROVIDERS = {
-  pollo: { label: 'Pollo', title: 'Runs on your Pollo account (billed in Pollo credits)' },
-  venice: { label: 'Venice', title: 'Runs on your Venice account (billed in Venice credit)' },
-  openrouter: { label: 'OpenRouter', title: 'Runs on OpenRouter (billed in OpenRouter credits)' },
-}
-const providerOf = id => {
-  const prefix = (id || '').split('/')[0]
-  return prefix === 'pollo' || prefix === 'venice' ? prefix : 'openrouter'
-}
-
-const { filters, toggleProvider, toggleTag, clear: clearFilters, hasActive } = useModelFilters()
-
-// Provider facet: which providers the list spans, with counts. Chips are only
-// offered when more than one provider is present.
-const providerCounts = computed(() => {
-  const c = {}
-  for (const m of visibleModels.value) {
-    const p = providerOf(m.id)
-    c[p] = (c[p] || 0) + 1
-  }
-  return c
-})
-const providersPresent = computed(() => Object.keys(ALL_PROVIDERS).filter(id => providerCounts.value[id]))
-const showProviders = computed(() => providersPresent.value.length > 1)
-
-// Tag facet: the capability tags present across this kind's models, with counts.
-const tagCounts = computed(() => {
-  const c = {}
-  for (const m of visibleModels.value) for (const t of m.tags || []) c[t] = (c[t] || 0) + 1
-  return c
-})
-const tagsPresent = computed(() =>
-  Object.keys(TAG_LABELS)
-    .filter(s => tagCounts.value[s])
-    .map(s => ({ slug: s, label: TAG_LABELS[s], n: tagCounts.value[s], color: tagColor(s) })),
-)
-
-const selProviders = computed(() => filters[props.kind].providers)
-const selTags = computed(() => filters[props.kind].tags)
-// Something other than search/show-hidden is narrowing the list
-const anyFilter = computed(() => hasActive(props.kind) || uncensoredOnly.value)
-
-// Facets AND together (provider ∧ tag); within the tag facet a model needs
-// only one of the selected tags. The current pick always stays.
-function passesFilters(m) {
-  if (m.id === props.modelValue) return true
-  if (selProviders.value.length && !selProviders.value.includes(providerOf(m.id))) return false
-  if (selTags.value.length && !(m.tags || []).some(t => selTags.value.includes(t))) return false
-  return true
-}
-
-const searched = computed(() => {
-  const faceted = visibleModels.value.filter(passesFilters)
-  const q = query.value.trim().toLowerCase()
-  return q ? faceted.filter(m => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q)) : faceted
-})
-
-function clearAll() {
-  clearFilters(props.kind)
-  uncensoredOnly.value = false
-  searchInput.value?.focus()
-}
-
 // The filter menu (providers, capabilities, uncensored, show-hidden) sits in
 // the pop-up behind the Filters button; the active picks also show as chips
 const filtersOpen = ref(false)
-const providerFacet = computed(() =>
-  showProviders.value
-    ? providersPresent.value.map(id => ({
-        id,
-        ...ALL_PROVIDERS[id],
-        n: providerCounts.value[id],
-        color: PROVIDER_COLOR[id],
-      }))
-    : [],
-)
-const hasFacets = computed(
-  () => providerFacet.value.length || tagsPresent.value.length || uncensoredCount.value || hiddenCount.value,
-)
-const filterCount = computed(() => selProviders.value.length + selTags.value.length + (uncensoredOnly.value ? 1 : 0))
-const activeChips = computed(() => [
-  ...selProviders.value.map(id => ({
-    key: `p-${id}`,
-    label: ALL_PROVIDERS[id]?.label || id,
-    color: PROVIDER_COLOR[id],
-    off: () => toggleProvider(props.kind, id),
-  })),
-  ...selTags.value.map(slug => ({
-    key: `t-${slug}`,
-    label: TAG_LABELS[slug] || slug,
-    color: tagColor(slug),
-    off: () => toggleTag(props.kind, slug),
-  })),
-  ...(uncensoredOnly.value ? [{ key: 'unc', label: 'Uncensored', off: () => (uncensoredOnly.value = false) }] : []),
-])
 
-// Favourites keep the order they were starred in; models that have left
-// the catalogue are skipped rather than shown broken
-const favouriteModels = computed(() => {
-  const byId = new Map(searched.value.map(m => [m.id, m]))
-  return (favourites[props.kind] || []).map(id => byId.get(id)).filter(Boolean)
-})
-const otherModels = computed(() => searched.value.filter(m => !isFavourite(props.kind, m.id)).slice(0, 200))
-const filtered = computed(() => [...favouriteModels.value, ...otherModels.value])
+const current = computed(() => props.models.find(m => m.id === props.modelValue))
+const list = useModelList(props, query)
+const {
+  showHidden,
+  uncensoredOnly,
+  visibleModels,
+  hiddenCount,
+  uncensoredCount,
+  showProviders,
+  providerFacet,
+  tagsPresent,
+  selProviders,
+  selTags,
+  anyFilter,
+  hasFacets,
+  filterCount,
+  activeChips,
+  filtered,
+  sections,
+  isFavourite,
+  toggleFavourite,
+  toggleProvider,
+  toggleTag,
+} = list
 
-const sections = computed(() => {
-  const out = []
-  if (favouriteModels.value.length) out.push({ id: 'fav', label: '★ Favourites', models: favouriteModels.value })
-  // Only label the main list when there's a favourites list to tell it apart from
-  out.push({ id: 'all', label: favouriteModels.value.length ? 'All models' : '', models: otherModels.value })
-  return out
-})
-
-function perMillion(price) {
-  const n = Number(price)
-  if (!price || Number.isNaN(n)) return null
-  if (n === 0) return 'free'
-  const v = n * 1e6
-  return `$${v < 1 ? v.toFixed(2) : v.toFixed(v < 10 ? 1 : 0)}`
+function clearAll() {
+  list.clearAll()
+  searchInput.value?.focus()
 }
-
-const UNCENSORED_TITLE = 'Uncensored: the provider marks this model as having no content filtering'
-
-// Venice's privacy levels
-const PRIVACY = {
-  private: { t: 'private', cls: 'private', title: "Private: runs on Venice's own servers and nothing is stored" },
-  anonymized: {
-    t: 'anonymized',
-    cls: 'anonymized',
-    title:
-      'Anonymized: Venice passes it to a third-party provider without your identity; that provider may keep the prompts and outputs',
-  },
-}
-
-// Venice prices: per image, or a quote for a ~5s video at the lowest resolution
-const fmtPrice = usd => `$${usd < 0.1 ? usd.toFixed(3).replace(/0$/, '') : usd.toFixed(2)}`
 
 const colorVar = b => (b.color ? { '--b': b.color } : null)
-const MAX_INLINE_BADGES = 2 // more than this and a row's badges fold up
-
-// The little labels beside a model: warnings first, then what it can do and costs
-function badges(m) {
-  const kindBadges = { text: textBadges, image: imageBadges, video: videoBadges }[props.kind] || (() => [])
-  const price = props.kind === 'text' ? [] : priceBadge(m)
-  return [...flagBadges(m), ...price, ...kindBadges(m), ...tagBadges(m)].filter(Boolean)
-}
-
-function flagBadges(m) {
-  return [
-    // First, so it's the one thing you can't miss
-    m.uncensored && { t: 'uncensored', title: UNCENSORED_TITLE, cls: 'uncensored' },
-    PRIVACY[m.privacy],
-    m.hidden && { t: 'hidden', title: m.hidden, cls: 'hidden' },
-  ]
-}
-
-function textBadges(m) {
-  const p = perMillion(m.prompt_price)
-  const c = perMillion(m.completion_price)
-  return [p && { t: p === 'free' ? 'free' : `${p}/${c}`, title: 'Input/output price per million tokens', cls: 'price' }]
-}
-
-function priceBadge(m) {
-  if (!m.price) return []
-  const basis = m.price.basis
-  const title =
-    props.kind === 'video'
-      ? `Quoted price for ${basis || 'a default video'} (longer or sharper costs more)`
-      : `Price per image${basis ? ` (${basis})` : ''}`
-  return [{ t: fmtPrice(m.price.usd), title, cls: 'price' }]
-}
-
-function imageBadges(m) {
-  return [
-    m.conversational && {
-      t: 'context',
-      title: 'Sees the conversation (text and earlier images), like the Gemini app',
-      cls: 'context',
-    },
-    chatImageModelTakesCharacters(m) && {
-      t: 'characters',
-      title: 'Can use characters (sends their reference images)',
-      cls: 'characters',
-    },
-  ]
-}
-function videoBadges(m) {
-  const d = m.durations
-  return [d?.length && { t: `${Math.min(...d)}–${Math.max(...d)}s`, title: 'Durations', cls: 'duration' }]
-}
-
-// What each model can do, from the backend's capability tags; each tag has its own colour
-const tagBadges = m =>
-  (m.tags || []).map(slug => ({
-    t: TAG_LABELS[slug] || slug,
-    title: `Capability: ${TAG_LABELS[slug] || slug}`,
-    cls: 'tag',
-    color: tagColor(slug),
-  }))
-
-// The pop-up is position: fixed, placed next to its button, so a scrolling
-// or narrow container (the chat sidebar) can't clip it. It opens upwards
-// when there's more room above, and never runs off the window.
-const popStyle = ref({})
-function place() {
-  if (!root.value) return
-  const r = root.value.getBoundingClientRect()
-  const vw = window.innerWidth
-  const vh = window.innerHeight
-  const width = Math.min(420, vw - 16)
-  const left = Math.max(8, Math.min(r.left, vw - width - 8))
-  const below = vh - r.bottom - 14
-  const above = r.top - 14
-  const up = below < 320 && above > below
-  popStyle.value = {
-    left: `${left}px`,
-    width: `${width}px`,
-    maxHeight: `${Math.max(180, up ? above : below)}px`,
-    ...(up ? { bottom: `${vh - r.top + 6}px` } : { top: `${r.bottom + 6}px` }),
-  }
-}
 
 const { open, root, toggle, close } = useDropdown({
   focus: searchInput,
   onOpen() {
     query.value = ''
-    place()
-    window.addEventListener('resize', place)
-    window.addEventListener('scroll', place, true) // any scrolling ancestor moves the button
+    placement.track()
   },
   onClose() {
     filtersOpen.value = false
-    window.removeEventListener('resize', place)
-    window.removeEventListener('scroll', place, true)
+    placement.untrack()
   },
 })
+const placement = usePopPlacement(root)
+const { popStyle } = placement
 
 // A click anywhere in the pop-up but the filter menu / its button closes the menu
 function closeFiltersOutside(e) {
@@ -333,16 +124,8 @@ function onKeydown(e) {
         <span class="picker-value">
           <template v-if="loading">Loading…</template>
           <template v-else>{{ current?.name || 'None' }}</template>
-          <span v-if="!loading && current?.uncensored" class="item-badge uncensored picked" :title="UNCENSORED_TITLE"
-            >uncensored</span
-          >
-          <span
-            v-if="!loading && PRIVACY[current?.privacy]"
-            class="item-badge picked"
-            :class="PRIVACY[current.privacy].cls"
-            :title="PRIVACY[current.privacy].title"
-            >{{ PRIVACY[current.privacy].t }}</span
-          >
+          <ModelBadge v-if="!loading && current?.uncensored" :badge="UNCENSORED" picked />
+          <ModelBadge v-if="!loading && PRIVACY[current?.privacy]" :badge="PRIVACY[current.privacy]" picked />
         </span>
       </span>
       <span class="chev">▾</span>
@@ -418,67 +201,24 @@ function onKeydown(e) {
       <div class="picker-list">
         <template v-for="section in sections" :key="section.id">
           <div v-if="section.label" class="picker-section">{{ section.label }}</div>
-          <button
+          <ModelRow
             v-if="section.id === 'all' && kind !== 'text' && allowNone && !query"
-            type="button"
-            class="picker-item"
-            :class="{ selected: !modelValue }"
-            @click="pick(null)"
-          >
-            <span class="item-name">None</span>
-            <span class="item-id">Disable {{ kind }} generation</span>
-          </button>
-          <div
+            none
+            :kind="kind"
+            :selected="!modelValue"
+            @pick="pick(null)"
+          />
+          <ModelRow
             v-for="m in section.models"
             :key="m.id"
-            role="button"
-            tabindex="0"
-            class="picker-item"
-            :class="{ selected: m.id === modelValue }"
-            @click="pick(m)"
-            @keydown.enter.prevent="pick(m)"
-          >
-            <span class="item-row">
-              <span class="item-name">{{ m.name }}</span>
-              <span
-                v-if="showProviders"
-                class="row-provider"
-                :class="providerOf(m.id)"
-                :title="ALL_PROVIDERS[providerOf(m.id)].title"
-                >{{ ALL_PROVIDERS[providerOf(m.id)].label }}</span
-              >
-              <span class="item-badges" :class="{ collapsed: badges(m).length > MAX_INLINE_BADGES }">
-                <!-- Long lists fold into coloured dots; hovering unfolds the labels -->
-                <span v-if="badges(m).length > MAX_INLINE_BADGES" class="badge-dots" aria-hidden="true">
-                  <span v-for="b in badges(m)" :key="b.t" class="dot" :class="b.cls" :style="colorVar(b)"></span>
-                  <span class="dots-n">{{ badges(m).length }}</span>
-                </span>
-                <span class="badge-list">
-                  <span
-                    v-for="b in badges(m)"
-                    :key="b.t"
-                    class="item-badge"
-                    :class="b.cls"
-                    :style="colorVar(b)"
-                    :title="b.title"
-                    >{{ b.t }}</span
-                  >
-                </span>
-              </span>
-              <button
-                type="button"
-                class="star"
-                :class="{ on: isFavourite(kind, m.id) }"
-                :title="isFavourite(kind, m.id) ? 'Remove from favourites' : 'Add to favourites'"
-                :aria-pressed="isFavourite(kind, m.id)"
-                @click.stop="toggleFavourite(kind, m.id)"
-                @keydown.enter.stop
-              >
-                {{ isFavourite(kind, m.id) ? '★' : '☆' }}
-              </button>
-            </span>
-            <span class="item-id">{{ m.id }}</span>
-          </div>
+            :model="m"
+            :kind="kind"
+            :selected="m.id === modelValue"
+            :favourite="isFavourite(kind, m.id)"
+            :show-provider="showProviders"
+            @pick="pick(m)"
+            @toggle-favourite="toggleFavourite(kind, m.id)"
+          />
         </template>
         <div v-if="!filtered.length" class="picker-empty">
           <template v-if="query">No models match “{{ query }}”</template>
@@ -607,32 +347,6 @@ function onKeydown(e) {
   color: var(--p-openrouter);
 }
 
-/* Provider colour on the closed-picker tag reused by the row provider label */
-.row-provider {
-  flex-shrink: 0;
-  font-size: 0.62rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  color: var(--text2);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 0 5px;
-  line-height: 1.5;
-}
-.row-provider.pollo {
-  color: var(--p-pollo);
-  border-color: color-mix(in srgb, var(--p-pollo) 45%, transparent);
-}
-.row-provider.venice {
-  color: var(--p-venice);
-  border-color: color-mix(in srgb, var(--p-venice) 45%, transparent);
-}
-.row-provider.openrouter {
-  color: var(--p-openrouter);
-  border-color: color-mix(in srgb, var(--p-openrouter) 45%, transparent);
-}
-
 .tab-hint {
   display: block;
   margin: 8px auto 0;
@@ -715,148 +429,6 @@ function onKeydown(e) {
   padding: 4px;
 }
 
-.picker-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  width: 100%;
-  background: none;
-  border: none;
-  border-radius: 8px;
-  padding: 7px 10px;
-  color: var(--text);
-  cursor: pointer;
-  text-align: left;
-}
-
-.picker-item:hover {
-  background: var(--shover);
-}
-
-.picker-item.selected {
-  background: var(--saccent-soft);
-}
-
-.item-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.item-name {
-  font-size: 0.87rem;
-}
-
-.item-id {
-  font-size: 0.72rem;
-  color: var(--text2);
-  font-family: monospace;
-}
-
-.picker-item {
-  position: relative;
-}
-.item-badges {
-  position: relative;
-  flex-shrink: 0;
-  margin-left: auto;
-}
-.badge-list {
-  display: flex;
-  gap: 4px;
-}
-/* Folded: just coloured dots (one per badge) + a count; the labels open on hover */
-.item-badges.collapsed .badge-list {
-  display: none;
-  position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: 5;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  width: max-content;
-  max-width: 300px;
-  margin-top: 2px;
-  padding: 6px;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-}
-.item-badges.collapsed:hover .badge-list,
-.item-badges.collapsed:focus-within .badge-list {
-  display: flex;
-}
-.badge-dots {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: var(--surface2);
-  cursor: default;
-}
-.item-badges.collapsed:hover .badge-dots {
-  outline: 1px solid var(--border);
-}
-.dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-}
-.dots-n {
-  margin-left: 2px;
-  font-size: 0.65rem;
-  color: var(--text2);
-}
-
-/* Every badge is the same pill: its hue comes from --b alone (text colour, tinted
-   fill, and the folded dot), so they stay consistent whatever they say */
-.item-badge {
-  --b: var(--text2);
-  font-size: 0.65rem;
-  font-weight: 600;
-  line-height: 1.5;
-  padding: 1px 7px;
-  border-radius: 6px;
-  white-space: nowrap;
-  color: var(--b);
-  background: color-mix(in srgb, var(--b) 16%, transparent);
-}
-.dot {
-  background: var(--b, var(--text2));
-}
-:is(.item-badge, .dot).uncensored {
-  --b: #ff8a6e;
-}
-:is(.item-badge, .dot).private {
-  --b: #4fd1a5;
-}
-:is(.item-badge, .dot).anonymized {
-  --b: var(--text2);
-}
-:is(.item-badge, .dot).characters {
-  --b: #e68fd0; /* pastel magenta */
-}
-:is(.item-badge, .dot).context {
-  --b: #5fb0f0; /* pastel sky blue */
-}
-:is(.item-badge, .dot).duration {
-  --b: #3fcabf; /* pastel teal */
-}
-:is(.item-badge, .dot).price {
-  --b: #e8a33d;
-}
-:is(.item-badge, .dot).hidden {
-  --b: #c9a227;
-}
-
-.item-badge.picked {
-  margin-left: 6px;
-  vertical-align: middle;
-}
-
 .picker-section {
   padding: 8px 10px 4px;
   font-size: 0.65rem;
@@ -869,36 +441,6 @@ function onKeydown(e) {
   margin-top: 4px;
   border-top: 1px solid var(--border);
   padding-top: 10px;
-}
-
-.star {
-  flex-shrink: 0;
-  background: none;
-  border: none;
-  color: var(--text2);
-  font-size: 1rem;
-  line-height: 1;
-  padding: 2px 4px;
-  border-radius: 6px;
-  cursor: pointer;
-  opacity: 0.45;
-  transition:
-    opacity 0.15s,
-    color 0.15s;
-}
-
-.picker-item:hover .star,
-.star:focus-visible {
-  opacity: 1;
-}
-
-.star:hover {
-  color: var(--yellow);
-}
-
-.star.on {
-  color: var(--yellow);
-  opacity: 1;
 }
 
 .picker-empty {

@@ -12,14 +12,13 @@ export function upsert(list, item) {
 // Why the current mode and models can't use characters, or null if they can
 // (mirrors Turn._characters_usable in web/chat/turn.py). Unknown models (catalogue still
 // loading) count as able, like on the server.
-function characterBlocker({ mode, selected, textInfo, imageInfo, videoInfo }) {
-  if (mode === 'text') return null
-  if (mode === 'video') {
-    // Only video models that take reference images (Venice refs→video, motion control)
-    return videoInfo && (videoInfo.reference_images || videoInfo.family === 'motion')
-      ? null
-      : "This video model doesn't take reference images, so it can't use characters."
-  }
+function videoBlocker(videoInfo) {
+  // Only video models that take reference images (Venice refs→video, motion control)
+  return videoInfo && (videoInfo.reference_images || videoInfo.family === 'motion')
+    ? null
+    : "This video model doesn't take reference images, so it can't use characters."
+}
+function imageBlocker({ mode, selected, textInfo, imageInfo }) {
   if (!selected.image) return 'Pick an image model to use characters.'
   if (imageInfo && !chatImageModelTakesCharacters(imageInfo)) {
     return `${imageInfo.name} can't take reference images, so it can't use characters.`
@@ -28,6 +27,10 @@ function characterBlocker({ mode, selected, textInfo, imageInfo, videoInfo }) {
     return `${textInfo.name} can't call tools, so Auto mode can't use characters.`
   }
   return null
+}
+function characterBlocker(ctx) {
+  if (ctx.mode === 'text') return null
+  return ctx.mode === 'video' ? videoBlocker(ctx.videoInfo) : imageBlocker(ctx)
 }
 
 // Characters for the open chat: every saved one plus the chat's own (ad
