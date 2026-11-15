@@ -10,8 +10,6 @@ repos:
       - id: check-yaml
       - id: check-added-large-files
         args: [--maxkb=1024]
-        # The generated type baseline can exceed the source-file size cap.
-        exclude: ^pyright-baseline\.json$
       - id: end-of-file-fixer
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]

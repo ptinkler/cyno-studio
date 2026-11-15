@@ -102,7 +102,7 @@ extend-immutable-calls = [
 [tool.ruff.lint.per-file-ignores]
 # Tests only, approved by the maintainer:
 # - S101: assert is how pytest tests express checks; the -O concern behind the rule never applies.
-# - ANN: basedpyright strict already requires annotations (tracked in pyright-baseline.json); no double-reporting.
+# - ANN: basedpyright strict already requires annotations (enforced there); no double-reporting.
 # - ARG: fixtures requested for their side effects and stand-ins that must match a replaced signature.
 "tests/*" = ["S101", "ANN", "ARG"]
 
@@ -114,11 +114,9 @@ known-third-party = ["alembic"]
 quote-style = "double"
 line-ending = "lf"
 
-# Keep strict diagnostics enabled. The baseline captures existing typing debt;
-# new diagnostics fail lint and baseline updates should be reviewed deliberately.
+# Strict type checking with no baseline: every diagnostic fails lint.
 [tool.basedpyright]
 typeCheckingMode = "strict"
-baselineFile = "pyright-baseline.json"
 reportExplicitAny = "error"
 reportAny = "error"
 reportUnknownVariableType = "error"
