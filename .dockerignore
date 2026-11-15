@@ -21,7 +21,6 @@ cache/
 
 # Node
 src/js/node_modules/
-src/py/web/static/
 
 # Build artifacts
 dist/

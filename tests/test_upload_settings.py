@@ -13,11 +13,13 @@ import web.api as api_mod
 from tests.errors import NoRouteError
 from tests.jsonpath import seq, text
 from tests.stubs import stub
-from web import image_hosts, public_media, upload_settings
 from web.core import config
 from web.core.metadata.models import User
-from web.image_hosts import HostedFileStatusError, LitterboxTimeoutError
-from web.upload_settings import UploadPrefs
+from web.media import public as public_media
+from web.uploads import hosts as image_hosts
+from web.uploads import settings as upload_settings
+from web.uploads.hosts import HostedFileStatusError, LitterboxTimeoutError
+from web.uploads.settings import UploadPrefs
 
 
 def _same_page(page: str) -> str:

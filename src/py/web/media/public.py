@@ -21,8 +21,10 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from web.auth import user_secret
+from web.auth.session import user_secret
 from web.core import config
+
+_TOKEN_PARTS = 3  # a signed token is <payload>.<expiry>.<signature>
 
 router = APIRouter(prefix="/api/public-media")
 
@@ -60,7 +62,7 @@ def sign_media_token(filepath: Path, ttl_seconds: int) -> str:
 def _resolve_token(token: str) -> Path | None:
     """The valid, unexpired, in-bounds file a token points to, else None."""
     parts = token.split(".")
-    if len(parts) != 3:
+    if len(parts) != _TOKEN_PARTS:
         return None
     b64path, exp_s, sig_b64 = parts
     payload = f"{b64path}.{exp_s}"

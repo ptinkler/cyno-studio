@@ -35,7 +35,6 @@ assets/
 # Node.js / Vue frontend
 node_modules/
 src/js/node_modules/
-src/py/web/static/
 *.local
 # Build artifacts
 dist/

@@ -8,15 +8,16 @@ import logging
 import threading
 import time
 from collections.abc import Mapping
+from http import HTTPStatus
 from pathlib import Path
 
 import requests
 from bs4 import BeautifulSoup
 from pydantic import TypeAdapter
 
-from web.public_media import selfhost_url
+from web.media.public import selfhost_url
 from web.types import JsonValue
-from web.upload_settings import UploadPrefs, current_upload_prefs
+from web.uploads.settings import UploadPrefs, current_upload_prefs
 
 log = logging.getLogger(__name__)
 
@@ -371,7 +372,7 @@ def upload_to_uguu(filepath: Path) -> str:
             resp = requests.post(UGUU_URL, files={"files[]": (filepath.name, f)}, timeout=(8, 60))
     except requests.RequestException as exc:
         raise UploadFailedError("uguu.se", exc) from exc
-    if resp.status_code != 200:
+    if resp.status_code != HTTPStatus.OK:
         raise _http_failure("uguu.se", resp)
     try:
         data = _UGUU_RESPONSE.validate_json(resp.text)
@@ -413,7 +414,7 @@ def _upload_to_litterbox(filepath: Path, expiry_minutes: int = 60) -> str:
     except (requests.exceptions.SSLError, requests.exceptions.ConnectionError) as exc:
         log.warning("litterbox upload failed — %s: %s", type(exc).__name__, exc)
         raise UploadFailedError("Litterbox", exc) from exc
-    if resp.status_code != 200 or not resp.text.startswith("https://"):
+    if resp.status_code != HTTPStatus.OK or not resp.text.startswith("https://"):
         err = _http_failure("Litterbox", resp)
         log.warning("%s", err)
         raise err
@@ -436,7 +437,7 @@ def _upload_to_tmpfiles(filepath: Path, expiry_minutes: int = 60) -> str:
         data = _TMPFILES_RESPONSE.validate_json(resp.text)
     except (requests.RequestException, ValueError) as exc:
         raise UploadRejectedError("tmpfiles.org", exc) from exc
-    if resp.status_code != 200:
+    if resp.status_code != HTTPStatus.OK:
         raise _http_failure("tmpfiles.org", resp)
     if data.get("status") != "success":
         raise UploadRejectedError("tmpfiles.org", data)

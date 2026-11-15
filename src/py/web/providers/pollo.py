@@ -16,13 +16,15 @@ its media item rather than adding to the OpenRouter `cost`.
 
 import time
 from collections.abc import Mapping, Sequence
+from http import HTTPStatus
 from pathlib import Path
 from urllib.parse import urlsplit
 
 import requests
 from PIL import Image
 
-from web import image_hosts, keyctx, request_log
+from web.auth import keyctx
+from web.core import request_log
 from web.core.config import POLLO_API_TIMEOUT, POLLO_PLATFORM_BASE
 from web.core.get_task import TaskResult, get_task_status
 from web.jsonutil import as_object, as_objects, body_of
@@ -63,6 +65,7 @@ from web.providers.pollo_errors import (
 )
 from web.providers.pollo_models import MODEL_INFO, ModelInfo
 from web.types import JsonValue, ModelEntry
+from web.uploads import hosts as image_hosts
 
 PREFIX = "pollo/"
 JOB_PREFIX = "pollo:"
@@ -81,12 +84,13 @@ def is_configured() -> bool:
 NAME: str = "pollo"
 
 
-def list_models(kind: str, _refresh: bool = False) -> list[ModelEntry]:
+def list_models(kind: str, *, refresh: bool = False) -> list[ModelEntry]:
     """List Pollo models for the uniform provider interface.
 
     Pollo has no text models; image, video and audio lists
-    are already key-gated (empty without a Pollo key).
+    are already key-gated (empty without a Pollo key). Nothing is cached, so `refresh` has no effect.
     """
+    _ = refresh
     if kind == "image":
         return list_image_models()
     if kind == "video":
@@ -478,6 +482,7 @@ def submit_video(
     duration: int | None = None,
     aspect_ratio: str | None = None,
     resolution: str | None = None,
+    *,
     generate_audio: bool | None = None,
     first_frame: Path | None = None,
     source_video: Path | None = None,
@@ -537,6 +542,7 @@ def estimate_cost(
     duration: int | None = None,
     aspect_ratio: str | None = None,
     resolution: str | None = None,
+    *,
     generate_audio: bool | None = None,
     n_images: int = 0,
     prompt: str = "",
@@ -696,7 +702,7 @@ def _submit_logged(generator: PolloGenerator, outcome: request_log.LogOutcome) -
     task_id = data.get("taskId")
     if not isinstance(task_id, str):
         task_id = None
-    if not task_id and resp.status_code == 404 and body.get("message") == "Not found":
+    if not task_id and resp.status_code == HTTPStatus.NOT_FOUND and body.get("message") == "Not found":
         raise ModelNotEnabledError
     if not task_id:
         detail = "; ".join(str(i.get("message", "")) for i in as_objects(data.get("issues"))) or body.get("message")

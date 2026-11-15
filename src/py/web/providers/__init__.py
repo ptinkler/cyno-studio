@@ -13,7 +13,7 @@ from typing import Protocol, cast
 
 from web.providers import openrouter, pollo, pollo_models, venice
 from web.types import ChatChunk, JsonValue, ModelEntry, VideoJob
-from web.uploads import file_to_data_url
+from web.uploads.files import file_to_data_url
 
 
 # Dispatch order for the model catalogue (Pollo first, OpenRouter last). Each
@@ -25,7 +25,7 @@ class Provider(Protocol):
 
     def is_configured(self) -> bool: ...
 
-    def list_models(self, kind: str, refresh: bool = False, /) -> list[ModelEntry]: ...
+    def list_models(self, kind: str, *, refresh: bool = False) -> list[ModelEntry]: ...
 
 
 PROVIDERS: tuple[Provider, ...] = (pollo, venice, openrouter)

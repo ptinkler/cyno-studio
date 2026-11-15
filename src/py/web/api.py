@@ -24,28 +24,31 @@ from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from web import characters, keyctx, media, user_keys, vpn
-from web.auth import USER_COOKIE, set_user_cookie, user_secret
+from web import characters, vpn
+from web.auth import keyctx, user_keys
+from web.auth.dev_login import router as dev_login_router
+from web.auth.dev_login import seed_dev_user
+from web.auth.oauth import configured_providers, register_providers
+from web.auth.oauth_routes import router as oauth_router
+from web.auth.passwords import hash_password, needs_rehash, verify_password
+from web.auth.session import USER_COOKIE, set_user_cookie, user_secret
+from web.auth.user_keys import router as keys_router
+from web.auth.users import admin_emails, resolve_current_user
 from web.chat import router as chat_router
 from web.chat import startup_resume_chat
-from web.chat_export import router as chat_export_router
-from web.chatgpt_import import router as chatgpt_import_router
 from web.core.env import bool_env
 from web.core.metadata import get_db, reset_tenant, set_tenant
 from web.core.metadata.schema import ensure_schema
-from web.dev_login import router as dev_login_router
-from web.dev_login import seed_dev_user
-from web.oauth import configured_providers, register_providers
-from web.oauth_routes import router as oauth_router
-from web.passwords import hash_password, needs_rehash, verify_password
-from web.public_media import router as public_media_router
-from web.upload_settings import router as upload_settings_router
-from web.user_keys import router as keys_router
-from web.users import admin_emails, resolve_current_user
+from web.media.public import router as public_media_router
+from web.media.routes import router as media_router
+from web.transfer.chatgpt import router as chatgpt_import_router
+from web.transfer.export import router as chat_export_router
+from web.uploads.settings import router as upload_settings_router
 
 log = logging.getLogger(__name__)
+
+_MAX_TRACKED_LOGIN_KEYS = 2048  # above this many keys, idle ones are pruned so the map can't grow unbounded
 ROOT_DIR = Path(__file__).resolve().parents[3]  # the repo root (src/py/web/api.py)
-WEB_DIR = Path(__file__).parent.resolve()
 
 
 @asynccontextmanager
@@ -204,7 +207,7 @@ def _login_rate_limited(request: Request, email: str) -> bool:
         over_ip = _record_attempt(f"ip:{_client_ip(request)}", now)
         over_email = _record_attempt(f"email:{email}", now)
         # Opportunistically drop idle keys so the map can't grow unbounded.
-        if len(_login_attempts) > 2048:
+        if len(_login_attempts) > _MAX_TRACKED_LOGIN_KEYS:
             for k in [k for k, ts in _login_attempts.items() if all(now - t >= LOGIN_WINDOW_SECONDS for t in ts)]:
                 _login_attempts.pop(k, None)
         return over_ip or over_email
@@ -266,11 +269,11 @@ app.include_router(chat_router)
 app.include_router(chatgpt_import_router)
 app.include_router(chat_export_router)
 app.include_router(characters.router)
-app.include_router(media.router)
+app.include_router(media_router)
 app.include_router(vpn.router)
 
 
-STATIC_DIR = WEB_DIR / "static"
+STATIC_DIR = ROOT_DIR / "src" / "js" / "dist"  # the built frontend
 
 
 def static_file(path: str, static_dir: Path = STATIC_DIR) -> Path:

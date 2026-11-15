@@ -4,7 +4,7 @@ Revision ID: 0014
 Revises: 0013
 Create Date: 2026-10-15
 
-Chats imported from a ChatGPT export (web/chatgpt_import.py) remember their
+Chats imported from a ChatGPT export (web/transfer/chatgpt.py) remember their
 id there and when it last changed, as do their messages, so importing a
 newer export only adds what's new. Deleting one records it so it isn't
 imported again.

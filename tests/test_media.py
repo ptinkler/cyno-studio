@@ -1,4 +1,4 @@
-"""Tests for web.media — the library of every upload and creation."""
+"""Tests for web.media.library — the library of every upload and creation."""
 
 import io
 import os
@@ -19,8 +19,13 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 import web.core.config as config
-import web.media as media_mod
-import web.media_cache as media_cache
+import web.media.blank as blank_mod
+import web.media.cache as media_cache
+import web.media.durations as durations_mod
+import web.media.index as index_mod
+import web.media.paths as paths_mod
+import web.media.thumbs as thumbs_mod
+import web.media.video as video_mod
 from tests.jsonpath import integer, obj, rows, seq, text
 from tests.stubs import stub
 from web.core import metadata
@@ -371,9 +376,9 @@ class TestBlocked:
 
     @pytest.fixture(autouse=True)
     def _fresh_blank_checks(self) -> Iterator[None]:
-        media_mod.reset_blank_checks()
+        blank_mod.reset_blank_checks()
         yield
-        media_mod.reset_blank_checks()
+        blank_mod.reset_blank_checks()
 
     def test_counts(self, client: TestClient, blocked: Path) -> None:
         """Test that counts."""
@@ -384,12 +389,12 @@ class TestBlocked:
     ) -> None:
         """Test that black images are checked once even across restarts."""
         assert integer(client.get("/api/media/blocked"), "black") == 1
-        media_mod.reset_blank_checks()  # as after a restart
+        blank_mod.reset_blank_checks()  # as after a restart
 
         def no_decoding(data: bytes) -> NoReturn:
             pytest.fail("decoded again")
 
-        monkeypatch.setattr(media_mod, "is_blank_image", no_decoding)
+        monkeypatch.setattr(blank_mod, "is_blank_image", no_decoding)
         assert integer(client.get("/api/media/blocked"), "black") == 1
 
     def test_imported_images_are_not_checked(
@@ -448,7 +453,7 @@ class TestThumbnails:
         assert thumb.size[0] > thumb.size[1]
         # Second request comes from the cache — no re-encoding
 
-        monkeypatch.setattr(media_mod.Image, "open", stub(lambda: pytest.fail("re-encoded")))
+        monkeypatch.setattr(thumbs_mod.Image, "open", stub(lambda: pytest.fail("re-encoded")))
         assert client.get(thumb_url).content == r.content
 
     def test_video_thumb_uses_the_first_frame(
@@ -458,7 +463,7 @@ class TestThumbnails:
         (config.ROOT_DIR / "chat" / conv.id / "vid.mp4").write_bytes(b"fake mp4")
         buf = io.BytesIO()
         Image.new("RGB", (640, 360), "orange").save(buf, "JPEG")
-        monkeypatch.setattr(media_mod, "first_frame_jpeg", stub(buf.getvalue))
+        monkeypatch.setattr(thumbs_mod, "first_frame_jpeg", stub(buf.getvalue))
         r = client.get(f"/api/media/thumb/chat:{conv.id}:vid.mp4")
         assert r.status_code == 200
         assert Image.open(io.BytesIO(r.content)).size == (569, 320)
@@ -468,7 +473,7 @@ class TestThumbnails:
     ) -> None:
         """Test that unreadable file has no thumb."""
         (config.ROOT_DIR / "chat" / conv.id / "vid.mp4").write_bytes(b"fake mp4")
-        monkeypatch.setattr(media_mod, "first_frame_jpeg", stub(lambda: None))
+        monkeypatch.setattr(thumbs_mod, "first_frame_jpeg", stub(lambda: None))
         assert client.get(f"/api/media/thumb/chat:{conv.id}:vid.mp4").status_code == 404
 
 
@@ -479,7 +484,7 @@ class TestFirstFrameJpeg:
         """Test that unopenable file."""
         fp = tmp_path / "notavideo.mp4"
         fp.write_bytes(b"definitely not a video")
-        assert media_mod.first_frame_jpeg(fp) is None
+        assert video_mod.first_frame_jpeg(fp) is None
 
     def test_read_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that read fails."""
@@ -487,8 +492,8 @@ class TestFirstFrameJpeg:
         fp.write_bytes(b"\x00" * 100)
         releases: list[int] = []
         cap = _capture(readable=False, releases=releases)
-        monkeypatch.setattr(media_mod.cv2, "VideoCapture", stub(lambda: cap))
-        assert media_mod.first_frame_jpeg(fp) is None
+        monkeypatch.setattr(video_mod.cv2, "VideoCapture", stub(lambda: cap))
+        assert video_mod.first_frame_jpeg(fp) is None
         assert releases == [1]
 
     def test_success(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -496,30 +501,30 @@ class TestFirstFrameJpeg:
         fp = tmp_path / "success.mp4"
         fp.write_bytes(b"\x00" * 100)
         cap = _capture(readable=True, releases=[])
-        monkeypatch.setattr(media_mod.cv2, "VideoCapture", stub(lambda: cap))
-        assert media_mod.first_frame_jpeg(fp) is not None
+        monkeypatch.setattr(video_mod.cv2, "VideoCapture", stub(lambda: cap))
+        assert video_mod.first_frame_jpeg(fp) is not None
 
     def test_exception(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that exception."""
         fp = tmp_path / "exc.mp4"
         fp.write_bytes(b"\x00" * 100)
-        monkeypatch.setattr(media_mod.cv2, "VideoCapture", _failing_capture)
-        assert media_mod.first_frame_jpeg(fp) is None
+        monkeypatch.setattr(video_mod.cv2, "VideoCapture", _failing_capture)
+        assert video_mod.first_frame_jpeg(fp) is None
 
     def test_delete_drops_the_cached_thumb(self, client: TestClient) -> None:
         """Test that delete drops the cached thumb."""
         item = _upload(client)
         client.get(text(item, "thumb_url"))
-        assert list(media_mod.thumb_dir().iterdir())
+        assert list(paths_mod.thumb_dir().iterdir())
         client.delete(f"/api/media/{text(item, 'id')}")
-        assert not list(media_mod.thumb_dir().iterdir())
+        assert not list(paths_mod.thumb_dir().iterdir())
 
     def test_at_most_two_made_at_once(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that at most two made at once."""
         thumb_urls = [text(_upload(client, f"{n}.png", _png((n, 0, 0))), "thumb_url") for n in range(8)]
-        real, lock, state = media_mod.make_thumb, threading.Lock(), {"now": 0, "peak": 0}
+        real, lock, state = thumbs_mod.make_thumb, threading.Lock(), {"now": 0, "peak": 0}
 
-        def slow_thumb(path: Path, size: int = media_mod.THUMB_SIZE) -> Path | None:
+        def slow_thumb(path: Path, size: int = thumbs_mod.THUMB_SIZE) -> Path | None:
             with lock:
                 state["now"] += 1
                 state["peak"] = max(state["peak"], state["now"])
@@ -530,7 +535,7 @@ class TestFirstFrameJpeg:
                 with lock:
                     state["now"] -= 1
 
-        monkeypatch.setattr(media_mod, "make_thumb", slow_thumb)
+        monkeypatch.setattr(thumbs_mod, "make_thumb", slow_thumb)
 
         def status_of(url: str) -> int:
             return client.get(url).status_code
@@ -538,7 +543,7 @@ class TestFirstFrameJpeg:
         with ThreadPoolExecutor(8) as pool:
             codes = list(pool.map(status_of, thumb_urls))
         assert codes == [200] * 8
-        assert state["peak"] <= media_mod.THUMB_WORKERS
+        assert state["peak"] <= thumbs_mod.THUMB_WORKERS
 
 
 class TestUploadDedupe:
@@ -578,8 +583,8 @@ def _seed_clips(db: MetadataDB, conv: ChatConversation) -> None:
             for n in range(3)
         ],
     )
-    media_mod.invalidate_list()
-    media_mod.reset_durations(loaded=True)
+    index_mod.invalidate_list()
+    durations_mod.reset_durations(loaded=True)
 
 
 def _clip_path(db: MetadataDB, name: str) -> Path:
@@ -608,7 +613,7 @@ class TestVideoDurations:
     def test_list_build_never_opens_a_video(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that list build never opens a video."""
         monkeypatch.setattr(
-            media_mod, "_video_seconds", stub(lambda: pytest.fail("the list build read a video header"))
+            durations_mod, "video_seconds", stub(lambda: pytest.fail("the list build read a video header"))
         )
         # The clips are in the library and get built into the list, but this
         # page holds no video, so nothing opens one
@@ -628,15 +633,15 @@ class TestVideoDurations:
             reads.append(path)
             return 12.5
 
-        monkeypatch.setattr(media_mod, "_video_seconds", video_seconds)
+        monkeypatch.setattr(durations_mod, "video_seconds", video_seconds)
         items = rows(client.get("/api/media"), "items")
         clip = next(i for i in items if i["name"] == "clip_0.mp4")
         assert clip["duration"] == 12.5
         assert len(reads) == 3
         # Read once: the next request (and the next process) uses what's stored
         reads.clear()
-        media_mod.invalidate_list()
-        media_mod.reset_durations(loaded=False)  # as a fresh process would start: nothing in memory
+        index_mod.invalidate_list()
+        durations_mod.reset_durations(loaded=False)  # as a fresh process would start: nothing in memory
         assert _durations_by_name(client)["clip_0.mp4"] == 12.5
         assert reads == []
 
@@ -645,11 +650,11 @@ class TestVideoDurations:
         self, client: TestClient, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Test that a re encoded file is read again."""
-        monkeypatch.setattr(media_mod, "_video_seconds", stub(lambda: 4.0))
+        monkeypatch.setattr(durations_mod, "video_seconds", stub(lambda: 4.0))
         client.get("/api/media")
         _clip_path(db, "clip_0.mp4").write_bytes(b"longer now")
-        monkeypatch.setattr(media_mod, "_video_seconds", stub(lambda: 9.0))
-        media_mod.invalidate_list()
+        monkeypatch.setattr(durations_mod, "video_seconds", stub(lambda: 9.0))
+        index_mod.invalidate_list()
         durations = _durations_by_name(client)
         assert durations["clip_0.mp4"] == 9.0
         assert durations["clip_1.mp4"] == 4.0
@@ -659,14 +664,14 @@ class TestVideoDurations:
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Test that fill is capped so one request cannot stall."""
-        monkeypatch.setattr(media_mod, "_DURATION_FILL_BUDGET", 2)
+        monkeypatch.setattr(durations_mod, "DURATION_FILL_BUDGET", 2)
         reads: list[str] = []
 
         def video_seconds(path: str, mtime: int) -> float:
             reads.append(path)
             return 3.0
 
-        monkeypatch.setattr(media_mod, "_video_seconds", video_seconds)
+        monkeypatch.setattr(durations_mod, "video_seconds", video_seconds)
         client.get("/api/media")
         assert len(reads) == 2
 
@@ -701,8 +706,8 @@ class TestMediaCache:
         before = len(media_cache.durations())
         path = _clip_path(db, "clip_0.mp4")
         path.write_bytes(b"re-encoded")
-        monkeypatch.setattr(media_mod, "_video_seconds", stub(lambda: 7.0))
-        media_mod.invalidate_list()
+        monkeypatch.setattr(durations_mod, "video_seconds", stub(lambda: 7.0))
+        index_mod.invalidate_list()
         client.get("/api/media")
         assert len(media_cache.durations()) == before  # replaced, not added
         assert media_cache.durations()[str(path)][1] == 7.0

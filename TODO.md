@@ -28,26 +28,25 @@ Status as of 2026-11-15. Measured numbers are from running the tools, not estima
 
 ## 3. Stricter lint rules
 
-Adopted (now in `select`, code already clean): `A` (builtin shadowing: `credits` renamed `credit_cost`), `PLW` (the four `global` caches became small holder objects with public test seams `reset_blank_checks()` / `reset_sweep()`), `PLR0911`, `PLR0912`, `PLR0915`.
+Adopted and enforced: `A`, `PLW`, `PLR0911`, `PLR0912`, `PLR0915`, `PLR2004` (magic numbers: HTTP statuses are `http.HTTPStatus`, the rest are named constants) and `FBT` (flag arguments are keyword-only). Test-only ignores for `PLR0913`, `PLR2004` and `FBT` are approved and documented in `pyproject.toml`.
 
-Not adopted yet. Each needs a decision, because the violations are mostly in tests and `tests/*` per-file-ignores are limited to S101/ANN/ARG without the maintainer's approval:
-- [ ] `PLR0913` too many arguments (max 5): 50 violations. 11 are test methods whose count is pytest fixtures; 4 are 10-14 argument provider facade functions (`src/py/web/providers/__init__.py` x2, `pollo.py` x2, `venice.py` `submit_video`, `request_log.py`) that mirror the HTTP request model. Fixing them means parameter objects and touching every call site.
-- [ ] `PLR2004` magic numbers: 246 violations, 214 of them in tests (asserts on counts). In `src/py/web/` there are 32, mostly HTTP statuses (`>= 400`, 429, 404 ...): replace with `http.HTTPStatus`.
-- [ ] `FBT` boolean positional arguments: 74 violations, 58 in `src/py/web/`. Make them keyword-only.
-- Decision needed: approve test-only ignores for `PLR2004` / `PLR0913` / `FBT` (as was done for S101/ANN/ARG), or fix the tests too.
+- [ ] `PLR0913` (at most 5 arguments) is parked in `pyproject.toml`: 31 non-test functions are over. They group into a few bundles, which is the fix rather than keyword-only tricks:
+  - video submission options (`submit_video` in `providers/__init__.py`, `pollo.py`, `venice.py`, `openrouter.py`, plus the `_submit_*` helpers and `turn_generation._generate_video`): a `VideoRequest` dataclass;
+  - image generation (`generate_image` x3, `turn_generation._generate_image`): an `ImageRequest`;
+  - `stream_chat` x3: a `StreamOptions` (tools, session id, time cap, stop callback);
+  - history shaping in `chat/generation.py` (`conversation`, `image_context`, `plan_refs`);
+  - the rest one by one (`add_chat_message` has 155 test call sites: `**fields` like the other `update_*` methods; `request_log.record`; the two import methods; `estimate_cost`; `Turn.__init__`).
+  Re-enable the rule when they are done.
 - Not recommended: `EM` (128) and `CPY` (133) are noise for this repo.
 
 ## 4. Split the oversized modules
 
-Backend line counts (functions at module level):
-- [x] `src/py/web/providers/pollo_engine/video.py` is now a `video/` package: `types.py`, `models.py` (the `VIDEO_MODELS` rows, `cfg`, endpoints), `payloads.py` (the body builders); `__init__.py` re-exports the public names.
-- [x] `src/py/web/providers/venice.py` (1106 -> 754 lines): catalogue shaping moved to `venice_catalogue.py`, video input / duration / size rules to `venice_video.py` (alongside the existing `venice_errors.py` / `venice_types.py`). The HTTP client, caches and public API stay in `venice.py`: tests patch them there, so a deeper split needs the shared state moved first.
-- [ ] `src/py/web/chat/turn.py` (~1000): essentially one huge `Turn` class. Extract streaming, tool dispatch, persistence and poller start-up into collaborators.
-- [x] `src/py/web/chat/routes.py` (870 -> 592 lines): settings / instructions / spaces moved to `routes_settings.py`, attachments / media files / library / request log to `routes_media.py` (all registered from `src/py/web/chat/__init__.py`).
-- [x] `src/py/web/chat/routes_turns.py` (877 -> 392 lines): pin / favourite / regenerate / version / active-generation routes moved to `routes_media_items.py`; the shared start lock now lives in `chat/deps.py` as `start_lock`.
-- [ ] `src/py/web/media.py` (~810, 47 defs): library index, thumbnails, durations and the blank-image cache are four concerns. Split into a `media/` package.
-- [ ] `src/py/web/chatgpt_import.py` (~760), `src/py/web/providers/pollo.py` (~750), `src/py/web/providers/openrouter.py` (~590): same treatment, lower priority.
-- [x] `tests/test_chat.py` (5245 lines) is now `test_chat_conversations.py`, `test_chat_turns.py`, `test_chat_media.py`, `test_chat_images.py` and `test_chat_pollo.py`, with the shared fakes in `tests/chat_support.py`. Largest is `test_chat_media.py` (1461 lines): split further by class if it grows.
+Done: `pollo_engine/video/` package; `venice_catalogue.py` / `venice_video.py`; `chat/routes_*` (settings, media, media items, turns); the test files; `media/` (paths, video, durations, thumbs, blank, index, routes); `chat/turn*.py` as a layered chain (`turn_base` -> `turn_history` -> `turn_generation` -> `turn_tools` -> `turn`); and the loose modules of `web/` moved into packages (`auth/`, `media/`, `uploads/`, `transfer/`, `core/`).
+
+- [ ] `web/providers/pollo.py` (799): split into a `pollo/` package (catalogue, uploads, tasks and polling, submit, estimate) behind a facade `__init__`; tests patch `get_*_generator`, `submit_task`, `POLL_INTERVAL` and `_upload` on it, so they need retargeting.
+- [ ] `web/transfer/chatgpt.py` (769): the import parser vs the importer vs the upload routes.
+- [ ] `web/providers/venice.py` (754): the HTTP client and caches could move out once tests stop patching them there.
+- [ ] `src/py/web/chat/routes_media_items.py` (506), `media/routes.py` (394) are fine; keep an eye on them.
 
 ## 5. Frontend
 

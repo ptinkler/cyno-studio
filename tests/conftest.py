@@ -15,8 +15,8 @@ import requests
 # `from x import y` names bind once, and whatever they point at then is what
 # runs for the rest of the session.
 import web.api
+import web.auth.users
 import web.core.config as config_mod
-import web.users
 from web.core import metadata
 
 # Every setting the app reads from the environment. A developer's .env is
@@ -87,7 +87,7 @@ def provider_keys(monkeypatch: pytest.MonkeyPatch) -> dict[str, str | None]:
         return _TEST_PROVIDER_KEYS.get(provider) or None
 
     monkeypatch.setattr(
-        "web.keyctx.provider_key",
+        "web.auth.keyctx.provider_key",
         provider_key,
         raising=False,
     )
@@ -127,14 +127,14 @@ def _tenant(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> 
     # Match the real 1-arg signature so a stale multi-arg call fails here too.
     # Patch every module that imported the name, not just where it is defined:
     # `from .users import resolve_current_user` binds at import, so patching
-    # web.users alone would leave web.api's middleware calling the real one.
+    # web.auth.users alone would leave web.api's middleware calling the real one.
     def resolve(user_cookie: str | None = None) -> types.SimpleNamespace:
         return admin
 
     # Patch every module that imported the name, not just where it is defined:
     # `from .users import resolve_current_user` binds at import, so patching
-    # web.users alone would leave web.api's middleware calling the real one.
-    for module in (web.users, web.api):
+    # web.auth.users alone would leave web.api's middleware calling the real one.
+    for module in (web.auth.users, web.api):
         monkeypatch.setattr(module, "resolve_current_user", resolve)
     token = metadata.set_tenant(admin_id)
     try:

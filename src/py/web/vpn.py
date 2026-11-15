@@ -15,10 +15,10 @@ import requests
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from web.auth.users import require_admin
 from web.core.metadata import User
 from web.jsonutil import as_object, body_of
 from web.types import JsonValue
-from web.users import require_admin
 
 log = logging.getLogger(__name__)
 

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from fastapi import Cookie, HTTPException
 
-from web.auth import resolve_user_session
+from web.auth.session import resolve_user_session
 from web.core.env import bool_env, email_set
 from web.core.metadata import User, get_db
 
@@ -40,7 +40,7 @@ def is_admin_email(email: str | None) -> bool:
     return bool(email) and email.lower() in admin_emails()
 
 
-def admit(email: str | None, is_first_user: bool) -> tuple[bool, bool]:
+def admit(email: str | None, *, is_first_user: bool) -> tuple[bool, bool]:
     """Decide whether an authenticating email may sign in.
 
     Return an ``(allowed, is_admin)`` pair.

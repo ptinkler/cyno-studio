@@ -3,7 +3,6 @@
 from fastapi import File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 
-from web import media, request_log
 from web.chat.constants import (
     CHAT_PREVIEW_SIZE,
 )
@@ -14,10 +13,13 @@ from web.chat.helpers import (
     require_conv,
     require_own_conversation,
 )
+from web.core import request_log
 from web.core.metadata import get_db, iso
-from web.media_types import VIDEO_SUFFIXES
+from web.media.index import referenced_files
+from web.media.kinds import VIDEO_SUFFIXES
+from web.media.thumbs import thumb_response
 from web.types import JsonValue
-from web.uploads import read_audio_upload, read_image_upload, read_video_upload, safe_filename, store_deduped
+from web.uploads.files import read_audio_upload, read_image_upload, read_video_upload, safe_filename, store_deduped
 
 
 @router.post("/conversations/{conv_id}/attachments")
@@ -63,8 +65,8 @@ def api_discard_attachment(conv_id: str, filename: str) -> dict[str, bool]:
     if not name.startswith(("up_", "upv_", "upa_")):
         return {"deleted": False}
     db = get_db()
-    in_use = any(name in media.referenced_files(i) for m in db.get_chat_messages(conv_id) for i in m.media) or any(
-        lib.conversation_id == conv_id and name in media.referenced_files(lib.item) for lib in db.list_chat_library()
+    in_use = any(name in referenced_files(i) for m in db.get_chat_messages(conv_id) for i in m.media) or any(
+        lib.conversation_id == conv_id and name in referenced_files(lib.item) for lib in db.list_chat_library()
     )
     path = conversation_dir(conv_id) / name
     if in_use or not path.is_file():
@@ -94,7 +96,7 @@ async def api_chat_media_preview(conv_id: str, filename: str) -> Response:
     if not path.is_file():
         raise HTTPException(404, "Not found")
     try:
-        return await media.thumb_response(path, CHAT_PREVIEW_SIZE)
+        return await thumb_response(path, CHAT_PREVIEW_SIZE)
     except HTTPException:
         # No thumbnail could be made (odd format, half-written file): show the
         # image itself rather than a broken tile. Videos have nothing to fall back to.
@@ -107,7 +109,7 @@ async def api_chat_media_preview(conv_id: str, filename: str) -> Response:
 def api_request_log(limit: int = 100) -> dict[str, JsonValue]:
     """The latest provider requests (Venice image/video calls): what was sent and what came back, newest first.
 
-    See web/request_log.py.
+    See web/core/request_log.py.
     """
     return {"entries": request_log.recent(max(1, min(limit, 1000)))}
 

@@ -5,7 +5,7 @@ Revises: 0027
 Create Date: 2026-11-11
 
 A `media_durations` table was added and then backed out: video lengths live in
-their own small cache file instead (web/media_cache.py), deliberately not in
+their own small cache file instead (web/media/cache.py), deliberately not in
 this database, so cache rows don't sit among real records. The empty table was
 left behind on databases that saw the short-lived version.
 

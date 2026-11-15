@@ -18,8 +18,8 @@ import web.providers.venice as v
 from tests.chat_fixtures import SETTINGS, ConversationOut, png_bytes, sse_events
 from tests.jsonpath import dig, must, number, obj, rows, seq, text
 from tests.stubs import stub
-from web import request_log
 from web.chat import catalogue as chat_catalogue
+from web.core import request_log
 from web.core.metadata import MetadataDB
 from web.jsonutil import as_object
 from web.providers import openrouter

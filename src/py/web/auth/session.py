@@ -3,7 +3,7 @@
 Login is by user session only: a local admin signs in with email + password, an
 allowed user signs in via OAuth, and either way the browser carries a signed
 `user_session` cookie holding the user id. There is no API key — every
-protected endpoint requires a resolvable session (see web/users.py).
+protected endpoint requires a resolvable session (see web/auth/users.py).
 """
 
 import base64
@@ -15,6 +15,8 @@ import time
 from fastapi import Request, Response
 
 from web.core.env import bool_env_or_none
+
+_TOKEN_PARTS = 3  # a signed token is <payload>.<expiry>.<signature>
 
 # The session token and the cookie carrying it expire together.
 SESSION_TTL = 60 * 60 * 24 * 30  # 30 days
@@ -95,7 +97,7 @@ def resolve_user_session(token: str | None) -> str | None:
     if not token:
         return None
     parts = token.strip().split(".")
-    if len(parts) != 3:
+    if len(parts) != _TOKEN_PARTS:
         return None
     user_id, exp_s, sig_b64 = parts
     payload = f"{user_id}.{exp_s}"

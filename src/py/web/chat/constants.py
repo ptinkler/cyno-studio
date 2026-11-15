@@ -1,6 +1,6 @@
 """Tunables and small constant tables shared across the chat package."""
 
-from web.media_types import IMAGE_EXTS
+from web.media.kinds import IMAGE_EXTS
 
 __all__ = ["IMAGE_EXTS"]  # re-exported for the chat package
 

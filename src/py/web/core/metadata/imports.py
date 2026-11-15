@@ -1,6 +1,6 @@
 """Track imported chats and apply their message updates.
 
-The importer in ``web/chatgpt_import.py`` uses these methods to preserve source
+The importer in ``web/transfer/chatgpt.py`` uses these methods to preserve source
 ids and apply each chat's changes in a single transaction.
 """
 
@@ -167,6 +167,7 @@ class ImportMixin(DBBase):
         updates: dict[int, ImportedMessageUpdate],
         import_updated_at: float | None,
         updated_at: datetime | None,
+        *,
         show: bool,
     ) -> None:
         """Apply one chat's import in one transaction.

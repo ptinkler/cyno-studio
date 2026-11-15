@@ -30,6 +30,7 @@ import argparse
 import json
 import os
 import sys
+from http import HTTPStatus
 from typing import TYPE_CHECKING, cast
 
 import requests
@@ -52,7 +53,7 @@ def write(text: str, *, err: bool = False) -> None:
 TIMEOUT = 20
 
 
-def _models(family: str | None, all_video: bool) -> list[str]:
+def _models(family: str | None, *, all_video: bool) -> list[str]:
     """The video model keys to probe, in catalogue order."""
     keys: list[str] = []
     for key in VIDEO_GENERATORS:
@@ -91,11 +92,11 @@ def _classify(status: int, text: str) -> tuple[str, str]:
     only a real submit with valid media settles them.
     """
     low = text.lower()
-    if status == 401:
+    if status == HTTPStatus.UNAUTHORIZED:
         return "KEY?", "401 — check the API key itself"
     if status in (403, 404) or "not enabled" in low or "not authorized" in low or "no access" in low:
         return "DISABLED", f"{status} / not enabled for API access on this key"
-    if status == 200:
+    if status == HTTPStatus.OK:
         return "ENABLED", "priced the request"
     # Any other answer (typically a 400 rejecting our fake media) didn't reach
     # the enablement check — we can't tell without real media.
@@ -187,7 +188,7 @@ def main() -> int:
             "cannot determine enablement for media-input models — test those one at a time in the app."
         )
 
-    keys = _models(None if args.all_video else args.family, args.all_video)
+    keys = _models(None if args.all_video else args.family, all_video=args.all_video)
     if not keys:
         write(f"No models match family={args.family!r}.")
         return 1

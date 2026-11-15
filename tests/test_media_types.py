@@ -1,4 +1,4 @@
-"""Tests for web.media_types: the one place that says what a file is.
+"""Tests for web.media.kinds: the one place that says what a file is.
 
 These sets used to live in six modules, which is how a .webm could be a video in one and fall through to "image"
 in another.
@@ -6,7 +6,7 @@ in another.
 
 import pytest
 
-from web.media_types import AUDIO_SUFFIXES, IMAGE_SUFFIXES, VIDEO_SUFFIXES, kind_of
+from web.media.kinds import AUDIO_SUFFIXES, IMAGE_SUFFIXES, VIDEO_SUFFIXES, kind_of
 
 
 @pytest.mark.parametrize(

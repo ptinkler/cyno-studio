@@ -6,10 +6,10 @@ The video poller finishes it: audio rides the same job and download path, and is
 from collections.abc import Mapping
 from typing import NotRequired, TypedDict, cast
 
-from web import request_log
 from web.chat.errors import InvalidAudioJobError, PolloModelRequiredError
 from web.chat.helpers import conversation_dir
 from web.chat.models import AudioOptions
+from web.core import request_log
 from web.providers import pollo
 from web.types import JsonValue
 

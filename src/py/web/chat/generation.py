@@ -8,22 +8,26 @@ import json
 import re
 import uuid
 from collections.abc import Callable, Mapping
+from http import HTTPStatus
 from pathlib import Path
 from typing import cast
 
-from web import characters, providers, request_log
+from web import characters, providers
 from web.chat.catalogue import auto_ratio, model_info
 from web.chat.constants import DEFAULT_IMAGE_LIMIT, IMAGE_EXTS, TITLE_SECONDS
 from web.chat.errors import EmptyPromptError
 from web.chat.helpers import conversation_dir, effective_ids
 from web.chat.models import RefChoices
 from web.chat.tools import AUDIO_TOOL_RESULT, IMAGE_TOOL_RESULT, TITLE_PROMPT, VIDEO_TOOL_RESULT
+from web.core import request_log
 from web.core.metadata import get_db
 from web.core.metadata.models import Character, ChatMessage
 from web.jsonutil import as_object
 from web.providers import openrouter, pollo, stream_chat
 from web.types import JsonValue, VideoJob
-from web.uploads import file_to_data_url, is_blank_image
+from web.uploads.files import file_to_data_url, is_blank_image
+
+_MAX_TITLE_LINE = 80  # a model reply longer than this is not a title
 
 # Chat APIs don't accept images inside assistant messages, so images the
 # model generated ride along with the next user message, after this label
@@ -97,7 +101,7 @@ def clean_title(text: str) -> str | None:
     line = re.sub(r"^(?:\*\*)?title(?:\*\*)?\s*:\s*", "", line, flags=re.IGNORECASE)
     # Model-generated titles may wrap text in curly quotes; remove them too.
     line = line.strip(" \t\"'`*#_\u201c\u201d\u2018\u2019").rstrip(".").strip()
-    if not line or len(line) > 80:
+    if not line or len(line) > _MAX_TITLE_LINE:
         return None
     return line
 
@@ -179,6 +183,7 @@ def conversation(
     conv_id: str,
     history: list[ChatMessage],
     history_limit: int | None,
+    *,
     vision: bool,
     as_tool_calls: bool = False,
     image_limit: int | None = DEFAULT_IMAGE_LIMIT,
@@ -206,7 +211,7 @@ def conversation(
                 messages.append({"role": "user", "content": parts})
         elif msg.role == "assistant":
             carried += [p for p in (pixels(i) for i in msg.media if i["kind"] == "image") if p]
-            messages += _assistant_messages(msg, as_tool_calls)
+            messages += _assistant_messages(msg, as_tool_calls=as_tool_calls)
     if carried:  # history ended on an assistant message
         messages.append({"role": "user", "content": [CARRIED_LABEL, *carried]})
     return messages
@@ -245,7 +250,7 @@ def _user_parts(
     return parts + [pixels(item) or {"type": "text", "text": "[user attached an image]"} for item in msg.media]
 
 
-def _assistant_messages(msg: ChatMessage, as_tool_calls: bool) -> list[dict[str, JsonValue]]:
+def _assistant_messages(msg: ChatMessage, *, as_tool_calls: bool) -> list[dict[str, JsonValue]]:
     """A reply as messages: with its media as the tool calls that made it, or as notes in the text."""
     generated = [i for i in msg.media if i.get("source") == "generated" and i.get("prompt")]
     if as_tool_calls and generated:
@@ -419,7 +424,7 @@ def is_moderation_error(e: openrouter.OpenRouterError) -> bool:
     """
     if isinstance(e, pollo.PolloError):
         return bool(MODERATION.search(str(e)))
-    return e.status == 403 or bool(MODERATION.search(str(e)))
+    return e.status == HTTPStatus.FORBIDDEN or bool(MODERATION.search(str(e)))
 
 
 def failure_fields(e: openrouter.OpenRouterError) -> dict[str, JsonValue]:

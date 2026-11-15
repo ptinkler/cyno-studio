@@ -10,7 +10,7 @@ _TRUE = {"1", "true", "yes", "on"}
 _FALSE = {"0", "false", "no", "off"}
 
 
-def bool_env(name: str, default: bool = False) -> bool:
+def bool_env(name: str, *, default: bool = False) -> bool:
     """A boolean setting: 1/true/yes/on or 0/false/no/off (any case), else `default`."""
     value = os.getenv(name, "").strip().lower()
     if value in _TRUE:

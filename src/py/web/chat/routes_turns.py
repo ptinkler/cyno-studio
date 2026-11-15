@@ -35,10 +35,10 @@ from web.chat.turn import Turn
 from web.chat.workers import ctx_thread
 from web.core.metadata import get_db
 from web.core.metadata.models import ChatMessage
-from web.media_types import kind_of
+from web.media.kinds import kind_of
 from web.providers import openrouter, pollo
 from web.types import JsonValue
-from web.uploads import safe_filename
+from web.uploads.files import safe_filename
 
 log = logging.getLogger(__name__)
 
@@ -79,10 +79,10 @@ def api_estimate(data: EstimateRequest) -> dict[str, JsonValue]:
             duration,
             ratio,
             resolution,
-            data.generate_audio,
-            data.n_images,
-            data.prompt,
-            audio_params(data.audio_options),
+            generate_audio=data.generate_audio,
+            n_images=data.n_images,
+            prompt=data.prompt,
+            audio=audio_params(data.audio_options),
         )
     }
 

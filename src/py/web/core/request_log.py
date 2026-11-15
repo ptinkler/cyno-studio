@@ -33,6 +33,8 @@ from web.core import config
 from web.core.metadata import current_tenant
 from web.types import ChatChunk, JsonValue
 
+_BARE_BASE64_MIN_CHARS = 2000  # a long string with no spaces is taken to be base64 (e.g. an image)
+
 MAX_BYTES = 5 * 1024 * 1024
 _lock = threading.Lock()
 _last = threading.local()  # the latest logged call on this thread (each chat turn runs on its own)
@@ -101,7 +103,7 @@ def redact(value: JsonValue) -> JsonValue:
     if isinstance(value, str) and value.startswith("data:") and ";base64," in value:
         head, data = value.split(",", 1)
         return f"{head},… ({len(data) * 3 // 4 // 1024} KB)"
-    if isinstance(value, str) and len(value) > 2000 and " " not in value:
+    if isinstance(value, str) and len(value) > _BARE_BASE64_MIN_CHARS and " " not in value:
         return f"… ({len(value) * 3 // 4 // 1024} KB of base64)"  # a bare base64 image, e.g. Venice's "images"
     return value
 

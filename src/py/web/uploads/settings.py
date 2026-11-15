@@ -13,18 +13,19 @@ import contextlib
 import json
 import os
 import secrets
+from http import HTTPStatus
 from typing import TYPE_CHECKING, Annotated, TypedDict, cast
 
 import httpx
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from web.auth.users import require_user
 from web.core import config
 from web.core.metadata import User, current_tenant, get_db
+from web.core.net_guard import UnsafeURLError, get_public
 from web.jsonutil import loads
-from web.net_guard import UnsafeURLError, get_public
-from web.public_media import selfhost_url
-from web.users import require_user
+from web.media.public import selfhost_url
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -183,7 +184,7 @@ async def check_selfhost(data: SelfhostTest, user: Annotated[User, Depends(requi
         url = selfhost_url(test_file, base, ttl_seconds=120)
         with httpx.Client() as client:
             resp = get_public(client, url, timeout=10)
-        if resp.status_code != 200:
+        if resp.status_code != HTTPStatus.OK:
             return {"ok": False, "detail": f"The URL returned HTTP {resp.status_code} — check the base URL and proxy."}
         if resp.text.strip() != token:
             return {"ok": False, "detail": "The URL was reachable but served the wrong content (proxy/caching?)."}

@@ -1,4 +1,4 @@
-"""Tests for web/uploads.py — image upload helpers shared by chat and Generate."""
+"""Tests for web/uploads/files.py — image upload helpers shared by chat and Generate."""
 
 import asyncio
 import io
@@ -8,7 +8,7 @@ from fastapi import HTTPException, UploadFile
 from PIL import Image
 from starlette.datastructures import Headers
 
-from web.uploads import image_media_type, read_image_upload, safe_filename
+from web.uploads.files import image_media_type, read_image_upload, safe_filename
 
 
 def _upload(content: bytes, content_type: str) -> UploadFile:

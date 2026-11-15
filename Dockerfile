@@ -1,7 +1,7 @@
 # ── Stage 1: Build the Vue frontend ──────────────────────────────────
 FROM mirror.gcr.io/library/node:24-alpine AS frontend-builder
 
-# Same layout as the repo (src/js builds into ../py/web/static) so vite's outDir resolves unchanged
+# Same layout as the repo, so the build lands where the API looks for it (src/js/dist)
 WORKDIR /build/src/js
 COPY src/js/package.json src/js/package-lock.json* ./
 RUN npm install
@@ -28,14 +28,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code in the repo's own layout (the code finds the repo root
 # three levels above web/api.py): the whole src/py tree so every subpackage —
-# core, providers, chat — is included; static is .dockerignored and re-copied
-# from the frontend build below
+# core, providers, chat — is included; the frontend build is added below
 COPY src/py/ ./src/py/
 COPY alembic/ ./alembic/
 COPY alembic.ini entrypoint.sh ./
 
-# Copy built frontend into web/static (where vite outputs it)
-COPY --from=frontend-builder /build/src/py/web/static ./src/py/web/static/
+# Copy the built frontend to where the API serves it from
+COPY --from=frontend-builder /build/src/js/dist ./src/js/dist/
 
 
 # Data directory (db + assets + cache) will be mounted as a volume

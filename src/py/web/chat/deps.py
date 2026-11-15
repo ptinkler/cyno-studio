@@ -7,7 +7,7 @@ import threading
 
 from fastapi import APIRouter, Depends
 
-from web.users import require_user
+from web.auth.users import require_user
 
 router = APIRouter(prefix="/api/chat", dependencies=[Depends(require_user)])
 

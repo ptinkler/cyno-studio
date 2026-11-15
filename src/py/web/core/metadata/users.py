@@ -28,7 +28,7 @@ class UserMixin(DBBase):
                 session.expunge(user)
             return user
 
-    def upsert_oauth_user(self, profile: Mapping[str, str | None], is_admin: bool = False) -> User:
+    def upsert_oauth_user(self, profile: Mapping[str, str | None], *, is_admin: bool = False) -> User:
         """Create or refresh a user from an OAuth profile.
 
         The profile contains ``provider``, ``sub``, ``email``, ``name``, and

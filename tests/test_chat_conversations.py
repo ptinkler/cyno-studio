@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 import web.chat as chat_pkg
-import web.media as media_mod
+import web.media.thumbs as thumbs_mod
 from tests import jsonpath as jp
 from tests.chat_fixtures import SETTINGS, ConversationOut, png_bytes, sse_events, text_chunks
 from tests.chat_support import ROOT_DIR, ChatImageSpy, GalleryBackfill, NopeError, StreamSpy, new_group, new_snippet
@@ -811,8 +811,8 @@ class TestLargeChats:
         folder.mkdir(parents=True)
         Image.new("RGB", (1200, 1600), "blue").save(folder / "img_a.png")
         chat_polling.warm_missing_thumbnails()
-        for size in (media_mod.THUMB_SIZE, chat_pkg.CHAT_PREVIEW_SIZE):
-            assert media_mod.thumb_path(folder / "img_a.png", size).is_file()
+        for size in (thumbs_mod.THUMB_SIZE, chat_pkg.CHAT_PREVIEW_SIZE):
+            assert thumbs_mod.thumb_path(folder / "img_a.png", size).is_file()
 
 
 class TestSpendBreakdown:

@@ -17,7 +17,7 @@ from tests.stubs import stub
 from web.chat import catalogue as chat_catalogue
 from web.chat import constants as chat_constants
 from web.chat import generation as chat_generation
-from web.chat import turn as chat_turn
+from web.chat import turn_base as chat_turn_base
 from web.core.metadata import MetadataDB
 from web.jsonutil import as_object
 from web.providers import openrouter
@@ -670,7 +670,7 @@ class TestReferenceCaps:
             return real(kind, mid)
 
         # model_info is read in both the turn (ref caps) and generation (modality) modules
-        monkeypatch.setattr(chat_turn, "model_info", fake_info)
+        monkeypatch.setattr(chat_turn_base, "model_info", fake_info)
         monkeypatch.setattr(chat_generation, "model_info", fake_info)
         monkeypatch.setattr(openrouter, "generate_image", stub(lambda: ([(png_bytes(), "image/png")], None)))
         return _params(sse_events(_post(client, conv, "go", mode="image", **settings)))

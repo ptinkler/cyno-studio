@@ -4,7 +4,8 @@ from collections.abc import Callable
 
 from fastapi import HTTPException
 
-from web import characters, keyctx
+from web import characters
+from web.auth import keyctx
 from web.chat.catalogue import get_models
 from web.chat.constants import (
     KINDS,
@@ -69,14 +70,14 @@ def api_venice_balance() -> dict[str, float | None]:
 
 
 @router.get("/models")
-def api_chat_models(refresh: bool = False) -> Catalogue:
+def api_chat_models(*, refresh: bool = False) -> Catalogue:
     """Return the model catalogue for the configured providers."""
     # No provider gate: the catalogue lists each provider independently
     # (get_models swallows a provider's failure and an unconfigured provider
     # returns []), so media models show with only a Pollo key, and new
     # providers slot in without touching this endpoint. Chat generation still
     # requires a text provider — that gate lives on the turn routes.
-    return get_models(refresh)
+    return get_models(refresh=refresh)
 
 
 def require_hidden_defaults(value: dict[str, list[int]] | None) -> dict[str, list[int]]:

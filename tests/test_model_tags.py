@@ -110,7 +110,7 @@ def test_catalogue_attaches_tags_to_every_model(monkeypatch: pytest.MonkeyPatch)
         def is_configured(self) -> bool:
             return True
 
-        def list_models(self, kind: str, refresh: bool = False, /) -> list[ModelEntry]:
+        def list_models(self, kind: str, *, refresh: bool = False) -> list[ModelEntry]:
             if kind == "video":
                 return [{"id": "fake/v", "name": "V", "type": "img2vid", "generate_audio": True}]
             if kind == "image":
@@ -143,7 +143,7 @@ def test_each_user_gets_their_own_catalogue(monkeypatch: pytest.MonkeyPatch) -> 
         def is_configured(self) -> bool:
             return True
 
-        def list_models(self, kind: str, refresh: bool = False, /) -> list[ModelEntry]:
+        def list_models(self, kind: str, *, refresh: bool = False) -> list[ModelEntry]:
             seen.append(current_tenant())
             if kind != "image" or current_tenant() != "has-key":
                 return []

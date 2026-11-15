@@ -58,7 +58,7 @@ class User(Base):
     api_keys_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Where source media (image/audio/video) is hosted for providers that only
     # take a URL (Pollo). JSON {"primary","backup","expiry_minutes","selfhost_base"};
-    # null = fall back to the instance default. See web/upload_settings.py.
+    # null = fall back to the instance default. See web/uploads/settings.py.
     upload_prefs_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -72,7 +72,7 @@ class JsonIds[OwnerT, ItemT]:
     writes remove duplicates unless ``unique=False``.
     """
 
-    def __init__(self, adapter: TypeAdapter[list[ItemT]], unique: bool = True) -> None:
+    def __init__(self, adapter: TypeAdapter[list[ItemT]], *, unique: bool = True) -> None:
         """Set the JSON list adapter and whether writes drop repeated items."""
         self.adapter = adapter
         self.unique = unique
@@ -173,7 +173,7 @@ class ChatConversation(Base):
     # inherited) but temporarily not sent to the model, until resumed. JSON
     # object keyed by instruction or instruction_group, each a list of ids.
     paused_instructions_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Imported from another app (web/chatgpt_import.py): where from, its id
+    # Imported from another app (web/transfer/chatgpt.py): where from, its id
     # there and when it was last changed there, so a later import of the
     # same export only adds what's new
     import_source: Mapped[str | None] = mapped_column(String(20), nullable=True)

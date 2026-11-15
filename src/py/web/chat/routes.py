@@ -49,7 +49,7 @@ from web.core import config
 from web.core.metadata import MetadataDB, get_db
 from web.jsonutil import as_list, as_object, as_str
 from web.types import JsonValue
-from web.uploads import safe_filename
+from web.uploads.files import safe_filename
 
 
 class _SpendGroup(TypedDict):
@@ -428,7 +428,7 @@ def api_update_conversation(conv_id: str, data: ConversationUpdate) -> dict[str,
     _clean_conv_update(data, fields)
     if "pinned" in fields:
         # Not an edit: the chat keeps its place among the rest
-        get_db().set_conversation_pinned(conv_id, bool(fields.pop("pinned")))
+        get_db().set_conversation_pinned(conv_id, pinned=bool(fields.pop("pinned")))
     if not fields:
         conversation = get_db().get_conversation(conv_id)
         if not conversation:
@@ -441,7 +441,7 @@ def api_update_conversation(conv_id: str, data: ConversationUpdate) -> dict[str,
 
 
 @router.delete("/conversations/{conv_id}")
-def api_delete_conversation(conv_id: str, delete_media: bool = True) -> dict[str, str]:
+def api_delete_conversation(conv_id: str, *, delete_media: bool = True) -> dict[str, str]:
     """Delete a chat.
 
     Its images/videos/uploads go with it unless delete_media=false
@@ -499,7 +499,7 @@ def _delete_detached_media(db: MetadataDB, conv_id: str, detached: list[dict[str
 
 
 @router.delete("/messages/{message_id}")
-def api_delete_exchange(message_id: int, delete_media: bool = False) -> dict[str, JsonValue]:
+def api_delete_exchange(message_id: int, *, delete_media: bool = False) -> dict[str, JsonValue]:
     """Delete a prompt turn and return the updated conversation.
 
     Replies and alternate prompt versions are removed while later messages on

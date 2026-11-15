@@ -1,4 +1,4 @@
-"""Tests for web.chatgpt_import — importing chats from a ChatGPT data export."""
+"""Tests for web.transfer.chatgpt — importing chats from a ChatGPT data export."""
 
 import json
 import time
@@ -11,7 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 from httpx import Response
 
-import web.chatgpt_import as imp_mod
+import web.transfer.chatgpt as imp_mod
 from tests.chat_fixtures import SETTINGS, png_bytes, text_chunks
 from tests.jsonpath import dig, integer, must, obj, rows, seq, text
 from tests.stubs import stub

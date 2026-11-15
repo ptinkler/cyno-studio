@@ -16,12 +16,14 @@ import socket
 import time
 from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager
+from http import HTTPStatus
 from pathlib import Path
 from typing import cast
 
 import httpx
 
-from web import keyctx, net_guard, request_log, sse
+from web.auth import keyctx
+from web.core import net_guard, request_log, sse
 from web.jsonutil import as_object, as_objects, body_of, loads
 from web.types import ChatChunk, JsonValue, VideoJob
 
@@ -152,8 +154,12 @@ def _cost(value: JsonValue) -> float | None:
     return float(value) if isinstance(value, int | float) and not isinstance(value, bool) else None
 
 
-def list_models(kind: str, _refresh: bool = False) -> list[dict[str, JsonValue]]:
-    """Uniform provider interface: text/image/video models (empty without a key)."""
+def list_models(kind: str, *, refresh: bool = False) -> list[dict[str, JsonValue]]:
+    """Uniform provider interface: text/image/video models (empty without a key).
+
+    The lists aren't cached here, so `refresh` has no effect.
+    """
+    _ = refresh
     if not is_configured():
         return []
     lister = {"text": list_text_models, "image": list_image_models, "video": list_video_models}.get(kind)
@@ -179,7 +185,7 @@ def request_headers() -> dict[str, str]:
 
 def raise_for_response(resp: httpx.Response) -> None:
     """Raise ``OpenRouterError`` for an HTTP error reply, with OpenRouter's own explanation."""
-    if resp.status_code < 400:
+    if resp.status_code < HTTPStatus.BAD_REQUEST:
         return
     try:
         body = body_of(resp)
@@ -385,7 +391,7 @@ def stream_chat(
         ) as resp,
     ):
         outcome["status"] = resp.status_code
-        if resp.status_code >= 400:
+        if resp.status_code >= HTTPStatus.BAD_REQUEST:
             resp.read()
             outcome["response"] = request_log.response_of(resp)
             raise_for_response(resp)
@@ -443,7 +449,7 @@ def generate_image(
         ) as resp,
     ):
         outcome["status"] = resp.status_code
-        if resp.status_code >= 400:
+        if resp.status_code >= HTTPStatus.BAD_REQUEST:
             resp.read()
             outcome["response"] = request_log.response_of(resp)
             raise_for_response(resp)
@@ -593,6 +599,7 @@ def submit_video(
     aspect_ratio: str | None = None,
     resolution: str | None = None,
     first_frame: str | None = None,
+    *,
     generate_audio: bool | None = None,
     session_id: str | None = None,
 ) -> VideoJob:
@@ -643,7 +650,7 @@ def download_video(job_id: str, dest: Path, index: int = 0) -> None:
         timeout=IMAGE_TIMEOUT,
         follow_redirects=True,
     ) as resp:
-        if resp.status_code >= 400:
+        if resp.status_code >= HTTPStatus.BAD_REQUEST:
             resp.read()
             raise_for_response(resp)
         with tmp.open("wb") as f:

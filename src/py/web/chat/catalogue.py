@@ -8,8 +8,8 @@ import threading
 import time
 from typing import TypedDict, cast
 
-from web.caches import on_keys_changed
 from web.chat.constants import MODELS_CACHE_TTL
+from web.core.key_caches import on_keys_changed
 from web.core.metadata import current_tenant
 from web.providers import PROVIDERS, venice
 from web.providers.model_tags import tags_for
@@ -80,7 +80,7 @@ def cached_models() -> Catalogue | None:
     return entry["data"] if entry else None
 
 
-def seed_models(data: Catalogue, stale: bool = False) -> None:
+def seed_models(data: Catalogue, *, stale: bool = False) -> None:
     """Put a ready-made catalogue in the current tenant's cache (tests).
 
     `stale` lets get_models() refetch while the per-model lookups still see it.
@@ -99,7 +99,7 @@ def clear_models() -> None:
         _models_cache.clear()
 
 
-def get_models(refresh: bool = False) -> Catalogue:
+def get_models(*, refresh: bool = False) -> Catalogue:
     """Return each provider's model catalogue, refreshing the tenant cache if requested."""
     tenant = current_tenant() or ""
     with _models_lock:
@@ -114,7 +114,7 @@ def get_models(refresh: bool = False) -> Catalogue:
             models: list[ModelEntry] = []
             for prov in PROVIDERS:
                 try:
-                    models += prov.list_models(kind, refresh)
+                    models += prov.list_models(kind, refresh=refresh)
                 except Exception as e:  # each provider fails on its own; the rest still list
                     log.warning("listing %s %s models failed", prov.NAME, kind, exc_info=True)
                     errors[f"{prov.NAME}_{kind}"] = str(e)

@@ -1,9 +1,8 @@
-"""web.request_log keeps each user's provider-call log to themselves."""
+"""web.core.request_log keeps each user's provider-call log to themselves."""
 
 import pytest
 
-from web import request_log
-from web.core import metadata
+from web.core import metadata, request_log
 
 
 def _prompts():

@@ -17,9 +17,9 @@ from tests.chat_fixtures import SETTINGS, ConversationOut, png_bytes, sse_events
 from tests.chat_support import ChatImageSpy, ImageApiSpy, StreamSpy
 from tests.errors import server_disconnected
 from tests.stubs import stub
-from web import request_log
 from web.chat import catalogue as chat_catalogue
 from web.chat import tools as chat_tools
+from web.core import request_log
 from web.core.metadata import MetadataDB
 from web.providers import openrouter
 from web.types import Catalogue, JsonValue

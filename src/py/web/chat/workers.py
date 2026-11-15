@@ -11,7 +11,7 @@ import threading
 from collections.abc import Callable, Generator
 from typing import Concatenate
 
-from web import keyctx, user_keys
+from web.auth import keyctx, user_keys
 from web.core.metadata import get_db
 
 

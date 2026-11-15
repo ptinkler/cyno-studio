@@ -3,8 +3,8 @@
 Everything the dev login touches lives in this one module, so it's easy to
 audit and remove. It is INERT unless DEV_LOGIN is set: the endpoint 404s,
 nothing is seeded at startup, and key storage stays encrypted. The only hooks
-in the real code are one-line, flag-gated calls (see web/user_keys.py,
-web/oauth_routes.py and the api.py lifespan).
+in the real code are one-line, flag-gated calls (see web/auth/user_keys.py,
+web/auth/oauth_routes.py and the api.py lifespan).
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import os
 
 from fastapi import APIRouter, HTTPException, Request, Response
 
-from web.auth import set_user_cookie
+from web.auth.session import set_user_cookie
 from web.core.env import bool_env
 from web.core.metadata import User, get_db
 

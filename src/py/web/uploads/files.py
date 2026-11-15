@@ -13,6 +13,8 @@ from pathlib import Path
 from fastapi import HTTPException, UploadFile
 from PIL import Image
 
+_BLANK_MAX_BRIGHTNESS = 4  # an image whose brightest pixel is at most this (of 255) counts as blank
+
 # What Pillow raises for corrupt or non-image bytes
 _NOT_AN_IMAGE = (OSError, ValueError, SyntaxError, Image.DecompressionBombError)
 
@@ -65,7 +67,7 @@ def is_blank_image(data: bytes) -> bool:
             grey = im.convert("L")
             grey.thumbnail((64, 64))
             _, brightest = grey.getextrema()
-            return isinstance(brightest, int) and brightest <= 4
+            return isinstance(brightest, int) and brightest <= _BLANK_MAX_BRIGHTNESS
     except _NOT_AN_IMAGE:  # Pillow rejects corrupt or non-image bytes this way
         return False  # not an image Pillow reads; leave it to the caller
 

@@ -23,11 +23,11 @@ from tests.chat_support import (
     by_id,
 )
 from tests.stubs import stub
-from web import request_log
 from web.chat import catalogue as chat_catalogue
 from web.chat import generation as chat_generation
 from web.chat import helpers as chat_helpers
 from web.chat import polling as chat_polling
+from web.core import request_log
 from web.core.get_task import TaskResult
 from web.core.metadata import MetadataDB
 from web.providers import openrouter
@@ -436,12 +436,12 @@ class TestPolloImageModels:
     ) -> None:
         """Test that audio estimate prices by the text."""
         kinds: list[str] = []
-        arg_lists: list[tuple[JsonValue, ...]] = []
+        options: list[dict[str, JsonValue]] = []
 
-        def fake(model: str, kind: str, *args: JsonValue) -> dict[str, JsonValue]:
-            _ = model
+        def fake(model: str, kind: str, *args: JsonValue, **kw: JsonValue) -> dict[str, JsonValue]:
+            _ = (model, args)
             kinds.append(kind)
-            arg_lists.append(args)
+            options.append(kw)
             return {"credits": 3}
 
         monkeypatch.setattr(pollo_provider, "estimate_cost", fake)
@@ -451,7 +451,8 @@ class TestPolloImageModels:
         )
         assert jp.decode(r) == {"estimate": {"credits": 3}}
         assert kinds[-1] == "audio"
-        assert arg_lists[-1][-2:] == ("hi", {"voice": "v1"})
+        assert options[-1]["prompt"] == "hi"
+        assert options[-1]["audio"] == {"voice": "v1"}
 
     def test_a_tool_needs_no_prompt_but_an_image(
         self,

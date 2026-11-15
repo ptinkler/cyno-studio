@@ -1,7 +1,7 @@
 """Importing chats from a ChatGPT data export (Settings → Data controls → Export data), to carry them on here.
 
 The same upload and import also take this app's own chat export (see
-web/chat_export.py), told apart by what's in the zip.
+web/transfer/export.py), told apart by what's in the zip.
 
 The export's zip goes in <data>/imports/: copied there, or uploaded from
 the browser in chunks (it's often gigabytes; nginx takes 25 MB a request).
@@ -45,16 +45,17 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
-from web import chat_export, media
+from web.auth.users import require_user
 from web.chat import CHAT_PREVIEW_SIZE, ConversationCreate, api_create_conversation, conversation_dir
 from web.core import config
 from web.core.metadata import current_tenant, get_db
 from web.core.metadata.models import ChatConversation, ChatMessage
 from web.jsonutil import as_object, as_objects, loads
-from web.media_types import IMAGE_EXTS, VIDEO_EXTS
+from web.media.kinds import IMAGE_EXTS, VIDEO_EXTS
+from web.media.thumbs import THUMB_SIZE, make_thumb
+from web.transfer import export as chat_export
 from web.types import JsonValue
-from web.uploads import safe_filename
-from web.users import require_user
+from web.uploads.files import safe_filename
 
 log = logging.getLogger(__name__)
 
@@ -493,7 +494,7 @@ def _import_conversation(
     else:
         updated_at = max(filter(None, [changed_at, conv.updated_at])) if changed else conv.updated_at
     db.add_imported_messages(
-        imported_conv.id, merge.rows, merge.updates, _timestamp(data.get("update_time")), updated_at, show
+        imported_conv.id, merge.rows, merge.updates, _timestamp(data.get("update_time")), updated_at, show=show
     )
     if fresh:
         return "new"
@@ -585,8 +586,8 @@ def _warm_thumbnails(paths: list[Path]) -> None:
     So opening the chats and the Media page later doesn't wait for hundreds of them to be made.
     """
     for path in paths:
-        for size in (media.THUMB_SIZE, CHAT_PREVIEW_SIZE):
-            media.make_thumb(path, size)
+        for size in (THUMB_SIZE, CHAT_PREVIEW_SIZE):
+            make_thumb(path, size)
 
 
 # Per-tenant import progress, keyed by user id (so one user's import status and

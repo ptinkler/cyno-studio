@@ -18,12 +18,14 @@ from cryptography.fernet import Fernet, InvalidToken
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from web import caches
-from web.auth import user_secret
+from web.auth.dev_login import store_keys_plaintext
+from web.auth.session import user_secret
+from web.auth.users import require_user
+from web.core import key_caches as caches
 from web.core.metadata import User, get_db
-from web.dev_login import store_keys_plaintext
 from web.jsonutil import loads
-from web.users import require_user
+
+_HINT_CHARS = 4  # how many trailing characters of a saved key are shown as its hint
 
 KEY_PROVIDERS = ("pollo", "venice", "openrouter")
 
@@ -40,7 +42,7 @@ def fernet() -> Fernet:
 def _encrypt(keys: dict[str, str]) -> str:
     # In dev (DEV_LOGIN, fresh DB) store plaintext JSON — no secret to set,
     # nothing to lose. A Fernet token is never valid JSON, so reads tell the
-    # two apart. See web/dev_login.py.
+    # two apart. See web/auth/dev_login.py.
     if store_keys_plaintext():
         return json.dumps(keys)
     return fernet().encrypt(json.dumps(keys).encode()).decode()
@@ -78,7 +80,7 @@ def _masked(user: User | None) -> dict[str, dict[str, str | bool]]:
     out: dict[str, dict[str, str | bool]] = {}
     for p in KEY_PROVIDERS:
         value = keys.get(p)
-        hint = f"…{value[-4:]}" if value and len(value) >= 4 else ("set" if value else "")
+        hint = f"…{value[-_HINT_CHARS:]}" if value and len(value) >= _HINT_CHARS else ("set" if value else "")
         out[p] = {"set": bool(value), "hint": hint}
     return out
 

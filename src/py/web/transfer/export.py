@@ -35,12 +35,12 @@ from fastapi.responses import FileResponse
 from pydantic import TypeAdapter
 from starlette.background import BackgroundTask
 
+from web.auth.users import require_user
 from web.chat import ConversationCreate, api_create_conversation, conversation_dir
 from web.core.metadata import get_db, iso
 from web.core.metadata.models import ChatConversation
 from web.types import JsonValue
-from web.uploads import safe_filename
-from web.users import require_user
+from web.uploads.files import safe_filename
 
 log = logging.getLogger(__name__)
 

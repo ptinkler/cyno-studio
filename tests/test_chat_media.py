@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 import web.characters as characters_mod
 import web.chat as chat_pkg
 import web.core.config as config
-import web.media as media_mod
+import web.media.index as index_mod
 from tests import jsonpath as jp
 from tests.chat_fixtures import SETTINGS, ConversationOut, png_bytes, sse_events, text_chunks, tool_chunks
 from tests.chat_support import FakeImages, FakeStream, FakeVideoSubmit, PollerStarts
@@ -1104,7 +1104,7 @@ class TestEditAndRewordInPlace:
             json={"prompt": "give it a hat", "edit": True, "replace": True},
         )
         item = self._media(db, msg.id)[0]
-        assert "img_old.png" in media_mod.referenced_files(item)
+        assert "img_old.png" in index_mod.referenced_files(item)
 
     def test_redo_re_rolls_the_prompt_without_the_picture(
         self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
@@ -1435,7 +1435,7 @@ class TestRetryAFailedPicture:
 def test_a_webm_attachment_is_recorded_as_a_video(
     client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB
 ) -> None:
-    """Attachment kind comes from web.media_types now.
+    """Attachment kind comes from web.media.kinds now.
 
     Only ".mp4" counted before, so a .webm or .mov clip was recorded as an image.
     """

@@ -31,14 +31,16 @@ import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from http import HTTPStatus
 from pathlib import Path
 from typing import NamedTuple
 
 import httpx
 
-from web import keyctx, request_log, sse
-from web.caches import on_keys_changed
+from web.auth import keyctx
+from web.core import request_log, sse
 from web.core.cache import MISS, TTLCache
+from web.core.key_caches import on_keys_changed
 from web.core.metadata import current_tenant
 from web.jsonutil import as_list, as_number, as_object, as_objects, as_str, body_of
 from web.providers.openrouter import CHAT_TIMEOUT, IMAGE_TIMEOUT, keepalive_socket_options
@@ -196,7 +198,7 @@ def _error_message(resp: httpx.Response) -> str | None:
 
 def _raise_for_response(resp: httpx.Response) -> None:
     _note_balance(resp)
-    if resp.status_code < 400:
+    if resp.status_code < HTTPStatus.BAD_REQUEST:
         return
     raise RequestRejectedError(_error_message(resp), resp.status_code)
 
@@ -211,7 +213,7 @@ def _request(
     json_body: JsonValue = None,
     params: dict[str, str] | None = None,
 ) -> httpx.Response:
-    """One Venice call. `log`: record it in the request log (web/request_log.py)."""
+    """One Venice call. `log`: record it in the request log (web/core/request_log.py)."""
     if not log:
         return _send(method, path, timeout, waiting_for, json_body=json_body, params=params)
     with request_log.logged("venice", method, path, json_body) as outcome:
@@ -228,6 +230,7 @@ def _send(
     path: str,
     timeout: httpx.Timeout,
     waiting_for: str,
+    *,
     check: bool = True,
     json_body: JsonValue = None,
     params: dict[str, str] | None = None,
@@ -341,7 +344,7 @@ def _price_videos(video: list[VideoEntry]) -> None:
             job.entry.public["price"] = price_tag(usd, basis)
 
 
-def _get_catalogue(refresh: bool = False) -> Catalogue:
+def _get_catalogue(*, refresh: bool = False) -> Catalogue:
     key = _tenant()
     with _catalogue_lock:
         cached = _catalogue.get(key)
@@ -385,11 +388,11 @@ def _find[E: Entry](entries: Sequence[E], kind: str, model_id: str) -> E:
     return entry
 
 
-def list_models(kind: str, refresh: bool = False) -> list[ModelEntry]:
+def list_models(kind: str, *, refresh: bool = False) -> list[ModelEntry]:
     """Venice's models of one kind (text | image | video), shaped like openrouter.list_*_models()."""
     if not is_configured() or kind not in ("text", "image", "video"):
         return []
-    return [dict(m.public) for m in _entries(_get_catalogue(refresh), kind)]
+    return [dict(m.public) for m in _entries(_get_catalogue(refresh=refresh), kind)]
 
 
 def model_info(kind: str, model_id: str) -> ModelEntry:
@@ -451,7 +454,7 @@ def stream_chat(
             ) as resp,
         ):
             outcome["status"] = resp.status_code
-            if resp.status_code >= 400:
+            if resp.status_code >= HTTPStatus.BAD_REQUEST:
                 resp.read()
                 outcome["response"] = request_log.response_of(resp)
             _raise_for_response(resp)
@@ -584,6 +587,7 @@ def submit_video(
     duration: int | None = None,
     aspect_ratio: str | None = None,
     resolution: str | None = None,
+    *,
     generate_audio: bool | None = None,
     first_frame: Path | None = None,
     last_frame: Path | None = None,
@@ -675,10 +679,10 @@ def _early_result(job_id: str, resp: httpx.Response) -> dict[str, JsonValue] | N
     Rate limits and 5xx raise (the poller's error budget); other client errors
     fail the job; a video body is saved until ``download_video`` collects it.
     """
-    if resp.status_code >= 500 or resp.status_code == 429:
+    if resp.status_code >= HTTPStatus.INTERNAL_SERVER_ERROR or resp.status_code == HTTPStatus.TOO_MANY_REQUESTS:
         resp.read()
         raise VideoCheckFailedError(resp.status_code)
-    if resp.status_code >= 400:
+    if resp.status_code >= HTTPStatus.BAD_REQUEST:
         resp.read()
         try:
             _raise_for_response(resp)
@@ -741,7 +745,7 @@ def download_video(job_id: str, dest: Path) -> None:
         if url:  # private models hand back a short-lived download link instead
             tmp = dest.with_suffix(dest.suffix + ".part")
             with _client.stream("GET", url, timeout=IMAGE_TIMEOUT, follow_redirects=True) as resp:
-                if resp.status_code >= 400:
+                if resp.status_code >= HTTPStatus.BAD_REQUEST:
                     resp.read()
                     raise VideoDownloadFailedError(resp.status_code)
                 with tmp.open("wb") as f:

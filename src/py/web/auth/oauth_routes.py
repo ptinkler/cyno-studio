@@ -12,11 +12,11 @@ from typing import Annotated
 from fastapi import APIRouter, Cookie, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
-from web import users
-from web.auth import set_user_cookie
+from web.auth import users
+from web.auth.dev_login import dev_login_enabled
+from web.auth.oauth import configured_providers, normalize_profile, oauth
+from web.auth.session import set_user_cookie
 from web.core.metadata import User, get_db
-from web.dev_login import dev_login_enabled
-from web.oauth import configured_providers, normalize_profile, oauth
 
 router = APIRouter(prefix="/api/auth")
 

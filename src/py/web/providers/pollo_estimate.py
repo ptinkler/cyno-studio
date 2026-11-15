@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Mapping
+from http import HTTPStatus
 from typing import TYPE_CHECKING
 
 import requests
@@ -76,9 +77,9 @@ def _ask(url: str, payload: Payload, api_key: str | None) -> tuple[dict[str, Jso
     """
     headers = {"x-api-key": api_key or "", "Content-Type": "application/json"}
     resp = requests.post(url, data=json.dumps(payload), headers=headers, timeout=TIMEOUT)
-    if is_cloudflare_block(resp) or resp.status_code >= 500:
+    if is_cloudflare_block(resp) or resp.status_code >= HTTPStatus.INTERNAL_SERVER_ERROR:
         return None, False
-    if resp.status_code != 200:
+    if resp.status_code != HTTPStatus.OK:
         log.warning("estimate %s answered HTTP %s: %s", url, resp.status_code, resp.text[:200])
         return None, True
     try:
