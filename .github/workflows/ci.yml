@@ -9,8 +9,8 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   REGISTRY: ghcr.io
-  IMAGE_APP: ghcr.io/ptinkler/pollo-api
-  IMAGE_NGX: ghcr.io/ptinkler/pollo-nginx
+  IMAGE_APP: ghcr.io/ptinkler/cyno-studio
+  IMAGE_NGX: ghcr.io/ptinkler/cyno-studio-nginx
 
 jobs:
   lint:

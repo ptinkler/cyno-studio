@@ -1,4 +1,4 @@
-name: pollo-api
+name: cyno-studio
 
 # Select stack via COMPOSE_PROFILES in .env:
 #   COMPOSE_PROFILES=novpn   — direct, no VPN (default)
@@ -9,18 +9,18 @@ services:
   # No-VPN stack
   app:
     profiles: [novpn]
-    image: ghcr.io/ptinkler/pollo-api:latest
+    image: ghcr.io/ptinkler/cyno-studio:latest
     user: "${PUID}:${PGID}"
     pull_policy: always
     restart: unless-stopped
     volumes:
-      - ${POLLO_HOST_DATA_DIR}:/data
+      - ${CYNO_HOST_DATA_DIR:-${POLLO_HOST_DATA_DIR:-}}:/data
     env_file:
       - .env
 
   nginx:
     profiles: [novpn]
-    image: ghcr.io/ptinkler/pollo-nginx:latest
+    image: ghcr.io/ptinkler/cyno-studio-nginx:latest
     pull_policy: always
     restart: unless-stopped
     ports:
@@ -55,7 +55,7 @@ services:
 
   app-vpn:
     profiles: [vpn]
-    image: ghcr.io/ptinkler/pollo-api:latest
+    image: ghcr.io/ptinkler/cyno-studio:latest
     user: "${PUID}:${PGID}"
     pull_policy: always
     restart: unless-stopped
@@ -64,13 +64,13 @@ services:
       gluetun:
         condition: service_healthy
     volumes:
-      - ${POLLO_HOST_DATA_DIR}:/data
+      - ${CYNO_HOST_DATA_DIR:-${POLLO_HOST_DATA_DIR:-}}:/data
     env_file:
       - .env
 
   nginx-vpn:
     profiles: [vpn]
-    image: ghcr.io/ptinkler/pollo-nginx:latest
+    image: ghcr.io/ptinkler/cyno-studio-nginx:latest
     pull_policy: always
     restart: unless-stopped
     network_mode: "service:gluetun"

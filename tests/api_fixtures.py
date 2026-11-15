@@ -17,7 +17,7 @@ from web.core.metadata import MetadataDB
 
 @pytest.fixture(autouse=True)
 def _setup_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, provider_keys: dict[str, str | None]) -> None:
-    monkeypatch.setenv("POLLO_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("CYNO_DATA_DIR", str(tmp_path))
     provider_keys["pollo"] = "test-key"
     (tmp_path / "data").mkdir()
 

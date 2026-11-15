@@ -30,6 +30,7 @@ _APP_ENV = (
     "ALLOWED_EMAILS",
     "CHAT_TITLE_MODEL",
     "COOKIE_SECURE",
+    "CYNO_DATA_DIR",
     "DEV_EMAIL",
     "DEV_LOGIN",
     "ENABLE_API_DOCS",
@@ -38,7 +39,7 @@ _APP_ENV = (
     "OPENROUTER_BASE_URL",
     "OPEN_SIGNUP",
     "PASSWORD_PEPPER",
-    "POLLO_DATA_DIR",
+    "POLLO_DATA_DIR",  # the legacy name of CYNO_DATA_DIR
     "PUBLIC_BASE_URL",
     "SESSION_SECRET",
     "UPLOAD_BACKUP",

@@ -36,17 +36,17 @@ COPY --from=frontend-builder /build/src/py/web/static ./src/py/web/static/
 
 
 # Data directory (db + assets + cache) will be mounted as a volume
-ENV POLLO_DATA_DIR=/data
+ENV CYNO_DATA_DIR=/data
 # The `web` package lives in src/py
 ENV PYTHONPATH=/app/src/py
 # App logs go to stdout, which Python block-buffers when it isn't a terminal:
 # without this they sit in the buffer and never reach `docker logs`.
 ENV PYTHONUNBUFFERED=1
 
-RUN groupadd -r pollo && useradd -r -g pollo pollo && \
+RUN groupadd -r cyno && useradd -r -g cyno cyno && \
     chmod +x entrypoint.sh && \
-    chown -R pollo:pollo /app
-USER pollo
+    chown -R cyno:cyno /app
+USER cyno
 
 EXPOSE 5000
 

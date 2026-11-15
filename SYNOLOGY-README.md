@@ -1,7 +1,7 @@
 Synology NAS setup
 ===================
 
-This document explains how to run the pollo-api project on a Synology NAS (DSM). It covers prerequisites, recommended paths and permissions, how to start the compose project (so the required network/device capabilities are preserved), and how to make the stack start automatically on boot using the included `synology-boot.sh` helper.
+This document explains how to run the Cyno Studio project on a Synology NAS (DSM). It covers prerequisites, recommended paths and permissions, how to start the compose project (so the required network/device capabilities are preserved), and how to make the stack start automatically on boot using the included `synology-boot.sh` helper.
 
 Prerequisites
 -------------
@@ -17,11 +17,11 @@ High-level notes about this project
 
 Recommended install path
 ------------------------
-Choose a directory on your NAS to hold the compose project. This README uses `/path/to/pollo-api` as a placeholder — replace it with whatever path you choose. Example layout:
+Choose a directory on your NAS to hold the compose project. This README uses `/path/to/cyno-studio` as a placeholder — replace it with whatever path you choose. Example layout:
 
-- Project root: /path/to/pollo-api
-- Compose file: /path/to/pollo-api/docker-compose.yml
-- Data dir (container mapping target): /path/to/pollo-api/data
+- Project root: /path/to/cyno-studio
+- Compose file: /path/to/cyno-studio/docker-compose.yml
+- Data dir (container mapping target): /path/to/cyno-studio/data
 
 Create project folder and copy files
 -----------------------------------
@@ -35,17 +35,17 @@ sudo -i
 2. Create directories and copy the repository contents into the chosen folder. Example (adjust to how you transfer the repository):
 
 ```bash
-mkdir -p /path/to/pollo-api
-cd /path/to/pollo-api
+mkdir -p /path/to/cyno-studio
+cd /path/to/cyno-studio
 # copy the repo files here (scp, git clone, rsync, etc.)
 ```
 
 3. Ensure the host data directory exists and set ownership to match the UID/GID you will put in `.env` as `PUID`/`PGID`:
 
 ```bash
-mkdir -p /path/to/pollo-api/data
+mkdir -p /path/to/cyno-studio/data
 # Run `id` to find your UID and GID, then:
-chown -R <PUID>:<PGID> /path/to/pollo-api/data
+chown -R <PUID>:<PGID> /path/to/cyno-studio/data
 ```
 
 Environment variables
@@ -69,7 +69,7 @@ GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
 
 # Provider keys (Pollo/OpenRouter/Venice) are entered per-user in the app, not here.
-POLLO_DATA_DIR=/data
+CYNO_DATA_DIR=/data
 
 # Host port the app is exposed on
 APP_PORT=8080
@@ -82,7 +82,7 @@ PUID=1000
 PGID=1000
 
 # Host data path
-POLLO_HOST_DATA_DIR=/path/to/pollo-api/data
+CYNO_HOST_DATA_DIR=/path/to/cyno-studio/data
 
 # VPN (Gluetun)
 VPN_SERVICE_PROVIDER=your_vpn_provider
@@ -96,10 +96,10 @@ TZ=UTC
 
 Copy `.env.example` as a starting point — it documents every variable.
 
-Note: `POLLO_HOST_DATA_DIR` is used in the compose mapping; in the compose file it is mounted as `${POLLO_HOST_DATA_DIR}:/data`. Set this to the absolute host path you want to use before starting the stack via the shell. If you want to keep the project portable, you can export the environment variable before calling `docker compose`:
+Note: `CYNO_HOST_DATA_DIR` is used in the compose mapping; in the compose file it is mounted as `${CYNO_HOST_DATA_DIR}:/data`. Set this to the absolute host path you want to use before starting the stack via the shell. If you want to keep the project portable, you can export the environment variable before calling `docker compose`:
 
 ```bash
-export POLLO_HOST_DATA_DIR=/path/to/pollo-api/data
+export CYNO_HOST_DATA_DIR=/path/to/cyno-studio/data
 docker compose up -d
 ```
 
@@ -113,7 +113,7 @@ Set `COMPOSE_PROFILES` in `.env` before starting:
 Then from the Synology shell in the project folder:
 
 ```bash
-cd /path/to/pollo-api
+cd /path/to/cyno-studio
 docker compose pull
 docker compose up -d
 ```
@@ -148,7 +148,7 @@ Automating startup on boot (use `synology-boot.sh`)
 The repository includes `synology-boot.sh` which is designed to be used with DSM's Task Scheduler. It performs three useful tasks:
 
 - Installs an HTTP→HTTPS redirect into DSM's nginx for the project's hostname (so plain HTTP is redirected to HTTPS).
-- Waits for the Docker daemon then stops any half-started containers belonging to project `pollo-api` that Docker's restart policy might have left in a broken state.
+- Waits for the Docker daemon then stops any half-started containers belonging to project `cyno-studio` that Docker's restart policy might have left in a broken state.
 - Runs `docker compose up -d`, respecting `COMPOSE_PROFILES` from `.env` (`novpn` or `vpn`), to bring the stack up respecting `depends_on` and `healthcheck` ordering.
 
 Before using the script:
@@ -162,14 +162,14 @@ Install the script into Task Scheduler:
 1. Make the script executable:
 
 ```bash
-chmod +x /path/to/pollo-api/synology-boot.sh
+chmod +x /path/to/cyno-studio/synology-boot.sh
 ```
 
 2. Open DSM → Control Panel → Task Scheduler → Create → Triggered Task → User-defined script
 
    - Event: Boot-up
    - User: root
-   - Task Settings → Run command: bash /path/to/pollo-api/synology-boot.sh
+   - Task Settings → Run command: bash /path/to/cyno-studio/synology-boot.sh
 
 3. Save the task. On next boot the script will run and start the compose stack in the correct order.
 
@@ -185,7 +185,7 @@ Updating the stack
 To update images and restart with latest:
 
 ```bash
-cd /path/to/pollo-api
+cd /path/to/cyno-studio
 docker compose pull
 docker compose up -d
 ```
@@ -202,14 +202,14 @@ Troubleshooting
 - Use `docker compose logs -f <service>` to tail logs for suspect services (e.g. `docker compose logs -f gluetun`).
 
 - Container Manager "Project" won't stop / random-prefixed container it doesn't recognize
-  - Container Manager's Project wizard names the compose project after the folder you point it at, not the `name: pollo-api` set in `docker-compose.yml`. If that folder ever got auto-suffixed by DSM (e.g. re-uploading/re-extracting the project into a new folder instead of updating files in place), re-importing creates a *new* project with a new random-prefixed set of containers, and the old ones become orphaned — Container Manager's GUI can fail to stop/remove containers it no longer associates with a tracked project.
+  - Container Manager's Project wizard names the compose project after the folder you point it at, not the `name: cyno-studio` set in `docker-compose.yml`. If that folder ever got auto-suffixed by DSM (e.g. re-uploading/re-extracting the project into a new folder instead of updating files in place), re-importing creates a *new* project with a new random-prefixed set of containers, and the old ones become orphaned — Container Manager's GUI can fail to stop/remove containers it no longer associates with a tracked project.
   - Fix the immediate problem via SSH, bypassing the GUI entirely:
     ```bash
     docker ps -a | grep -i pollo   # find the orphaned container(s) by image name
     docker stop <container_id>
     docker rm <container_id>
     ```
-  - Prevent recurrence: keep the project in one stable folder (edit files in place rather than re-uploading/re-extracting), and when creating/re-creating the Project in Container Manager, explicitly set its "Project Name" field to `pollo-api` rather than accepting whatever it auto-fills from the folder path.
+  - Prevent recurrence: keep the project in one stable folder (edit files in place rather than re-uploading/re-extracting), and when creating/re-creating the Project in Container Manager, explicitly set its "Project Name" field to `cyno-studio` rather than accepting whatever it auto-fills from the folder path.
 
 Advanced options
 ----------------
@@ -229,7 +229,7 @@ Start / stop / upgrade:
 
 ```bash
 # Start
-cd /path/to/pollo-api
+cd /path/to/cyno-studio
 docker compose up -d
 
 # Stop

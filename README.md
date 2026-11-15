@@ -1,8 +1,10 @@
-# Pollo API
+# Cyno Studio
 
-A self-hosted web UI and API backend for generating videos via the [Pollo](https://pollo.ai) video generation API.
+A self-hosted studio for chat, image, video and audio generation across several providers ([Pollo](https://pollo.ai), [OpenRouter](https://openrouter.ai) and [Venice](https://venice.ai)), with a web UI and an API backend.
 
-Originally built for rapid on-the-fly D&D resource creation — generating atmospheric video loops, character portraits, and scene backgrounds for tabletop use. Grew into a general-purpose personal Pollo frontend with project management, credit tracking, and VPN rotation.
+Originally built for rapid on-the-fly D&D resource creation — generating atmospheric video loops, character portraits, and scene backgrounds for tabletop use. Grew into a general-purpose personal generation studio with chats, galleries, characters, credit tracking, and VPN rotation.
+
+> **Renamed from `pollo-api`.** Existing deployments: rename `POLLO_DATA_DIR` / `POLLO_HOST_DATA_DIR` in your `.env` to `CYNO_DATA_DIR` / `CYNO_HOST_DATA_DIR` (the old names still work for now, with a warning), and stop the old stack once with `docker compose -p pollo-api down` before bringing up `cyno-studio`. The container images are now `ghcr.io/ptinkler/cyno-studio` and `cyno-studio-nginx`. `POLLO_API_KEY` is unchanged: it is the Pollo provider's key.
 
 ## Features
 
@@ -20,7 +22,7 @@ Originally built for rapid on-the-fly D&D resource creation — generating atmos
 
 ```bash
 cp .env.example .env
-# Edit .env — set ADMIN_EMAILS, the three secrets, POLLO_HOST_DATA_DIR, PUID/PGID
+# Edit .env — set ADMIN_EMAILS, the three secrets, CYNO_HOST_DATA_DIR, PUID/PGID
 docker compose up -d
 ```
 
@@ -48,7 +50,7 @@ See `.env.example` for the full list.
 | `KEYS_SECRET` | Encrypts stored per-user provider keys — set once, never change |
 | `PUBLIC_BASE_URL` | Public https base URL for OAuth callbacks (behind a proxy/DDNS) |
 | `*_OAUTH_CLIENT_ID` / `*_OAUTH_CLIENT_SECRET` | Google/Microsoft/X credentials; a provider turns on when both are set |
-| `POLLO_HOST_DATA_DIR` | Host path for persistent data (videos, DB) |
+| `CYNO_HOST_DATA_DIR` | Host path for persistent data (videos, DB) |
 | `APP_PORT` | Host port to expose the app on (default `8080`) |
 | `COMPOSE_PROFILES` | `novpn` (default) or `vpn` — selects the stack |
 | `PUID` / `PGID` | User/group the app container runs as (run `id` to find values) |
@@ -113,7 +115,7 @@ Code standards, enforced in CI:
 
 ## Data
 
-All data (videos, source images, chat media, character images, SQLite DB) is stored in `POLLO_HOST_DATA_DIR` on the host. Back this up.
+All data (videos, source images, chat media, character images, SQLite DB) is stored in `CYNO_HOST_DATA_DIR` on the host. Back this up.
 
 ## NAS / Synology
 

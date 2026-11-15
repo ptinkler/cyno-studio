@@ -1,4 +1,4 @@
-"""Pollo Studio — API Backend (FastAPI).
+"""Cyno Studio — API Backend (FastAPI).
 
 Run:  make dev-api   (uvicorn web.api:app, from the repo root)
 
@@ -77,7 +77,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
 # (or in dev, where DEV_LOGIN is set).
 _docs_on = bool_env("ENABLE_API_DOCS") or bool_env("DEV_LOGIN")
 app = FastAPI(
-    title="Pollo Studio API",
+    title="Cyno Studio API",
     lifespan=lifespan,
     docs_url="/docs" if _docs_on else None,
     redoc_url="/redoc" if _docs_on else None,
@@ -311,5 +311,5 @@ if STATIC_DIR.is_dir():
 
 
 if __name__ == "__main__":
-    log.info("starting Pollo API server on http://localhost:5000 (docs at /docs)")
+    log.info("starting Cyno Studio server on http://localhost:5000 (docs at /docs)")
     uvicorn.run(app, host="127.0.0.1", port=5000)

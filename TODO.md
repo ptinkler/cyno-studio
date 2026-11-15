@@ -1,5 +1,7 @@
 # TODO
 
+The project was renamed from pollo-api to **Cyno Studio** (`cyno-studio`). Pollo is now just one provider.
+
 What is left to do for clean, consistent code. Kept in-repo so people and Claude can read it.
 Update it when an item is started, finished or dropped; delete finished items.
 
