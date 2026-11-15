@@ -162,22 +162,6 @@ function onGenerate() {
 function openQueueItem(e) {
   router.push(`/${e.conversation_id}/gallery`)
 }
-const {
-  galleryItem,
-  galleryManage,
-  favItems,
-  openGeneration,
-  onGalleryFavourite,
-  onFavUnstar,
-  openFavourite,
-  regenerateFromModal,
-  useSettingsFromModal,
-  useImageFromModal,
-  deleteFromModal,
-  openThreadFromModal,
-  makeCharacterFromModal,
-} = useGalleryModal({ studio, genQueue, openThreadView })
-
 const leftCollapsed = ref(false)
 const rightCollapsed = ref(false)
 const search = ref('')
@@ -212,6 +196,23 @@ const {
   onSettingsNavigate,
   syncFromRoute,
 } = useStudioRoutes({ router, route, studio, threadView })
+
+// After the routes: the modal's actions navigate with openThreadView
+const {
+  galleryItem,
+  galleryManage,
+  favItems,
+  openGeneration,
+  onGalleryFavourite,
+  onFavUnstar,
+  openFavourite,
+  regenerateFromModal,
+  useSettingsFromModal,
+  useImageFromModal,
+  deleteFromModal,
+  openThreadFromModal,
+  makeCharacterFromModal,
+} = useGalleryModal({ studio, genQueue, openThreadView })
 
 onMounted(() => {
   loadLists()

@@ -3,7 +3,7 @@
 import json
 import logging
 from collections.abc import Mapping
-from typing import TypedDict, cast
+from typing import TypedDict
 
 from web import characters
 from web.chat.catalogue import auto_ratio, model_info
@@ -51,6 +51,18 @@ class _ToolCall(TypedDict):
     function: _ToolFunction
 
 
+def _as_json(tool_calls: list[_ToolCall]) -> list[JsonValue]:
+    """The tool calls as they go back to the model in the assistant message."""
+    return [
+        {
+            "id": c["id"],
+            "type": c["type"],
+            "function": {"name": c["function"]["name"], "arguments": c["function"]["arguments"]},
+        }
+        for c in tool_calls
+    ]
+
+
 class ToolsTurn(GenerationTurn):
     """The chat model's tool loop: streaming a round, running its generate_* / create_* calls."""
 
@@ -72,9 +84,7 @@ class ToolsTurn(GenerationTurn):
             text, tool_calls = self._stream_round(model, messages, round_tools)
             if self.cancel.is_set() or not tool_calls:
                 return
-            messages.append(
-                cast("dict[str, JsonValue]", {"role": "assistant", "content": text or None, "tool_calls": tool_calls})
-            )
+            messages.append({"role": "assistant", "content": text or None, "tool_calls": _as_json(tool_calls)})
             results = self._run_tool_calls(tool_calls, messages)
             if results is None:
                 return
@@ -120,17 +130,15 @@ class ToolsTurn(GenerationTurn):
 
     def _tools(self) -> list[dict[str, JsonValue]]:
         names = list(dict.fromkeys(c.name for c in self.characters))  # a name shared by two is listed once
-        tools: list[dict[str, JsonValue]] = (
-            [cast("dict[str, JsonValue]", TOOLS_CREATE_CHARACTER)] if self.s.image_model else []
-        )
+        tools: list[dict[str, JsonValue]] = [TOOLS_CREATE_CHARACTER] if self.s.image_model else []
         if self.s.image_model:
             tools.insert(0, with_character_arg(TOOLS_IMAGE, names))
         if self.s.video_model:
             tools.append(with_character_arg(TOOLS_VIDEO, names))
         if self.s.audio_model:
-            tools.append(cast("dict[str, JsonValue]", TOOLS_AUDIO))
+            tools.append(TOOLS_AUDIO)
         # Needs no media model: applies to the chat model itself.
-        tools.append(cast("dict[str, JsonValue]", TOOLS_CREATE_INSTRUCTION))
+        tools.append(TOOLS_CREATE_INSTRUCTION)
         return tools
 
     def _add_chunk_cost(self, chunk: ChatChunk) -> None:
@@ -246,7 +254,7 @@ class ToolsTurn(GenerationTurn):
             return None, "Arguments were not valid JSON"
         if not isinstance(parsed, dict):
             return None, "Arguments must be a JSON object"
-        return cast("Mapping[str, JsonValue]", parsed), None
+        return parsed, None
 
     def _audio_tool(self, args: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
         prompt = str(args.get("prompt") or "").strip()

@@ -46,9 +46,15 @@ Done: `providers/pollo/engine/video/` package; the Python provider and importer 
 
 - [x] `composables/useStudio.js` (was 1054) is a 340-line composition root over `useStudioAttachments`, `useStudioThreads`, `useStudioTurns`, `useStudioPrompt` (estimate + enhance), `useStudioReuse`, plus the existing media/sidebar/defaults ones and the pure `studioDelete.js`. `studio.test.js` pins its public surface and the send/open/delete/reuse flows.
 - [x] The 700+ line components are split: `ModelPicker` (910 -> 450: `ModelRow`, `ModelBadge`, `useModelList`, `usePopPlacement`, `utils/modelBadges`), `StudioComposer` (762 -> 350: `ComposerAttachments`, `useMentionEditor`, `utils/refItems`), `StudioView` (750 -> 500: `useStudioRoutes`, `useGalleryModal`, `useThreadView`, `useStudioTheme`, `useAttachmentPicker`), `ChatMessage` (738 -> 360: `ChatMediaCard`, `ChatAttachments`, `PromptBox`, `PinButton`), `StudioSidebar` (657 -> 560: `SidebarSpaceFolder`). Scoped CSS moved with the markup; not yet looked at in a browser (see below).
-- [ ] Eyeball the split components in a browser (model picker badges and folded dots, composer attachment strip, chat media cards, sidebar space folders): the unit tests cover behaviour, not the moved scoped CSS.
+- [x] The split components were checked in a browser (2026-11-15). That turned up a use-before-define in `StudioView` setup; `appMount.test.js` (the whole app mounted, every pane) now guards against that class of bug.
 - [x] `npm run typecheck` (`tsc` with `checkJs`, non-strict) checks `composables/` and `utils/` and runs in CI; it needed five JSDoc annotations. Note `.vue` files are not covered yet: `vue-tsc` reports about 250 errors, nearly all from untyped array/object props (need `PropType` JSDoc per component).
-- [ ] Type the components so `vue-tsc` can cover them, then turn on `noImplicitAny` for the JS (about 690 errors today: mostly untyped parameters, so JSDoc on the composables' public functions first).
+- [ ] **TypeScript migration (planned, own session).** Today: `npm run typecheck` (`tsc`, `checkJs`, non-strict) covers `composables/` and `utils/` in CI; `.vue` files are not checked (`vue-tsc` reports ~250 errors, almost all untyped `{ type: Array }` / `{ type: Object }` props), and `noImplicitAny` shows ~690 errors in the JS. Giving every array prop `PropType<any[]>` would silence them without checking anything, so don't. Plan, in order:
+  1. Generate the API types from the backend: export FastAPI's OpenAPI schema (`app.openapi()`, no server needed) and run `openapi-typescript` into `src/js/src/api/schema.d.ts`; add a `make`/npm script and a CI check that the committed file is up to date (the same drift concern as `TAG_LABELS`). Check first how many routes declare response models; untyped routes (plain `dict[str, JsonValue]`) need models on the Python side for this to pay off.
+  2. Hand-written domain types where the API schema doesn't reach (composer settings, attachments, UI state) in `src/js/src/types.ts`.
+  3. Migrate `utils/` then `composables/` to `.ts` (start with `useApi`, `useChat`, `useComposerSettings`, `useStudio*`), turning on `strict` for those paths via a second tsconfig, then the rest.
+  4. Components: `<script setup lang="ts">` with `defineProps<{...}>()` / `defineEmits<{...}>()`, a directory at a time (small shared ones first, then `studio/`, `chat/`), adding `vue-tsc` to `npm run typecheck` once it is clean. Vitest, ESLint (`typescript-eslint`) and Prettier configs need the TS pieces added.
+  5. Finish with `strict: true` everywhere and drop `checkJs`.
+  Tests (`__tests__`) can stay JS until last. `studio.test.js` and `modelTags.test.js` are the safety net for the first steps.
 - [x] `modelTags.test.js` reads `model_tags.py` and fails when `TAG_LABELS` drifts (it caught an existing ordering mismatch for `audio`, now fixed). Serving the labels from the backend instead remains an option.
 - [x] ESLint also enforces `eqeqeq`, `no-var`, `prefer-const`, `no-shadow`, `no-console` (warn/error allowed), `vue/no-undef-components` and `vue/no-unused-refs`, plus the complexity and `max-lines` limits above.
 - [x] `vue/define-macros-order` is enforced (props, emits, model). `flat/recommended` already includes the strongly-recommended rules.
@@ -57,13 +63,14 @@ Done: `providers/pollo/engine/video/` package; the Python provider and importer 
 
 - [ ] Keep the refs-to-video docs and the audit/probe scripts (`scripts/`) in sync with what Pollo actually accepts (frontend/backend `[@name]` naming contract).
 - [ ] Periodically re-diff `docs.pollo.ai/openapi.json` against `MODEL_INFO` for newly added models. The Pollo build-out itself is finished: tags and filters, video extend/edit, motion, lip-sync, upscale, image tools and TTS/music are all wired.
+- Audit run 2026-11-15 (docs only, no key, nothing billable): 53 video models in the registry, 199 documented endpoints. Docs show a reference branch we don't declare (`ref_mode`) for `geminiomniedit` (13), `hailuo03` (15), `happyhorse10` (9), `klingvideoo1` (3), `pollo26` / `pollo26fast` (15), `seedance25extend` (50), `veo31` (3), `viduq2proedit` (7), `wan26` (3), `wanedit27` (10), `wanedit30` / `wanedit30prime` (22). `klingv3omni` declares one the docs don't show (known; kept). Documented but not in the registry and worth a look: `gemini-omni-1-2-flash` (13 refs), `minimax-h3-fast`, `minimax-h3-max-turbo`, `hailuo-2-3-fast`, `happyhorse-1-1` / `1-5`, `pollo-dance-2-0` / `-fast`. Nothing was written: each `ref_mode` needs the free estimate probe with your key (`make audit-models ARGS="--key …"`) to confirm the model is enabled first.
 - [ ] Deferred Pollo gaps: Sora-2 extend (uses `generationId`, not a video URL), Runway extend (takes `images`), video-edit extras (images, seed, audio).
 
-## 7. Rename clean-up (after every deployment has moved to the new names)
+## 7. Rename clean-up: DONE
 
-- [ ] Drop the legacy `POLLO_DATA_DIR` fallback (`src/py/web/core/config.py`, its tests, `tests/conftest.py`) and the `${POLLO_HOST_DATA_DIR}` fallback in `docker-compose.yml`.
-- [ ] Drop the "Renamed from pollo-api" note in `README.md` (the old-project cleanup line in `synology-boot.sh` is already gone).
-- [ ] Delete the old GHCR packages `ghcr.io/ptinkler/pollo-api` and `pollo-nginx` (GitHub profile -> Packages) and the old images on the NAS.
+- [x] Dropped the legacy `POLLO_DATA_DIR` fallback (`config.py`, its tests, `tests/conftest.py`) and the `${POLLO_HOST_DATA_DIR}` fallback in `docker-compose.yml`. A deployment still using the old names now gets the repo root (local) or an unset mount (compose) instead of its data, so check `.env` first.
+- [x] Dropped the "Renamed from pollo-api" note in `README.md`, and the orphan root `package-lock.json` (empty, still named `pollo-api`).
+- [x] Deleted the old GHCR packages `pollo-api` and `pollo-nginx`; the NAS images, stale remote branches and stray scratch folder are gone too. The rename is fully cleaned up.
 
 ## 8. Code inspection (hacks, workarounds, suppressions)
 
@@ -83,4 +90,4 @@ Also done (second pass):
 - The two failed-image retries share `utils/imageRetry.js`.
 
 Open:
-- [ ] Remaining `cast(` calls in `request_log.py` / `chat/turn.py` / `chat/tools.py` could be tightened with TypedDicts for the tool schemas.
+- [x] Tightened the `cast(` calls in `request_log.py`, `chat/tools.py` (tool schemas are typed `dict[str, JsonValue]`), `chat/turn_tools.py` and `chat/generation.py`: 47 -> 34 in `src/py`. The log's `_last` was typed as one shape and assigned another (now one typed `Mapping`), and a streamed chat reply is a small dataclass with `as_json()` instead of a TypedDict cast to JSON. The 34 left are TypedDict construction, Protocol shims for untyped libraries (Authlib, ASGI scope) and ORM internals.

@@ -1,8 +1,13 @@
 """web.core.request_log keeps each user's provider-call log to themselves."""
 
+from typing import TYPE_CHECKING
+
 import pytest
 
 from web.core import metadata, request_log
+
+if TYPE_CHECKING:
+    from web.types import ChatChunk
 
 
 def _prompts():
@@ -51,3 +56,27 @@ def test_entry_of_returns_the_log_entry_of_a_call_that_raised() -> None:
 def test_entry_of_is_none_for_an_error_that_was_never_logged() -> None:
     """Test that an exception raised outside logged() has no entry."""
     assert request_log.entry_of(ValueError("plain")) is None
+
+
+def test_chat_reply_logs_what_arrived_even_when_the_stream_stops_early() -> None:
+    """Test that a reply the app stopped reading still shows its text and tool calls so far."""
+    outcome: request_log.LogOutcome = {"status": None, "flags": None, "response": None}
+    chunks: list[ChatChunk] = [
+        {"choices": [{"delta": {"content": "Hel"}}]},
+        {
+            "choices": [
+                {"delta": {"tool_calls": [{"index": 0, "function": {"name": "generate_image", "arguments": '{"pro'}}]}}
+            ]
+        },
+        {"choices": [{"delta": {"content": "lo"}}]},
+    ]
+    stream = request_log.chat_reply(iter(chunks), outcome)
+    next(stream)
+    next(stream)
+    stream.close()  # the consumer walked away mid-stream
+    assert outcome["response"] == {
+        "content": "Hel",
+        "tool_calls": {"0": {"name": "generate_image", "arguments": '{"pro'}},
+        "finish_reason": None,
+        "usage": None,
+    }

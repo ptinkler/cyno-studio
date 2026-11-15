@@ -39,7 +39,6 @@ _APP_ENV = (
     "OPENROUTER_BASE_URL",
     "OPEN_SIGNUP",
     "PASSWORD_PEPPER",
-    "POLLO_DATA_DIR",  # the legacy name of CYNO_DATA_DIR
     "PUBLIC_BASE_URL",
     "SESSION_SECRET",
     "UPLOAD_BACKUP",

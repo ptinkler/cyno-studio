@@ -25,20 +25,20 @@ import json
 import threading
 import time
 from collections.abc import Generator, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Protocol, TypedDict, cast
+from typing import Protocol, TypedDict
 
 from web.core import config
 from web.core.metadata import current_tenant
+from web.jsonutil import as_object, body_of, loads
 from web.types import ChatChunk, JsonValue
 
 _BARE_BASE64_MIN_CHARS = 2000  # a long string with no spaces is taken to be base64 (e.g. an image)
 
 MAX_BYTES = 5 * 1024 * 1024
 _lock = threading.Lock()
-_last = threading.local()  # the latest logged call on this thread (each chat turn runs on its own)
 MAX_TEXT = 4000  # a non-JSON response body is kept up to this many characters
 
 
@@ -47,11 +47,25 @@ class _ToolReply(TypedDict):
     arguments: str
 
 
-class _ChatReply(TypedDict):
-    content: str
-    tool_calls: dict[int, _ToolReply]
-    finish_reason: str | None
-    usage: JsonValue
+@dataclass
+class _ChatReply:
+    """A chat reply as it streams in: text, tool calls, finish reason and usage."""
+
+    content: str = ""
+    tool_calls: dict[int, _ToolReply] = field(default_factory=dict)
+    finish_reason: str | None = None
+    usage: JsonValue = None
+
+    def as_json(self) -> JsonValue:
+        """What the log shows of it so far (tool calls keyed by their index, as text)."""
+        return {
+            "content": self.content,
+            "tool_calls": {
+                str(i): {"name": c["name"], "arguments": c["arguments"]} for i, c in self.tool_calls.items()
+            },
+            "finish_reason": self.finish_reason,
+            "usage": self.usage,
+        }
 
 
 class LogOutcome(TypedDict):
@@ -62,9 +76,13 @@ class LogOutcome(TypedDict):
     response: JsonValue
 
 
-class _RequestExchange(TypedDict):
-    request: JsonValue
-    response: JsonValue
+class _Last(threading.local):
+    """The latest logged call on this thread (each chat turn runs on its own)."""
+
+    entry: Mapping[str, JsonValue] | None = None
+
+
+_last = _Last()
 
 
 class _Response(Protocol):
@@ -119,7 +137,7 @@ def response_of(resp: _Response) -> JsonValue:
     content_type = (headers.get("content-type") or "").split(";")[0].strip()
     if "json" in content_type or not content_type:
         with contextlib.suppress(Exception):
-            return redact(cast("JsonValue", resp.json()))
+            return redact(body_of(resp))
     if content_type.startswith("text/") or not content_type:
         with contextlib.suppress(Exception):
             text = resp.text
@@ -128,29 +146,30 @@ def response_of(resp: _Response) -> JsonValue:
     return {"content_type": content_type, "bytes": len(resp.content)}
 
 
-def chat_reply(chunks: Iterator[ChatChunk], outcome: LogOutcome) -> Iterator[ChatChunk]:
+def chat_reply(chunks: Iterator[ChatChunk], outcome: LogOutcome) -> Generator[ChatChunk]:
     """Pass through chat chunks while assembling their logged reply.
 
     The accumulated response includes text, tool calls, finish reason, and
     usage, including partial data when the stream ends early.
     """
-    reply: _ChatReply = {"content": "", "tool_calls": {}, "finish_reason": None, "usage": None}
-    outcome["response"] = cast("JsonValue", reply)
+    reply = _ChatReply()
+    outcome["response"] = reply.as_json()
     for chunk in chunks:
         for choice in chunk.get("choices") or []:
             delta = choice.get("delta") or {}
             content = delta.get("content")
-            reply["content"] += content if isinstance(content, str) else ""
+            reply.content += content if isinstance(content, str) else ""
             for call in delta.get("tool_calls") or []:
-                slot = reply["tool_calls"].setdefault(call.get("index", 0), {"name": "", "arguments": ""})
+                slot = reply.tool_calls.setdefault(call.get("index", 0), {"name": "", "arguments": ""})
                 fn = call.get("function") or {}
                 name, arguments = fn.get("name"), fn.get("arguments")
                 slot["name"] += name if isinstance(name, str) else ""
                 slot["arguments"] += arguments if isinstance(arguments, str) else ""
-            reply["finish_reason"] = choice.get("finish_reason") or reply["finish_reason"]
+            reply.finish_reason = choice.get("finish_reason") or reply.finish_reason
         usage = chunk.get("usage")
         if usage:
-            reply["usage"] = cast("JsonValue", usage)
+            reply.usage = as_object(usage)
+        outcome["response"] = reply.as_json()  # kept current, so a stream that stops early still logs what arrived
         yield chunk
 
 
@@ -224,9 +243,11 @@ def recent(limit: int = 100) -> list[dict[str, JsonValue]]:
     out: list[dict[str, JsonValue]] = []
     for line in reversed(lines):
         try:
-            out.append(cast("dict[str, JsonValue]", json.loads(line)))
+            entry = loads(line)
         except ValueError:
             continue
+        if isinstance(entry, dict):
+            out.append(entry)
         if len(out) >= limit:
             break
     return out
@@ -247,10 +268,10 @@ def _attach_entry(error: BaseException, entry: Mapping[str, JsonValue]) -> None:
 def entry_of(error: BaseException) -> Mapping[str, JsonValue] | None:
     """The log entry of the call that raised `error`, when it was raised inside ``logged()``."""
     try:
-        entry = vars(error).get(_ENTRY_ATTR)
+        entry: object = vars(error).get(_ENTRY_ATTR)
     except TypeError:
         return None
-    return cast("Mapping[str, JsonValue]", entry) if isinstance(entry, Mapping) else None
+    return as_object(entry) or None
 
 
 @contextlib.contextmanager
@@ -265,7 +286,7 @@ def logged(provider: str, method: str, path: str, body: JsonValue, model: str | 
     """
     shown = redact(body)
     outcome: LogOutcome = {"status": None, "flags": None, "response": None}
-    _last.entry = _RequestExchange(request=shown, response=None)
+    _last.entry = {"request": shown, "response": None}
     start = time.monotonic()
 
     def done(error: str | None = None, status: int | None = None) -> dict[str, JsonValue]:
@@ -295,9 +316,9 @@ def logged(provider: str, method: str, path: str, body: JsonValue, model: str | 
 
 def take_last() -> dict[str, JsonValue] | None:
     """The latest logged call on this thread, as {"request", "response"} (then forgets it)."""
-    entry = cast("_RequestExchange | None", getattr(_last, "entry", None))
+    entry = _last.entry
     _last.entry = None
-    return {"request": entry["request"], "response": entry.get("response")} if entry else None
+    return {"request": entry.get("request"), "response": entry.get("response")} if entry else None
 
 
 def forget_last() -> None:

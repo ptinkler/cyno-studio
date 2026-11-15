@@ -11,7 +11,6 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from http import HTTPStatus
 from pathlib import Path
-from typing import cast
 
 from web import characters, providers
 from web.chat.catalogue import auto_ratio, model_info
@@ -23,7 +22,7 @@ from web.chat.tools import AUDIO_TOOL_RESULT, IMAGE_TOOL_RESULT, TITLE_PROMPT, V
 from web.core import request_log
 from web.core.metadata import get_db
 from web.core.metadata.models import Character, ChatMessage
-from web.jsonutil import as_object
+from web.jsonutil import as_list, as_object
 from web.providers import ImageRequest, StreamOptions, VideoRequest, openrouter, pollo, stream_chat
 from web.types import JsonValue, VideoJob
 from web.uploads.files import file_to_data_url, is_blank_image
@@ -164,10 +163,11 @@ def plan_refs(chat_refs: list[str], chars: list[Character], limits: RefLimits) -
 
 def param_characters(params: Mapping[str, JsonValue]) -> list[Character]:
     """The characters a media item was made with (deleted ones drop out)."""
-    ids = params.get("characters")
-    if not isinstance(ids, list) or not all(isinstance(item, int) and not isinstance(item, bool) for item in ids):
+    ids = as_list(params.get("characters"))
+    wanted = [i for i in ids if isinstance(i, int) and not isinstance(i, bool)]
+    if not ids or len(wanted) != len(ids):  # anything but whole-number ids means the params are not ours
         return []
-    return characters.load(cast("list[int]", ids), get_db())
+    return characters.load(wanted, get_db())
 
 
 def _ref_file(conv_id: str, ref: str) -> Path:
