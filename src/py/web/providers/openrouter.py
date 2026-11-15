@@ -26,7 +26,7 @@ from web.auth import keyctx
 from web.core import net_guard, request_log, sse
 from web.jsonutil import as_object, as_objects, body_of, loads
 from web.providers.specs import ImageRequest, StreamOptions, VideoRequest
-from web.types import ChatChunk, JsonValue, VideoJob
+from web.types import ChatChunk, JsonValue, OpenRouterCredits, VideoJob
 from web.uploads.files import file_to_data_url
 
 # Overridable so a local fake can stand in during manual testing
@@ -224,7 +224,7 @@ def _get(path: str, params: dict[str, str] | None = None) -> dict[str, JsonValue
     return as_object(data)
 
 
-def get_credits() -> dict[str, float]:
+def get_credits() -> OpenRouterCredits:
     """Return the account's total, used, and remaining credits in dollars.
 
     This is distinct from GET /key, which reports only this key's spending limit.

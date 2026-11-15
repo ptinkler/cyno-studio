@@ -23,7 +23,7 @@ from web.providers.venice.errors import (
     RequestRejectedError,
     VeniceError,
 )
-from web.types import JsonValue
+from web.types import JsonValue, VeniceBalances
 
 VENICE_BASE = os.getenv("VENICE_BASE_URL", "https://api.venice.ai/api/v1").rstrip("/")
 
@@ -141,7 +141,7 @@ def _send(call: Call, *, check: bool = True) -> httpx.Response:
     return resp
 
 
-def get_balances() -> dict[str, float | None]:
+def get_balances() -> VeniceBalances:
     """Return the account's USD balance and bundled credits.
 
     Both values come from one rate-limits call. Venice spends BUNDLED_CREDITS

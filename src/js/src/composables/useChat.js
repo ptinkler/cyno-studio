@@ -1,12 +1,31 @@
-import { apiGet, apiPost, apiPut, apiPatch, apiDelete, apiUpload } from './useApi'
+import { apiGet, apiPost, apiPatch, apiDelete, apiUpload } from './useApi'
 import { useAuth } from './useAuth'
 
 const enc = encodeURIComponent
 
-export const fetchChatStatus = () => apiGet('/api/chat/status')
+// Status, balances, defaults, instructions and spaces are typed in chatSettingsApi.ts; re-exported so
+// everything chat-related is still imported from here.
+export {
+  fetchChatStatus,
+  fetchOpenRouterCredits,
+  fetchVeniceBalance,
+  fetchInstructions,
+  createInstruction,
+  updateInstruction,
+  deleteInstruction,
+  createInstructionGroup,
+  updateInstructionGroup,
+  deleteInstructionGroup,
+  fetchSpaces,
+  createSpace,
+  updateSpace,
+  deleteSpace,
+  fetchSettings,
+  updateSettings,
+  setTitleModel,
+} from './chatSettingsApi'
+
 export const fetchChatModels = (refresh = false) => apiGet(`/api/chat/models${refresh ? '?refresh=true' : ''}`)
-export const fetchOpenRouterCredits = () => apiGet('/api/chat/credits')
-export const fetchVeniceBalance = () => apiGet('/api/chat/venice-balance')
 // Pinned + most recent ({ conversations, more }); with `q`, chats whose title or messages match (each with a `snippet`)
 export const fetchConversations = (q = '') => apiGet(`/api/chat/conversations${q ? `?q=${enc(q)}` : ''}`)
 // What a chat has cost: { usd, credits, inherited_usd, inherited_credits }
@@ -65,27 +84,6 @@ export const deleteChatExchange = (messageId, { deleteMedia = false } = {}) =>
   apiDelete(`/api/chat/messages/${messageId}?delete_media=${deleteMedia}`)
 // What that would also remove: { other_versions, other_messages }
 export const fetchDeleteInfo = messageId => apiGet(`/api/chat/messages/${messageId}/delete-info`)
-
-// Custom instructions: snippets, and groups that bundle them (attachable per chat)
-export const fetchInstructions = () => apiGet('/api/chat/instructions')
-export const createInstruction = data => apiPost('/api/chat/instructions', data)
-export const updateInstruction = (id, data) => apiPut(`/api/chat/instructions/${id}`, data)
-export const deleteInstruction = id => apiDelete(`/api/chat/instructions/${id}`)
-export const createInstructionGroup = data => apiPost('/api/chat/instruction-groups', data)
-export const updateInstructionGroup = (id, data) => apiPut(`/api/chat/instruction-groups/${id}`, data)
-export const deleteInstructionGroup = id => apiDelete(`/api/chat/instruction-groups/${id}`)
-
-// Spaces: chat-only groupings with their own default characters/instructions
-export const fetchSpaces = () => apiGet('/api/chat/spaces')
-export const createSpace = data => apiPost('/api/chat/spaces', data)
-export const updateSpace = (id, data) => apiPut(`/api/chat/spaces/${id}`, data)
-export const deleteSpace = id => apiDelete(`/api/chat/spaces/${id}`)
-
-// Global defaults bucket (characters + instructions added to every new chat)
-export const fetchSettings = () => apiGet('/api/chat/settings')
-export const updateSettings = data => apiPut('/api/chat/settings', data)
-// The text model that names new chats ('' / null = the chat's own model)
-export const setTitleModel = title_model => apiPut('/api/chat/settings/title-model', { title_model })
 
 export const patchConversation = (id, data) => apiPatch(`/api/chat/conversations/${enc(id)}`, data)
 

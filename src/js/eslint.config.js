@@ -1,10 +1,12 @@
 import js from '@eslint/js'
+import { defineConfig } from 'eslint/config'
 import prettier from 'eslint-config-prettier'
 import pluginVue from 'eslint-plugin-vue'
 import globals from 'globals'
+import tseslint from 'typescript-eslint'
 
 export default [
-  { ignores: ['coverage/**', 'dist/**'] }, // dist is the build output
+  { ignores: ['coverage/**', 'dist/**', 'src/api/schema.d.ts'] }, // dist is the build output; schema.d.ts is generated
   js.configs.recommended,
   ...pluginVue.configs['flat/recommended'],
   {
@@ -38,6 +40,18 @@ export default [
     // vite.config.js runs Vitest with `globals: true`
     languageOptions: { globals: { ...globals.browser, ...globals.node, ...globals.vitest } },
   },
+  ...defineConfig({
+    // TypeScript: the strictest preset, type-aware. No `any`, no unsafe member access, no floating
+    // promises. It is why the typed client reads server JSON in exactly one place (api/json.ts).
+    files: ['**/*.ts'],
+    extends: [...tseslint.configs.strictTypeChecked, ...tseslint.configs.stylisticTypeChecked],
+    languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } },
+    rules: {
+      'no-unused-vars': 'off', // @typescript-eslint/no-unused-vars replaces it
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrors: 'none' }],
+      '@typescript-eslint/consistent-type-imports': 'error',
+    },
+  }),
   // Layout is Prettier's job: turn off the stylistic rules that would fight it
   prettier,
 ]

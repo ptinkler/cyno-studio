@@ -11,7 +11,7 @@ import requests
 from web.core.cloudflare import is_cloudflare_block
 from web.core.config import POLLO_API_TIMEOUT, POLLO_PLATFORM_BASE, POLLO_TASK_BASE
 from web.jsonutil import as_int, as_object, as_objects, as_str, body_of
-from web.types import JsonValue
+from web.types import JsonValue, PolloBalance
 
 log = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ def _credit(value: JsonValue) -> int | None:
         return None
 
 
-def get_credit_balance(api_key: str) -> dict[str, float] | None:
+def get_credit_balance(api_key: str) -> PolloBalance | None:
     """Fetch current credit balance from Pollo API.
 
     Returns {"availableCredits": N, "totalCredits": N} or None on failure.

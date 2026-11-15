@@ -75,14 +75,27 @@ def get_user_keys(user: User) -> dict[str, str]:
     return _decrypt(getattr(user, "api_keys_json", None))
 
 
-def _masked(user: User | None) -> dict[str, dict[str, str | bool]]:
+class KeyStatus(BaseModel):
+    """Whether one provider's key is saved, with a short hint of it (never the key)."""
+
+    set: bool
+    hint: str
+
+
+class KeysStatus(BaseModel):
+    """The key status of every provider, by provider id."""
+
+    keys: dict[str, KeyStatus]
+
+
+def _masked(user: User | None) -> KeysStatus:
     keys = get_user_keys(user) if user else {}
-    out: dict[str, dict[str, str | bool]] = {}
+    out: dict[str, KeyStatus] = {}
     for p in KEY_PROVIDERS:
         value = keys.get(p)
         hint = f"…{value[-_HINT_CHARS:]}" if value and len(value) >= _HINT_CHARS else ("set" if value else "")
-        out[p] = {"set": bool(value), "hint": hint}
-    return out
+        out[p] = KeyStatus(set=bool(value), hint=hint)
+    return KeysStatus(keys=out)
 
 
 class KeysUpdate(BaseModel):
@@ -93,15 +106,13 @@ class KeysUpdate(BaseModel):
 
 
 @router.get("")
-async def get_keys(user: Annotated[User, Depends(require_user)]) -> dict[str, dict[str, dict[str, str | bool]]]:
+async def get_keys(user: Annotated[User, Depends(require_user)]) -> KeysStatus:
     """Return whether each provider key is set and its masked hint."""
-    return {"keys": _masked(user)}
+    return _masked(user)
 
 
 @router.put("")
-async def set_keys(
-    data: KeysUpdate, user: Annotated[User, Depends(require_user)]
-) -> dict[str, dict[str, dict[str, str | bool]]]:
+async def set_keys(data: KeysUpdate, user: Annotated[User, Depends(require_user)]) -> KeysStatus:
     """Update the signed-in user's provider keys."""
     current = get_user_keys(user)
     for provider, value in data.keys.items():
@@ -113,4 +124,4 @@ async def set_keys(
             current[provider] = value.strip()
     get_db().set_user_api_keys(user.id, _encrypt(current))
     caches.keys_changed()  # catalogues and balances are per user, built from their keys
-    return {"keys": _masked(get_db().get_user(user.id))}
+    return _masked(get_db().get_user(user.id))

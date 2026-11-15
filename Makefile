@@ -3,7 +3,7 @@ IMAGE_APP := $(REGISTRY)/cyno-studio
 IMAGE_NGX := $(REGISTRY)/cyno-studio-nginx
 TAG       := latest
 
-.PHONY: build push tag dev dev-api dev-frontend lint format test hooks vpn-restart vpn-status vpn-logs db-migrate db-upgrade db-downgrade db-history
+.PHONY: build push tag dev dev-api dev-frontend lint format test gen-api hooks vpn-restart vpn-status vpn-logs db-migrate db-upgrade db-downgrade db-history
 
 build:
 	docker build -t $(IMAGE_APP):$(TAG) .
@@ -48,6 +48,15 @@ hooks:
 test:
 	.venv/bin/python -m pytest -q
 	cd src/js && npm test
+
+# Regenerate the frontend's API types (src/js/src/api/schema.d.ts) from the backend's OpenAPI schema.
+# CI runs this with PY=python and fails if the committed file is stale.
+PY ?= .venv/bin/python
+gen-api:
+	@tmp=$$(mktemp) && data=$$(mktemp -d) \
+		&& PYTHONPATH=src/py CYNO_DATA_DIR=$$data $(PY) -m scripts.export_openapi $$tmp >/dev/null \
+		&& (cd src/js && npm run --silent gen:api -- $$tmp); \
+		status=$$?; rm -rf $$tmp $$data; exit $$status
 
 # Pollo model maintenance scripts (src/py is put on the path for you). Pass options with ARGS, e.g.
 #   make audit-models ARGS="--key sk-..."

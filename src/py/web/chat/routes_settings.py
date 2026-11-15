@@ -22,25 +22,35 @@ from web.chat.models import (
     SpaceIn,
     TitleModelIn,
 )
+from web.chat.schemas import (
+    ChatSettings,
+    ChatStatus,
+    Deleted,
+    Instruction,
+    InstructionGroup,
+    InstructionList,
+    Space,
+    SpaceList,
+)
 from web.core.get_task import get_credit_balance
 from web.core.metadata import get_db
 from web.core.metadata.models import ChatSpace
 from web.providers import openrouter, venice
-from web.types import Catalogue, JsonValue
+from web.types import Catalogue, OpenRouterCredits, PolloBalance, VeniceBalances
 
 
 @router.get("/status")
-def api_chat_status() -> dict[str, bool]:
+def api_chat_status() -> ChatStatus:
     """Report which chat providers are configured."""
-    return {
-        "configured": openrouter.is_configured() or venice.is_configured(),
-        "openrouter": openrouter.is_configured(),
-        "venice": venice.is_configured(),
-    }
+    return ChatStatus(
+        configured=openrouter.is_configured() or venice.is_configured(),
+        openrouter=openrouter.is_configured(),
+        venice=venice.is_configured(),
+    )
 
 
 @router.get("/credits")
-def api_chat_credits() -> dict[str, float]:
+def api_chat_credits() -> OpenRouterCredits:
     """OpenRouter balance for the chat header (Pollo's is /pollo-balance)."""
     require_text_provider()
     try:
@@ -50,7 +60,7 @@ def api_chat_credits() -> dict[str, float]:
 
 
 @router.get("/pollo-balance")
-def api_pollo_balance() -> dict[str, float]:
+def api_pollo_balance() -> PolloBalance:
     """Pollo credit balance for the chat header."""
     api_key = keyctx.provider_key("pollo")
     if not api_key:
@@ -62,7 +72,7 @@ def api_pollo_balance() -> dict[str, float]:
 
 
 @router.get("/venice-balance")
-def api_venice_balance() -> dict[str, float | None]:
+def api_venice_balance() -> VeniceBalances:
     """Venice balance for the chat header: USD, and the plan's bundled credits."""
     if not venice.is_configured():
         raise HTTPException(503, "No Venice API key set — add one in Settings → Keys")
@@ -137,113 +147,114 @@ def _defaults_fields(data: DefaultsIn) -> dict[str, list[int]]:
 
 
 @router.get("/settings")
-def api_get_settings() -> dict[str, JsonValue]:
+def api_get_settings() -> ChatSettings:
     """Return the current user's global chat defaults."""
-    return get_db().get_settings().to_dict()
+    return ChatSettings.model_validate(get_db().get_settings().to_dict())
 
 
 @router.put("/settings")
-def api_update_settings(data: DefaultsIn) -> dict[str, JsonValue]:
+def api_update_settings(data: DefaultsIn) -> ChatSettings:
     """Save validated global chat defaults."""
-    return get_db().save_settings(**_defaults_fields(data)).to_dict()
+    return ChatSettings.model_validate(get_db().save_settings(**_defaults_fields(data)).to_dict())
 
 
 @router.put("/settings/title-model")
-def api_set_title_model(data: TitleModelIn) -> dict[str, JsonValue]:
+def api_set_title_model(data: TitleModelIn) -> ChatSettings:
     """The text model that names new chats (empty = the chat's own model)."""
-    return get_db().save_settings(title_model=(data.title_model or "").strip() or None).to_dict()
+    saved = get_db().save_settings(title_model=(data.title_model or "").strip() or None)
+    return ChatSettings.model_validate(saved.to_dict())
 
 
 @router.get("/instructions")
-def api_list_instructions() -> dict[str, JsonValue]:
+def api_list_instructions() -> InstructionList:
     """List instruction snippets and groups."""
-    return {
-        "instructions": [i.to_dict() for i in get_db().list_instructions()],
-        "groups": [g.to_dict() for g in get_db().list_instruction_groups()],
-    }
+    return InstructionList(
+        instructions=[Instruction.model_validate(i.to_dict()) for i in get_db().list_instructions()],
+        groups=[InstructionGroup.model_validate(g.to_dict()) for g in get_db().list_instruction_groups()],
+    )
 
 
 @router.post("/instructions")
-def api_create_instruction(data: InstructionIn) -> dict[str, JsonValue]:
+def api_create_instruction(data: InstructionIn) -> Instruction:
     """Create an instruction snippet."""
     item = get_db().save_instruction(name=data.name.strip(), content=data.content)
     if not item:
         raise HTTPException(500, "Could not create instruction")
-    return item.to_dict()
+    return Instruction.model_validate(item.to_dict())
 
 
 @router.put("/instructions/{instruction_id}")
-def api_update_instruction(instruction_id: int, data: InstructionIn) -> dict[str, JsonValue]:
+def api_update_instruction(instruction_id: int, data: InstructionIn) -> Instruction:
     """Update an instruction snippet by ID."""
     item = get_db().save_instruction(instruction_id, name=data.name.strip(), content=data.content)
     if not item:
         raise HTTPException(404, "Instruction not found")
-    return item.to_dict()
+    return Instruction.model_validate(item.to_dict())
 
 
 @router.delete("/instructions/{instruction_id}")
-def api_delete_instruction(instruction_id: int) -> dict[str, int]:
+def api_delete_instruction(instruction_id: int) -> Deleted:
     """Delete an instruction snippet by ID."""
     if not get_db().delete_instruction(instruction_id):
         raise HTTPException(404, "Instruction not found")
-    return {"deleted": instruction_id}
+    return Deleted(deleted=instruction_id)
 
 
 @router.post("/instruction-groups")
-def api_create_instruction_group(data: InstructionGroupIn) -> dict[str, JsonValue]:
+def api_create_instruction_group(data: InstructionGroupIn) -> InstructionGroup:
     """Create a group from validated instruction snippet IDs."""
     group = get_db().save_instruction_group(name=data.name.strip(), snippet_ids=require_instructions(data.snippet_ids))
     if not group:
         raise HTTPException(500, "Could not create instruction group")
-    return group.to_dict()
+    return InstructionGroup.model_validate(group.to_dict())
 
 
 @router.put("/instruction-groups/{group_id}")
-def api_update_instruction_group(group_id: int, data: InstructionGroupIn) -> dict[str, JsonValue]:
+def api_update_instruction_group(group_id: int, data: InstructionGroupIn) -> InstructionGroup:
     """Update an instruction group by ID."""
     item = get_db().save_instruction_group(
         group_id, name=data.name.strip(), snippet_ids=require_instructions(data.snippet_ids)
     )
     if not item:
         raise HTTPException(404, "Instruction group not found")
-    return item.to_dict()
+    return InstructionGroup.model_validate(item.to_dict())
 
 
 @router.delete("/instruction-groups/{group_id}")
-def api_delete_instruction_group(group_id: int) -> dict[str, int]:
+def api_delete_instruction_group(group_id: int) -> Deleted:
     """Delete an instruction group by ID."""
     if not get_db().delete_instruction_group(group_id):
         raise HTTPException(404, "Instruction group not found")
-    return {"deleted": group_id}
+    return Deleted(deleted=group_id)
 
 
 @router.get("/spaces")
-def api_list_spaces() -> dict[str, JsonValue]:
+def api_list_spaces() -> SpaceList:
     """List the user's chat spaces."""
-    return {"spaces": [s.to_dict() for s in get_db().list_spaces()]}
+    return SpaceList(spaces=[Space.model_validate(s.to_dict()) for s in get_db().list_spaces()])
 
 
 @router.post("/spaces")
-def api_create_space(data: SpaceIn) -> dict[str, JsonValue]:
+def api_create_space(data: SpaceIn) -> Space:
     """Create a chat space with validated defaults."""
     space = get_db().save_space(None, name=data.name.strip(), **_defaults_fields(data))
     if not space:
         raise HTTPException(500, "Could not create space")
-    return space.to_dict()
+    return Space.model_validate(space.to_dict())
 
 
 @router.put("/spaces/{space_id}")
-def api_update_space(space_id: int, data: SpaceIn) -> dict[str, JsonValue]:
+def api_update_space(space_id: int, data: SpaceIn) -> Space:
     """Update a chat space and its defaults."""
     item = get_db().save_space(space_id, name=data.name.strip(), **_defaults_fields(data))
     if not item:
         raise HTTPException(404, "Space not found")
-    return item.to_dict()
+    return Space.model_validate(item.to_dict())
 
 
 @router.delete("/spaces/{space_id}")
-def api_delete_space(space_id: int) -> dict[str, int]:
+def api_delete_space(space_id: int) -> Deleted:
     """Delete a chat space by ID."""
     if not get_db().delete_space(space_id):
         raise HTTPException(404, "Space not found")
-    return {"deleted": space_id}
+    return Deleted(deleted=space_id)

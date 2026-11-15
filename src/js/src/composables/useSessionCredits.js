@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue'
-import { fetchBalance } from './useApi'
+import { fetchBalance } from './chatSettingsApi'
 
 /**
  * Session credit tracker.

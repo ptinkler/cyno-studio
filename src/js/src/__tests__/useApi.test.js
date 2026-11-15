@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const mockFetch = vi.fn()
 globalThis.fetch = mockFetch
 
-import { apiGet, apiPost, apiPut, apiDelete } from '../composables/useApi.js'
+import { apiGet, apiPost, apiPut, apiDelete } from '../composables/useApi'
 
 beforeEach(() => {
   mockFetch.mockReset()

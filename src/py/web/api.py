@@ -31,6 +31,7 @@ from web.auth.dev_login import seed_dev_user
 from web.auth.oauth import configured_providers, register_providers
 from web.auth.oauth_routes import router as oauth_router
 from web.auth.passwords import hash_password, needs_rehash, verify_password
+from web.auth.schemas import AuthStatus, LoginResult, Ok, login_result, session_user
 from web.auth.session import USER_COOKIE, set_user_cookie, user_secret
 from web.auth.user_keys import router as keys_router
 from web.auth.users import admin_emails, resolve_current_user
@@ -214,7 +215,7 @@ def _login_rate_limited(request: Request, email: str) -> bool:
 
 
 @app.post("/api/auth/login")
-async def api_auth_login(data: LoginRequest, response: Response, request: Request) -> dict[str, str | bool | None]:
+async def api_auth_login(data: LoginRequest, response: Response, request: Request) -> LoginResult:
     """Authenticate a local user and set the signed-in session cookie."""
     email = data.email.strip().lower()
     if _login_rate_limited(request, email):
@@ -226,29 +227,24 @@ async def api_auth_login(data: LoginRequest, response: Response, request: Reques
     if needs_rehash(user.password_hash):  # transparently upgrade to stronger params
         db.set_user_password(user.id, hash_password(data.password))
     set_user_cookie(response, request, user.id)
-    return {"ok": True, "email": user.email, "name": user.name}
+    return login_result(user)
 
 
 @app.post("/api/auth/logout")
-async def api_auth_logout(response: Response) -> dict[str, bool]:
+async def api_auth_logout(response: Response) -> Ok:
     """Clear the signed-in user cookie."""
     response.delete_cookie(key=USER_COOKIE, samesite="lax")
-    return {"ok": True}
+    return Ok(ok=True)
 
 
 @app.get("/api/auth/status")
-async def api_auth_status(
-    user_session: Annotated[str | None, Cookie()] = None,
-) -> dict[str, bool | dict[str, str | bool | None] | None]:
+async def api_auth_status(user_session: Annotated[str | None, Cookie()] = None) -> AuthStatus:
     """Return whether a user is signed in and their public account details.
 
     Admin accounts are created via the CLI (web.provision_admin), never through the app.
     """
     user = resolve_current_user(user_session)
-    return {
-        "authenticated": user is not None,
-        "user": {"email": user.email, "name": user.name, "is_admin": user.is_admin} if user else None,
-    }
+    return AuthStatus(authenticated=user is not None, user=session_user(user) if user else None)
 
 
 # Track jobs currently being recovered to prevent concurrent recovery attempts
@@ -292,7 +288,7 @@ if STATIC_DIR.is_dir():
     # Serve static assets (js, css, etc.)
     app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="static-assets")
 
-    @app.get("/{path:path}")
+    @app.get("/{path:path}", include_in_schema=False)  # the SPA, not part of the API
     def serve_frontend(path: str) -> FileResponse:
         """Catch-all: serve the Vue SPA index.html for any non-API route."""
         return FileResponse(static_file(path))

@@ -15,21 +15,11 @@ from fastapi.responses import RedirectResponse
 from web.auth import users
 from web.auth.dev_login import dev_login_enabled
 from web.auth.oauth import configured_providers, normalize_profile, oauth
+from web.auth.schemas import AuthMe, AuthProviders, account_user
 from web.auth.session import set_user_cookie
-from web.core.metadata import User, get_db
+from web.core.metadata import get_db
 
 router = APIRouter(prefix="/api/auth")
-
-
-def _user_dict(u: User) -> dict[str, object]:
-    return {
-        "id": u.id,
-        "email": u.email,
-        "name": u.name,
-        "avatar_url": u.avatar_url,
-        "provider": u.provider,
-        "is_admin": u.is_admin,
-    }
 
 
 def _redirect_uri(request: Request, provider: str) -> str:
@@ -44,22 +34,22 @@ def _redirect_uri(request: Request, provider: str) -> str:
 
 
 @router.get("/providers")
-async def providers(user_session: Annotated[str | None, Cookie()] = None) -> dict[str, object]:
+async def providers(user_session: Annotated[str | None, Cookie()] = None) -> AuthProviders:
     """Return configured sign-in providers and the current user, if any."""
     user = users.resolve_current_user(user_session)
-    return {
-        "providers": configured_providers(),
-        "open_signup": users.open_signup(),
-        "dev_login": dev_login_enabled(),
-        "user": _user_dict(user) if user else None,
-    }
+    return AuthProviders(
+        providers=configured_providers(),
+        open_signup=users.open_signup(),
+        dev_login=dev_login_enabled(),
+        user=account_user(user) if user else None,
+    )
 
 
 @router.get("/me")
-async def me(user_session: Annotated[str | None, Cookie()] = None) -> dict[str, object]:
+async def me(user_session: Annotated[str | None, Cookie()] = None) -> AuthMe:
     """Return the signed-in user, if any."""
     user = users.resolve_current_user(user_session)
-    return {"user": _user_dict(user) if user else None}
+    return AuthMe(user=account_user(user) if user else None)
 
 
 @router.get("/login/{provider}", name="oauth_login")

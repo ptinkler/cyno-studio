@@ -15,6 +15,7 @@ import os
 
 from fastapi import APIRouter, HTTPException, Request, Response
 
+from web.auth.schemas import LoginResult, login_result
 from web.auth.session import set_user_cookie
 from web.core.env import bool_env
 from web.core.metadata import User, get_db
@@ -91,7 +92,7 @@ def seed_dev_user() -> None:
 
 
 @router.post("/dev-login")
-async def dev_login(response: Response, request: Request) -> dict[str, str | bool | None]:
+async def dev_login(response: Response, request: Request) -> LoginResult:
     """Sign in as the local development account without a password or OAuth.
 
     The route returns 404 when disabled and refuses databases with encrypted keys.
@@ -106,4 +107,4 @@ async def dev_login(response: Response, request: Request) -> dict[str, str | boo
         )
     user = dev_user()
     set_user_cookie(response, request, user.id)
-    return {"ok": True, "email": user.email, "name": user.name}
+    return login_result(user)

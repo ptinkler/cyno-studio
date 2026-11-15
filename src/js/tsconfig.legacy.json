@@ -1,0 +1,15 @@
+{
+  // The JavaScript not yet migrated, type-checked with checkJs and no strictness. Composables and utils
+  // only: the .vue components need PropType annotations first (about 250 errors under vue-tsc).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "strict": false,
+    "noUncheckedIndexedAccess": false,
+    "exactOptionalPropertyTypes": false,
+    "noPropertyAccessFromIndexSignature": false,
+    "verbatimModuleSyntax": false
+  },
+  "include": ["src/composables/**/*.js", "src/utils/**/*.js"]
+}

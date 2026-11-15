@@ -9,6 +9,28 @@ type JsonValue = str | int | float | bool | Sequence[JsonValue] | Mapping[str, J
 type ModelEntry = dict[str, JsonValue]
 
 
+class PolloBalance(TypedDict):
+    """A Pollo account's credits (fractional: a job can cost 51.74)."""
+
+    availableCredits: float
+    totalCredits: float
+
+
+class OpenRouterCredits(TypedDict):
+    """An OpenRouter account's credits, in dollars."""
+
+    total_credits: float
+    total_usage: float
+    remaining: float
+
+
+class VeniceBalances(TypedDict):
+    """A Venice account's USD balance and bundled plan credits; null when unreadable."""
+
+    usd: float | None
+    credits: float | None
+
+
 class Catalogue(TypedDict, total=False):
     """Every provider's models by kind, plus the providers that failed to list."""
 

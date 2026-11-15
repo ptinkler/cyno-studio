@@ -46,6 +46,15 @@ jobs:
           npm run format:check
           npm run typecheck
 
+      # The frontend's API types are generated from the backend's routes; fail if the committed file is stale.
+      - name: Frontend — generated API types are up to date
+        run: |
+          make gen-api PY=python
+          git diff --exit-code src/js/src/api/schema.d.ts || {
+            echo "::error::src/js/src/api/schema.d.ts is stale. Run 'make gen-api' and commit it."
+            exit 1
+          }
+
   test-python:
     runs-on: ubuntu-latest
     steps:

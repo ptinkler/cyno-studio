@@ -131,24 +131,36 @@ class UploadPrefsUpdate(BaseModel):
     selfhost_base: str | None = None
 
 
-def _meta() -> dict[str, object]:
-    return {
-        "hosts": list(HOSTS),
-        "expiry_options": list(EXPIRY_OPTIONS),
-        "expiry_configurable": list(EXPIRY_CONFIGURABLE),
-        "selfhost_base_default": _public_base_default(),
-        "public_base_url_set": bool(_public_base_default()),
-    }
+class UploadSettings(BaseModel):
+    """A user's upload preferences and the choices the settings page offers."""
+
+    prefs: UploadPrefs
+    hosts: list[str]
+    expiry_options: list[int]
+    expiry_configurable: list[str]
+    selfhost_base_default: str
+    public_base_url_set: bool
+
+
+def _settings(prefs: UploadPrefs) -> UploadSettings:
+    return UploadSettings(
+        prefs=prefs,
+        hosts=list(HOSTS),
+        expiry_options=list(EXPIRY_OPTIONS),
+        expiry_configurable=list(EXPIRY_CONFIGURABLE),
+        selfhost_base_default=_public_base_default(),
+        public_base_url_set=bool(_public_base_default()),
+    )
 
 
 @router.get("")
-async def get_upload_prefs(user: Annotated[User, Depends(require_user)]) -> dict[str, object]:
+async def get_upload_prefs(user: Annotated[User, Depends(require_user)]) -> UploadSettings:
     """Return the user's upload preferences and available choices."""
-    return {"prefs": dict(resolve_prefs(user)), **_meta()}
+    return _settings(resolve_prefs(user))
 
 
 @router.put("")
-async def set_upload_prefs(data: UploadPrefsUpdate, user: Annotated[User, Depends(require_user)]) -> dict[str, object]:
+async def set_upload_prefs(data: UploadPrefsUpdate, user: Annotated[User, Depends(require_user)]) -> UploadSettings:
     """Save the user's upload preferences."""
     fields: dict[str, object] = {
         "primary": data.primary,
@@ -159,7 +171,7 @@ async def set_upload_prefs(data: UploadPrefsUpdate, user: Annotated[User, Depend
     given = {k: v for k, v in fields.items() if v is not None}
     merged = _sanitize(given, resolve_prefs(user))
     get_db().set_user_upload_prefs(user.id, json.dumps(merged))
-    return {"prefs": dict(merged), **_meta()}
+    return _settings(merged)
 
 
 class SelfhostTest(BaseModel):
@@ -168,8 +180,15 @@ class SelfhostTest(BaseModel):
     selfhost_base: str | None = None
 
 
+class SelfhostCheck(BaseModel):
+    """The outcome of a self-host reachability check."""
+
+    ok: bool
+    detail: str
+
+
 @router.post("/test-selfhost")
-async def check_selfhost(data: SelfhostTest, user: Annotated[User, Depends(require_user)]) -> dict[str, bool | str]:
+async def check_selfhost(data: SelfhostTest, user: Annotated[User, Depends(require_user)]) -> SelfhostCheck:
     """Check that the configured self-host URL can serve media externally.
 
     Stage a small file, fetch its signed public URL and verify the returned bytes.
@@ -185,17 +204,21 @@ async def check_selfhost(data: SelfhostTest, user: Annotated[User, Depends(requi
         with httpx.Client() as client:
             resp = get_public(client, url, timeout=10)
         if resp.status_code != HTTPStatus.OK:
-            return {"ok": False, "detail": f"The URL returned HTTP {resp.status_code} — check the base URL and proxy."}
+            return SelfhostCheck(
+                ok=False, detail=f"The URL returned HTTP {resp.status_code} — check the base URL and proxy."
+            )
         if resp.text.strip() != token:
-            return {"ok": False, "detail": "The URL was reachable but served the wrong content (proxy/caching?)."}
+            return SelfhostCheck(
+                ok=False, detail="The URL was reachable but served the wrong content (proxy/caching?)."
+            )
     except UnsafeURLError as e:  # before ValueError, which it subclasses
-        return {"ok": False, "detail": f"Not publicly reachable: {e}. Pollo needs a public https address."}
+        return SelfhostCheck(ok=False, detail=f"Not publicly reachable: {e}. Pollo needs a public https address.")
     except ValueError as e:
-        return {"ok": False, "detail": str(e)}
+        return SelfhostCheck(ok=False, detail=str(e))
     except httpx.HTTPError as e:
-        return {"ok": False, "detail": f"Couldn't reach the URL: {e}"}
+        return SelfhostCheck(ok=False, detail=f"Couldn't reach the URL: {e}")
     finally:
         test_file.unlink(missing_ok=True)
         with contextlib.suppress(OSError):
             test_dir.rmdir()  # remove the staging dir when empty
-    return {"ok": True, "detail": f"Reachable — Pollo can fetch source media from {base}."}
+    return SelfhostCheck(ok=True, detail=f"Reachable — Pollo can fetch source media from {base}.")
