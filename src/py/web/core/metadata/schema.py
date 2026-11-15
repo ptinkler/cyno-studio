@@ -36,10 +36,18 @@ def _config(db_path: Path) -> Config:
     return cfg
 
 
+class MigrationFailedError(RuntimeError):
+    """The database could not be brought up to date, so the app must not start on it."""
+
+    def __init__(self, db_path: Path) -> None:
+        super().__init__(f"could not bring the database at {db_path} up to date (see the error above)")
+
+
 def ensure_schema(engine: sa.Engine, db_path: Path, fresh: bool) -> None:
     """Bring an unversioned database up to the current Alembic revision.
 
-    Failures are logged rather than raised so a server can still start. The
+    A failure raises ``MigrationFailedError``: the server must not start on a half-migrated database, where it
+    would fail later and more confusingly, or write data the next migration can't read. The
     engine is disposed first because its connections hold
     ``PRAGMA locking_mode=EXCLUSIVE`` (see ``_base.py``), so
     while one is open Alembic's own connection can't write — it would block
@@ -56,5 +64,5 @@ def ensure_schema(engine: sa.Engine, db_path: Path, fresh: bool) -> None:
             log.info("database has no Alembic version: adopting it at %s", at)
             command.stamp(cfg, at)
         command.upgrade(cfg, "head")
-    except Exception:
-        log.exception("could not bring the database up to date")
+    except Exception as exc:
+        raise MigrationFailedError(db_path) from exc

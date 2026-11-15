@@ -32,7 +32,7 @@ echo "Boot mode: COMPOSE_PROFILES=${COMPOSE_PROFILES:-novpn}"
 # IMPORTANT: Delete any HTTP (port 80) reverse proxy rule in DSM for
 # this hostname — only keep the HTTPS (port 443) rule.
 # ─────────────────────────────────────────────────────────────────────
-REDIRECT_CONF="/etc/nginx/conf.d/http.pollo-http-redirect.conf"
+REDIRECT_CONF="/etc/nginx/conf.d/http.cyno-http-redirect.conf"
 HOSTNAME="${APP_HOSTNAME:?APP_HOSTNAME not set — add APP_HOSTNAME=your-hostname.local to .env}"  # from .env
 
 DESIRED_CONF=$(cat <<EOF

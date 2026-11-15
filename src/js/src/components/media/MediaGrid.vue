@@ -2,6 +2,7 @@
 import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { mediaOrigin } from '../../composables/useMedia'
 import { fmtDuration } from '../../utils/format'
+import { reloadImageLater } from '../../utils/imageRetry'
 
 // A grid of media-library items with infinite scroll: tiles are added a
 // small batch at a time as you near the bottom, and each tile's small
@@ -74,10 +75,7 @@ const failed = ref(new Set())
 function onThumbError(item, e) {
   if (!retried.value.has(item.id)) {
     retried.value = new Set(retried.value).add(item.id)
-    const img = e.target
-    setTimeout(() => {
-      img.src = `${item.thumb_url}?retry=1`
-    }, 2000)
+    reloadImageLater(e.target, item.thumb_url, 2000)
   } else {
     failed.value = new Set(failed.value).add(item.id)
   }

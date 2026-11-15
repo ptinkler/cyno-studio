@@ -20,6 +20,7 @@ from web.chat.models import RefChoices
 from web.chat.tools import AUDIO_TOOL_RESULT, IMAGE_TOOL_RESULT, TITLE_PROMPT, VIDEO_TOOL_RESULT
 from web.core.metadata import get_db
 from web.core.metadata.models import Character, ChatMessage
+from web.jsonutil import as_object
 from web.providers import openrouter, pollo, stream_chat
 from web.types import JsonValue, VideoJob
 from web.uploads import file_to_data_url, is_blank_image
@@ -353,12 +354,8 @@ def dedupe(files: list[str]) -> list[str]:
     return list(dict.fromkeys(files))
 
 
-def _json_object(value: JsonValue) -> Mapping[str, JsonValue]:
-    return cast("Mapping[str, JsonValue]", value) if isinstance(value, Mapping) else {}
-
-
 def _history_tool_call(item: dict[str, JsonValue]) -> dict[str, JsonValue]:
-    params = _json_object(item.get("params"))
+    params = as_object(item.get("params"))
     prompt = item.get("prompt")
     args: dict[str, JsonValue] = {"prompt": prompt if isinstance(prompt, str) else ""}
     if params.get("aspect_ratio"):
@@ -366,7 +363,7 @@ def _history_tool_call(item: dict[str, JsonValue]) -> dict[str, JsonValue]:
     # Replay the reference choices too, so the history doesn't read as a
     # run of reference-free calls that the model then imitates
     if item.get("kind") == "image":
-        args.update(_json_object(params.get("ref_args")))
+        args.update(as_object(params.get("ref_args")))
     return {
         "id": f"call_{item.get('id', '')}",
         "type": "function",

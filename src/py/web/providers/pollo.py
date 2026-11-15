@@ -17,7 +17,6 @@ its media item rather than adding to the OpenRouter `cost`.
 import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import cast
 from urllib.parse import urlsplit
 
 import requests
@@ -26,6 +25,7 @@ from PIL import Image
 from web import image_hosts, keyctx, request_log
 from web.core.config import POLLO_API_TIMEOUT, POLLO_PLATFORM_BASE
 from web.core.get_task import TaskResult, get_task_status
+from web.jsonutil import as_object, as_objects, body_of
 from web.providers import pollo_estimate
 from web.providers.pollo_engine import (
     AUDIO_GENERATORS,
@@ -180,7 +180,7 @@ def list_video_models() -> list[ModelEntry]:
 
 def _plain(value: Mapping[str, object]) -> dict[str, JsonValue]:
     """A JSON-literal table entry (a ``TypedDict``) as a plain JSON object."""
-    return cast("dict[str, JsonValue]", dict(value))
+    return as_object(value)
 
 
 def list_audio_models() -> list[ModelEntry]:
@@ -210,24 +210,12 @@ def list_voices(page: int = 1, page_size: int = 50, **filters: str) -> dict[str,
             timeout=POLLO_API_TIMEOUT,
         )
         resp.raise_for_status()
-        body = _json_object(cast("object", resp.json()))
+        body = as_object(body_of(resp))
     except (requests.RequestException, ValueError) as e:
         raise VoiceListError(e) from e
     keep = ("voiceId", "voiceName", "sampleAudio", "language", "gender", "age", "voiceStyle", "accent", "engineCode")
-    voices: list[JsonValue] = [{k: v.get(k) for k in keep} for v in _json_objects(body.get("data"))]
+    voices: list[JsonValue] = [{k: v.get(k) for k in keep} for v in as_objects(body.get("data"))]
     return {"voices": voices, "total": body.get("total", len(voices))}
-
-
-def _json_object(value: object) -> dict[str, JsonValue]:
-    """A decoded JSON body as an object (empty when it is anything else)."""
-    return cast("dict[str, JsonValue]", value) if isinstance(value, dict) else {}
-
-
-def _json_objects(value: JsonValue) -> list[Mapping[str, JsonValue]]:
-    """The objects in a decoded JSON list (anything else is empty)."""
-    if isinstance(value, Sequence) and not isinstance(value, str):
-        return [item for item in value if isinstance(item, Mapping)]
-    return []
 
 
 def submit_audio(
@@ -700,7 +688,7 @@ def _submit_logged(generator: PolloGenerator, outcome: request_log.LogOutcome) -
     outcome["status"] = resp.status_code
     outcome["response"] = request_log.response_of(resp)
     try:
-        body = _json_object(cast("object", resp.json()))
+        body = as_object(body_of(resp))
     except ValueError:
         raise NonJsonReplyError(resp.status_code, resp.text) from None
     data = body.get("data")
@@ -711,7 +699,7 @@ def _submit_logged(generator: PolloGenerator, outcome: request_log.LogOutcome) -
     if not task_id and resp.status_code == 404 and body.get("message") == "Not found":
         raise ModelNotEnabledError
     if not task_id:
-        detail = "; ".join(str(i.get("message", "")) for i in _json_objects(data.get("issues"))) or body.get("message")
+        detail = "; ".join(str(i.get("message", "")) for i in as_objects(data.get("issues"))) or body.get("message")
         raise RequestFailedError(None if detail is None else str(detail), resp.status_code)
     return task_id
 

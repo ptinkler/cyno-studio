@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 import web.api as api_mod
 from tests.jsonpath import must, number
+from web.chat import routes_settings
 from web.core.metadata import MetadataDB
 
 if TYPE_CHECKING:
@@ -87,13 +88,13 @@ class TestLoginThrottle:
         assert must(last).status_code == 429
 
 
-def test_usage_balance_accepts_fractional_credits(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pollo_balance_accepts_fractional_credits(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """Pollo reports fractional credits (e.g. 1.54); the balance route must not 500 on them."""
 
     def balance(api_key: str) -> dict[str, float]:
         return {"availableCredits": 1.5400000000008731, "totalCredits": 42026}
 
-    monkeypatch.setattr(api_mod, "get_credit_balance", balance)
-    r = client.get("/api/usage/balance")
+    monkeypatch.setattr(routes_settings, "get_credit_balance", balance)
+    r = client.get("/api/chat/pollo-balance")
     assert r.status_code == 200
     assert number(r, "availableCredits") == pytest.approx(1.54)

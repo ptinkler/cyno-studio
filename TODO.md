@@ -79,8 +79,12 @@ Done 2026-11-15:
 - `openrouter.py` uses the shared `jsonutil` helpers (`as_object`, `body_of`, new `loads`) instead of private copies and 14 casts; `cast(` count in `src/py` went 88 -> 64.
 - `vpn.py` catches `requests.RequestException`, not bare `Exception`; the scripts no longer rely on a `sys.path` hack (run them with `make audit-models` / `make probe-models`).
 
+Also done (second pass):
+- Startup now fails fast: `ensure_schema` raises `MigrationFailedError` (the original error chained) instead of letting the server run on a half-migrated database. Note `restart: unless-stopped` will retry-loop a container whose migration fails; the cause is in `docker compose logs app`.
+- JSON narrowing casts replaced with the shared `jsonutil` helpers (`as_object`, `as_objects`, `body_of`, `loads`): `cast(` count in `src/py` went 88 -> 50. The 50 left are deliberate: TypedDict construction, Protocol shims for untyped libraries (Authlib, ASGI scope), ORM internals.
+- Legacy `chat_conversations.instruction_id` column removed (migration 0030, reversible; its values were carried into `instruction_ids_json` by 0011).
+- The Pollo balance route moved from `/api/usage/balance` (in `api.py`) to `/api/chat/pollo-balance`, beside the OpenRouter and Venice balances.
+- The two failed-image retries share `utils/imageRetry.js`.
+
 Open:
-- [ ] `ensure_schema` (`core/metadata/schema.py`) logs a failed migration and lets the server start on a half-migrated database (`test_schema.py` pins this). Decide whether startup should fail fast instead.
-- [ ] 64 `cast(` calls remain in `src/py` (most in `chatgpt_import.py`, `chat/turn.py`, `request_log.py`): mostly JSON narrowing that the `jsonutil` helpers could replace.
-- [ ] Legacy kept around: the single-attachment instruction column in `core/metadata/models.py` ("superseded by instruction_ids_json") and the `/api/usage` credits route used by `useApi.js`. Remove once nothing reads them.
-- [ ] `GenerationGrid.vue` and `MediaGrid.vue` each retry a failed image with a cache-busting query string; different enough that they were left separate.
+- [ ] Remaining `cast(` calls in `request_log.py` / `chat/turn.py` / `chat/tools.py` could be tightened with TypedDicts for the tool schemas.

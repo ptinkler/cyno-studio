@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 from fastapi import HTTPException
 
-from web import characters
+from web import characters, keyctx
 from web.chat.catalogue import get_models
 from web.chat.constants import (
     KINDS,
@@ -21,6 +21,7 @@ from web.chat.models import (
     SpaceIn,
     TitleModelIn,
 )
+from web.core.get_task import get_credit_balance
 from web.core.metadata import get_db
 from web.core.metadata.models import ChatSpace
 from web.providers import openrouter, venice
@@ -39,12 +40,24 @@ def api_chat_status() -> dict[str, bool]:
 
 @router.get("/credits")
 def api_chat_credits() -> dict[str, float]:
-    """OpenRouter balance for the chat header (Pollo's is /api/usage/balance)."""
+    """OpenRouter balance for the chat header (Pollo's is /pollo-balance)."""
     require_text_provider()
     try:
         return openrouter.get_credits()
     except openrouter.OpenRouterError as e:
         raise HTTPException(502, f"Couldn't fetch the OpenRouter balance: {e}") from e
+
+
+@router.get("/pollo-balance")
+def api_pollo_balance() -> dict[str, float]:
+    """Pollo credit balance for the chat header."""
+    api_key = keyctx.provider_key("pollo")
+    if not api_key:
+        raise HTTPException(503, "No Pollo API key set — add one in Settings → Keys")
+    balance = get_credit_balance(api_key)
+    if balance is None:
+        raise HTTPException(502, "Couldn't fetch the Pollo balance")
+    return balance
 
 
 @router.get("/venice-balance")

@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Annotated, cast
 
 import uvicorn
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Request
+from fastapi import Cookie, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -31,7 +31,6 @@ from web.chat import startup_resume_chat
 from web.chat_export import router as chat_export_router
 from web.chatgpt_import import router as chatgpt_import_router
 from web.core.env import bool_env
-from web.core.get_task import get_credit_balance
 from web.core.metadata import get_db, reset_tenant, set_tenant
 from web.core.metadata.schema import ensure_schema
 from web.dev_login import router as dev_login_router
@@ -42,7 +41,7 @@ from web.passwords import hash_password, needs_rehash, verify_password
 from web.public_media import router as public_media_router
 from web.upload_settings import router as upload_settings_router
 from web.user_keys import router as keys_router
-from web.users import admin_emails, require_user, resolve_current_user
+from web.users import admin_emails, resolve_current_user
 
 log = logging.getLogger(__name__)
 ROOT_DIR = Path(__file__).resolve().parents[3]  # the repo root (src/py/web/api.py)
@@ -255,20 +254,6 @@ _recovering_lock = threading.Lock()
 
 
 IMMUTABLE_CACHE = {"Cache-Control": "public, max-age=31536000, immutable"}
-
-
-@app.get("/api/usage/balance")
-def api_usage_balance(_api_key: Annotated[str, Depends(require_user)]) -> dict[str, float]:
-    """Fetch current credit balance from the Pollo API."""
-    api_key = keyctx.provider_key("pollo")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="API key not configured")
-
-    balance = get_credit_balance(api_key)
-    if balance is None:
-        raise HTTPException(status_code=502, detail="Failed to fetch credit balance from Pollo API")
-
-    return balance
 
 
 # Must be registered before the SPA catch-all below.

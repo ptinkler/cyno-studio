@@ -244,7 +244,7 @@ def _new_conversation(data: Mapping[str, JsonValue], spaces: dict[str, int]) -> 
             space_id=_space_id(_str(data.get("space")), spaces),
         )
     )
-    made_id = cast("Mapping[str, JsonValue]", made).get("id")
+    made_id = made.get("id")
     settings = data.get("settings")
     conv = get_db().update_conversation(
         str(made_id),

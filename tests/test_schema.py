@@ -17,7 +17,7 @@ import web.core.metadata._base as base
 from tests.jsonpath import must
 from tests.stubs import stub
 from web.core.metadata import MetadataDB
-from web.core.metadata.schema import ADOPT_AT, ensure_schema
+from web.core.metadata.schema import ADOPT_AT, MigrationFailedError, ensure_schema
 
 pytestmark = pytest.mark.no_tenant
 
@@ -90,14 +90,16 @@ def test_adopting_still_runs_the_migrations_after_it(tmp_path: Path) -> None:
     assert media[0]["model"] == "pollo/seedream"  # 0027 ran
 
 
-def test_a_broken_migration_does_not_stop_the_server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A server that can't migrate should still start and say so."""
+def test_a_broken_migration_stops_startup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A server that can't migrate must not start on a half-migrated database."""
     path = tmp_path / "x.db"
     db = MetadataDB(db_path=path)
     monkeypatch.setattr(
         "web.core.metadata.schema.command.upgrade", stub(lambda: (_ for _ in ()).throw(RuntimeError("boom")))
     )
-    ensure_schema(db.engine, path, fresh=True)  # must not raise
+    with pytest.raises(MigrationFailedError, match="could not bring the database") as raised:
+        ensure_schema(db.engine, path, fresh=True)
+    assert isinstance(raised.value.__cause__, RuntimeError)  # the original failure is chained, not lost
 
 
 def test_the_old_handwritten_catch_up_is_gone(tmp_path: Path) -> None:
@@ -105,3 +107,26 @@ def test_the_old_handwritten_catch_up_is_gone(tmp_path: Path) -> None:
     src = Path(must(base.__file__)).read_text()
     assert "_LATE_COLUMNS" not in src
     assert "_BACKFILLS" not in src
+
+
+def test_the_legacy_instruction_id_column_is_dropped_and_instructions_kept(tmp_path: Path) -> None:
+    """Migration 0030 removes chat_conversations.instruction_id; the carried-over instruction_ids_json stays."""
+    path = tmp_path / "old.db"
+    db = MetadataDB(db_path=path)
+    ensure_schema(db.engine, path, fresh=True)
+    conv = db.create_conversation(title="Fox")
+    db.update_conversation(conv.id, instruction_ids=[7])
+    db.engine.dispose()
+    # put the database back in its pre-0030 shape: the legacy column present, versioned at 0029
+    eng = sa.create_engine(f"sqlite:///{path}")
+    with eng.begin() as c:
+        c.execute(sa.text("ALTER TABLE chat_conversations ADD COLUMN instruction_id INTEGER"))
+        c.execute(sa.text("UPDATE alembic_version SET version_num = '0029'"))
+    eng.dispose()
+
+    db2 = MetadataDB(db_path=path)
+    ensure_schema(db2.engine, path, fresh=False)
+    columns = {c["name"] for c in sa.inspect(db2.engine).get_columns("chat_conversations")}
+    assert "instruction_id" not in columns
+    assert must(_version(path)) >= "0030"
+    assert must(db2.get_conversation(conv.id)).instruction_ids == [7]

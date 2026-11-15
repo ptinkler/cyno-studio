@@ -91,5 +91,5 @@ export function apiUpload(endpoint, file) {
   return apiSend('POST', endpoint, form)
 }
 
-// Pollo credits remaining (the only legacy /api/usage route Studio still uses).
-export const fetchBalance = () => apiGet('/api/usage/balance')
+// Pollo credits remaining.
+export const fetchBalance = () => apiGet('/api/chat/pollo-balance')

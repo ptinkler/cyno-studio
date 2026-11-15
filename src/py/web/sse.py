@@ -8,6 +8,7 @@ import time
 from collections.abc import Callable, Iterable, Iterator
 from typing import cast
 
+from web.jsonutil import as_object, loads
 from web.types import ChatChunk, JsonValue
 
 
@@ -24,7 +25,7 @@ def _data_payload(line: str) -> str | None:
 def _parse_chunk(payload: str) -> dict[str, JsonValue] | None:
     """A payload's JSON object, or None when it isn't readable JSON."""
     try:
-        return cast("dict[str, JsonValue]", json.loads(payload))
+        return as_object(loads(payload))
     except json.JSONDecodeError:
         return None
 

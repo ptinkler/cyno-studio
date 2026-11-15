@@ -9,13 +9,14 @@ import json
 import logging
 import os
 import time
-from typing import Annotated, cast
+from typing import Annotated
 
 import requests
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from web.core.metadata import User
+from web.jsonutil import as_object, body_of
 from web.types import JsonValue
 from web.users import require_admin
 
@@ -76,8 +77,8 @@ def _gluetun_json(
         r = _gluetun_get(path, timeout=timeout)
     except requests.RequestException:  # any connection failure means unreachable
         return if_unreachable
-    data = cast("object", r.json())
-    return cast("dict[str, JsonValue]", data) if r.ok and isinstance(data, dict) else if_not_ok
+    data = body_of(r)
+    return as_object(data) if r.ok and isinstance(data, dict) else if_not_ok
 
 
 def _egress_ip() -> str | None:

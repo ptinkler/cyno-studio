@@ -136,9 +136,6 @@ class ChatConversation(Base):
     text_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
     image_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
     video_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    # Legacy single attachment (superseded by instruction_ids_json; kept so old
-    # rows migrate and the column isn't dropped out from under existing data)
-    instruction_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Instruction snippets attached individually (ChatInstruction.id list, JSON)
     instruction_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Instruction groups attached (ChatInstructionGroup.id list, JSON); each

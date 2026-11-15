@@ -10,12 +10,13 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import requests
 
 from web.core.cache import MISS, TTLCache
 from web.core.cloudflare import is_cloudflare_block
+from web.jsonutil import body_of
 
 if TYPE_CHECKING:
     from web.providers.pollo_engine._shared import Payload
@@ -81,7 +82,7 @@ def _ask(url: str, payload: Payload, api_key: str | None) -> tuple[dict[str, Jso
         log.warning("estimate %s answered HTTP %s: %s", url, resp.status_code, resp.text[:200])
         return None, True
     try:
-        body = cast("JsonValue", resp.json())
+        body = body_of(resp)
     except ValueError:
         return None, False
     return _credits(body.get("data", body) if isinstance(body, Mapping) else None), True

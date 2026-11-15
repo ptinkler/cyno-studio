@@ -5,6 +5,7 @@
      size S/M/L is remembered; kind + favourites filters are applied locally. -->
 <script setup>
 import { computed, ref } from 'vue'
+import { reloadImageLater } from '../../utils/imageRetry'
 
 const props = defineProps({
   items: { type: Array, default: () => [] },
@@ -52,7 +53,7 @@ function onImgError(e, item) {
     img.src = item.url
   } else if (!img.dataset.retry) {
     img.dataset.retry = '1'
-    setTimeout(() => (img.src = `${item.url}${item.url.includes('?') ? '&' : '?'}r=1`), 1500)
+    reloadImageLater(img, item.url, 1500)
   }
 }
 const inProgress = computed(() => props.items.filter(it => it.status === 'pending').length)
