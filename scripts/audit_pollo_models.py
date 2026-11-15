@@ -9,7 +9,7 @@ the public spec):
      source of truth for a model's FEATURES — whether it has a reference-to-
      video branch, the refs cap, allowed ref types, durations, resolutions,
      ratios. This script extracts those and diffs them against our registry
-     (web/providers/pollo_engine/video.py VIDEO_MODELS + pollo_models.MODEL_INFO)
+     (src/py/web/providers/pollo_engine/video/models.py VIDEO_MODELS + pollo_models.MODEL_INFO)
      so you never hand-find a model's feature set again.
 
   2. ENABLED ON YOUR KEY?  (--key / POLLO_API_KEY) The free estimate probe
@@ -248,13 +248,14 @@ def _enablement(keys: list[str], api_key: str) -> dict[str, str]:
 
 # ── --write: safe, surgical edits to our source (you review the git diff) ──
 # Only the mechanical, derivable fields are touched: `hidden` (enablement) and
-# `ref_mode` in pollo_models.py, and `HAS_REFS` in video.py. Curated bits —
+# `ref_mode` in pollo_models.py, and `HAS_REFS` in video/models.py. Curated bits —
 # labels, deliberate "Superseded" hides, ref_mode's own quirks like
 # `no_audio_with_video` — are merged around, never overwritten.
 REMOVE: Final = _Remove.REMOVE
 _REPO = Path(__file__).resolve().parent.parent  # repo root
-MODELS_FILE = _REPO / "web" / "providers" / "pollo_models.py"
-ENGINE_FILE = _REPO / "web" / "providers" / "pollo_engine" / "video.py"
+_PY = _REPO / "src" / "py"
+MODELS_FILE = _PY / "web" / "providers" / "pollo_models.py"
+ENGINE_FILE = _PY / "web" / "providers" / "pollo_engine" / "video" / "models.py"
 # A hide we may clear is one justified by enablement; a deliberate hide is kept.
 _ENABLEMENT_HIDE = re.compile(r"enabled|403|404|unavailable|access", re.IGNORECASE)
 
@@ -450,7 +451,7 @@ def _write(ours: Mapping[str, OurModel], docs: Mapping[str, DocFeature], enabled
         write("\nHand-review (not auto-applied):")
         for note in notes:
             write(f"  - {note}")
-    write(f"\nApplied {n} edit(s) to pollo_models.py / video.py.")
+    write(f"\nApplied {n} edit(s) to pollo_models.py / video/models.py.")
     write("Run `ruff format` on them, then review with `git diff` before committing.")
 
 

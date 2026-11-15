@@ -1,4 +1,4 @@
-import { confirmDialog, promptDialog } from './useDialog'
+import { confirmDialog } from './useDialog'
 import { ref, reactive, computed, watch, onScopeDispose } from 'vue'
 import {
   fetchConversations,
@@ -6,25 +6,14 @@ import {
   fetchConversationSpend,
   fetchChatStatus,
   fetchSpaces,
-  createSpace,
-  updateSpace,
-  deleteSpace,
   fetchChatModels,
   createConversation,
   patchConversation,
-  deleteConversation,
   sendChatMessage,
   retryChatMessage,
   editChatMessage,
-  rewordChatMessage,
-  showChatTextVersion,
-  showChatMediaVersion,
-  regenerateChatMedia,
   enhanceChatPrompt,
   estimateChatCost,
-  pinChatMedia,
-  favouriteChatMedia,
-  fetchChatLibrary,
   deleteChatExchange,
   fetchDeleteInfo,
   switchChatBranch,
@@ -36,36 +25,14 @@ import { useChatInstructions } from './useChatInstructions'
 import { useMessagePolling } from './useMessagePolling'
 import { useChatAttachments, MAX_ATTACHMENTS } from './useChatAttachments'
 import { useChatBalances } from './useChatBalances'
-import { useChatDefaults } from './useChatDefaults'
+import { unusedKeys, readVideoDuration } from './studioAttachments'
+import { useStudioDefaults } from './useStudioDefaults'
+import { useStudioMedia } from './useStudioMedia'
+import { useStudioSidebar } from './useStudioSidebar'
 
 // All of Studio's state + behaviour, kept out of the view so the components
 // stay presentational. `settings` is a useComposerSettings() instance (shared
 // with the inspector's model pickers); `models` is its catalogue, filled here.
-const attKind = a => (a.audio ? 'audio' : a.video ? 'video' : 'image')
-
-// What a video model takes, by attachment kind
-function acceptedKinds(info) {
-  const types = new Set(info.ref_mode?.types || [])
-  return {
-    image: types.has('image') || !!info.reference_images || !!info.frame_images?.length,
-    video: types.has('video') || !!info.video_input,
-    audio: types.has('audio') || !!info.audio_input,
-  }
-}
-
-// Keys of attachments the model can't use: a kind it doesn't take, or past its per-kind cap
-function unusedKeys(list, info, caps) {
-  const accepts = acceptedKinds(info)
-  const seen = { image: 0, video: 0, audio: 0 }
-  const out = new Set()
-  for (const a of list) {
-    const kind = attKind(a)
-    seen[kind]++
-    if (!accepts[kind] || seen[kind] > caps[kind]) out.add(a.key)
-  }
-  return out
-}
-
 export function useStudio({ models, settings, showToast }) {
   const { selected, mode, turnSettings, applyChat, applyDefaults } = settings
 
@@ -143,15 +110,6 @@ export function useStudio({ models, settings, showToast }) {
   // Reference-to-video with a source clip (recast): the output runs as long as
   // the clip, so on Auto the length is the clip's, snapped to what the model
   // allows. Picking a length by hand overrides it. Read client-side.
-  function readVideoDuration(url) {
-    return new Promise(resolve => {
-      const v = document.createElement('video')
-      v.preload = 'metadata'
-      v.onloadedmetadata = () => resolve(v.duration || null)
-      v.onerror = () => resolve(null)
-      v.src = url
-    })
-  }
   watch(
     () => [
       selected.video,
@@ -175,54 +133,22 @@ export function useStudio({ models, settings, showToast }) {
     { deep: true },
   )
 
-  // Defaults (global + space) a thread inherits, less any hidden here, plus pauses
-  const defaults = useChatDefaults()
-  const { inherited: allInherited, globalSettings, loadDefaults, setCurrentSpace } = defaults
-  const NO_HIDDEN = () => ({ character: [], instruction: [], instruction_group: [] })
-  const NO_PAUSED = () => ({ instruction: [], instruction_group: [] })
-  const hiddenDefaults = ref(NO_HIDDEN())
-  const paused = ref(NO_PAUSED())
-  const splitInherited = hidden =>
-    Object.fromEntries(
-      Object.entries(allInherited.value).map(([kind, list]) => [
-        kind,
-        list.filter(x => hidden === (hiddenDefaults.value[kind] || []).includes(x.id)),
-      ]),
-    )
-  const inheritedDefaults = computed(() => splitInherited(false))
-  const hiddenInherited = computed(() => splitInherited(true))
-  const inheritedInstructionIds = computed(() => ({
-    snippets: inheritedDefaults.value.instruction.map(x => x.id),
-    groups: inheritedDefaults.value.instruction_group.map(x => x.id),
-  }))
-  const inheritedCharacterIds = computed(() => inheritedDefaults.value.character.map(x => x.id))
-  const pausedInstructionIds = computed(() => ({
-    snippets: paused.value.instruction,
-    groups: paused.value.instruction_group,
-  }))
-  const DEFAULT_KIND = { snippet: 'instruction', group: 'instruction_group' }
-  async function setDefaultHidden({ kind: picked, id }, hide) {
-    const kind = DEFAULT_KIND[picked] || picked
-    const ids = hiddenDefaults.value[kind].filter(x => x !== id)
-    hiddenDefaults.value = { ...hiddenDefaults.value, [kind]: hide ? [...ids, id] : ids }
-    if (!active.value) return
-    try {
-      await patchConversation(active.value, { hidden_defaults: hiddenDefaults.value })
-    } catch (e) {
-      showToast(`Couldn't update the thread: ${e.message}`, 'error')
-    }
-  }
-  async function setPaused({ kind: picked, id }, pause) {
-    const kind = DEFAULT_KIND[picked] || picked
-    const ids = paused.value[kind].filter(x => x !== id)
-    paused.value = { ...paused.value, [kind]: pause ? [...ids, id] : ids }
-    if (!active.value) return
-    try {
-      await patchConversation(active.value, { paused_instructions: paused.value })
-    } catch (e) {
-      showToast(`Couldn't update the thread: ${e.message}`, 'error')
-    }
-  }
+  const {
+    globalSettings,
+    loadDefaults,
+    setCurrentSpace,
+    hiddenDefaults,
+    paused,
+    NO_HIDDEN,
+    NO_PAUSED,
+    inheritedDefaults,
+    hiddenInherited,
+    inheritedInstructionIds,
+    inheritedCharacterIds,
+    pausedInstructionIds,
+    setDefaultHidden,
+    setPaused,
+  } = useStudioDefaults({ active, showToast })
   // Tell the defaults singleton which space is in context (for editors' add-to toggles)
   watch(
     () => activeThread.value?.space_id ?? null,
@@ -779,88 +705,20 @@ export function useStudio({ models, settings, showToast }) {
       enhancing.value = false
     }
   }
-  // Cards whose regenerate request is in flight: a double click on "Try
-  // again" would otherwise start (and pay for) two generations
-  const regenerating = new Set()
-  async function regenerateMedia(msg, { mediaId, model, prompt, edit, replace }) {
-    if (regenerating.has(mediaId)) return
-    regenerating.add(mediaId)
-    if (!model) {
-      const kind = (msg.media || []).find(i => i.id === mediaId)?.kind
-      if (kind && selected[kind]) model = selected[kind]
-    }
-    try {
-      replaceMessage(await regenerateChatMedia(msg.id, mediaId, { model, prompt, edit, replace }))
-      polling.ensure()
-    } catch (e) {
-      showToast(e.message, 'error')
-    } finally {
-      regenerating.delete(mediaId)
-    }
-  }
-  // Write a reply's words again, keeping the pictures it already made.
-  // With an instruction the model edits its words; without, it redoes them.
-  // The old words stay as a version (the ‹ › on the text).
-  async function reword(msg, instruction = '') {
-    if (sending.value || messageIndex(msg.id) === -1) return
-    await runTurn(
-      rewordChatMessage,
-      active.value,
-      { ...turnSettings(), message_id: msg.id, instruction: instruction || '' },
-      null,
-    )
-  }
-  // Make another of a card's pictures the real one (free: nothing is generated)
-  async function showMediaVersion(msg, { mediaId, index }) {
-    if (sending.value) return
-    try {
-      replaceMessage(await showChatMediaVersion(msg.id, mediaId, index))
-    } catch (e) {
-      showToast(e.message, 'error')
-    }
-  }
-  // Flip a reply's text to another wording (free: nothing is generated)
-  async function showTextVersion(msg, index) {
-    if (sending.value) return
-    try {
-      replaceMessage(await showChatTextVersion(msg.id, index))
-    } catch (e) {
-      showToast(e.message, 'error')
-    }
-  }
-  async function pinMedia(msg, { mediaId, pinned: on }) {
-    try {
-      const { media } = await pinChatMedia(msg.id, mediaId, on)
-      const current = messages.value[messageIndex(msg.id)]
-      if (current) replaceMessage({ ...current, media })
-    } catch (e) {
-      showToast(e.message, 'error')
-    }
-  }
-  // Star/un-star a generation (bookmark for the Favourites gallery). `msg` may
-  // be a real message (in-thread) or a library row carrying { message_id }.
-  async function favouriteMedia(msg, { mediaId, favourite: on }) {
-    const messageId = msg.id ?? msg.message_id
-    try {
-      const { media } = await favouriteChatMedia(messageId, mediaId, on)
-      const current = messages.value[messageIndex(messageId)]
-      if (current) replaceMessage({ ...current, media })
-      // Reflect it in the open favourites gallery without a full reload
-      const f = favourites.value.find(i => i.id === mediaId)
-      if (f) f.favourite = on
-      if (!on) favourites.value = favourites.value.filter(i => i.id !== mediaId)
-    } catch (e) {
-      showToast(e.message, 'error')
-    }
-  }
-  async function loadFavourites() {
-    try {
-      const { items } = await fetchChatLibrary()
-      favourites.value = (items || []).filter(i => i.favourite && i.file)
-    } catch {
-      favourites.value = []
-    }
-  }
+  const { regenerateMedia, reword, showMediaVersion, showTextVersion, pinMedia, favouriteMedia, loadFavourites } =
+    useStudioMedia({
+      messages,
+      messageIndex,
+      replaceMessage,
+      polling,
+      showToast,
+      selected,
+      sending,
+      runTurn,
+      turnSettings,
+      active,
+      favourites,
+    })
   async function stop() {
     if (!streamingId.value) return
     try {
@@ -874,87 +732,15 @@ export function useStudio({ models, settings, showToast }) {
     if (file && !addChatImage(file, fromConv)) return
     if (target) mode.value = target
   }
-  async function toggleFav(t) {
-    const next = !t.pinned
-    try {
-      await patchConversation(t.id, { pinned: next })
-      t.pinned = next
-    } catch (e) {
-      showToast(e.message, 'error')
-    }
-  }
-  // Rename from the sidebar's inline editor (no prompt). `name` is the new title.
-  async function renameThread(t, name) {
-    const title = (name ?? '').trim()
-    if (!title || title === (t.title || '')) return
-    try {
-      await patchConversation(t.id, { title })
-      t.title = title
-      if (activeThread.value?.id === t.id) activeThread.value.title = title
-    } catch (e) {
-      showToast(e.message, 'error')
-    }
-  }
-  async function removeThread(t) {
-    const r = await confirmDialog({
-      title: `Delete “${t.title || 'Untitled'}”?`,
-      message: "The conversation is removed. This can't be undone.",
-      confirmLabel: 'Delete',
-      danger: true,
-      checkbox: { label: 'Also delete all its media (images, videos, uploads)', checked: true },
-    })
-    if (!r) return
-    try {
-      await deleteConversation(t.id, { deleteMedia: r.checked })
-      threads.value = threads.value.filter(x => x.id !== t.id)
-      if (active.value === t.id) newThread()
-    } catch (e) {
-      showToast(e.message, 'error')
-    }
-  }
-  async function moveThread(t, spaceId) {
-    try {
-      await patchConversation(t.id, { space_id: spaceId })
-      t.space_id = spaceId
-    } catch (e) {
-      showToast(e.message, 'error')
-    }
-  }
-
-  async function addSpace() {
-    const name = await promptDialog({ title: 'New space', label: 'Name', confirmLabel: 'Create' })
-    if (!name?.trim()) return
-    try {
-      const space = await createSpace({ name: name.trim() })
-      spaces.value = [...spaces.value, space]
-    } catch (e) {
-      showToast(e.message, 'error')
-    }
-  }
-  async function renameSpace(s, name) {
-    if (!name?.trim()) return
-    try {
-      await updateSpace(s.id, { name: name.trim() })
-      s.name = name.trim()
-    } catch (e) {
-      showToast(e.message, 'error')
-    }
-  }
-  async function removeSpace(s) {
-    const ok = await confirmDialog({
-      title: `Delete space “${s.name}”?`,
-      message: 'Its threads move to Unfiled.',
-      confirmLabel: 'Delete',
-      danger: true,
-    })
-    if (!ok) return
-    try {
-      await deleteSpace(s.id)
-      await loadLists()
-    } catch (e) {
-      showToast(e.message, 'error')
-    }
-  }
+  const { toggleFav, renameThread, removeThread, moveThread, addSpace, renameSpace, removeSpace } = useStudioSidebar({
+    threads,
+    spaces,
+    active,
+    activeThread,
+    showToast,
+    newThread,
+    loadLists,
+  })
 
   return {
     modelsLoading,

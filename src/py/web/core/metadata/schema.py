@@ -18,7 +18,7 @@ from alembic.config import Config
 
 log = logging.getLogger(__name__)
 
-_ROOT = Path(__file__).resolve().parents[3]
+_ROOT = Path(__file__).resolve().parents[5]  # src/py/web/core/metadata/schema.py
 
 # A database this app created before Alembic was wired in here has no version
 # row, but its schema was kept current by that hand-maintained catch-up — which

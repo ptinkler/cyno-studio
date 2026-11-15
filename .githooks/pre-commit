@@ -2,7 +2,7 @@
 # Runs the checks in .pre-commit-config.yaml on the staged files.
 # Enabled by `make hooks` (git config core.hooksPath .githooks).
 #
-# The tools live in the Linux checkout (.venv, web/frontend/node_modules), so
+# The tools live in the Linux checkout (.venv, src/js/node_modules), so
 # when git for Windows commits to the repo through \\wsl.localhost\<distro>\…
 # (VS Code, GitHub Desktop, PowerShell), the checks run inside WSL instead.
 

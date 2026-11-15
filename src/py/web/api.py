@@ -45,7 +45,7 @@ from web.user_keys import router as keys_router
 from web.users import admin_emails, require_user, resolve_current_user
 
 log = logging.getLogger(__name__)
-ROOT_DIR = Path(__file__).parent.parent.resolve()
+ROOT_DIR = Path(__file__).resolve().parents[3]  # the repo root (src/py/web/api.py)
 WEB_DIR = Path(__file__).parent.resolve()
 
 

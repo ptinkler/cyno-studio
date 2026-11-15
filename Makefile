@@ -20,10 +20,10 @@ tag:
 	git tag $(NEXT) && git push origin $(NEXT)
 
 dev-api:
-	.venv/bin/python -m uvicorn web.api:app --reload --port 5000
+	.venv/bin/python -m uvicorn web.api:app --app-dir src/py --reload --reload-dir src/py --port 5000
 
 dev-frontend:
-	cd web/frontend && npm run dev
+	cd src/js && npm run dev
 
 dev:
 	$(MAKE) -j2 dev-api dev-frontend
@@ -33,12 +33,12 @@ lint:
 	.venv/bin/ruff check .
 	.venv/bin/ruff format --check .
 	.venv/bin/basedpyright
-	cd web/frontend && npm run lint && npm run format:check
+	cd src/js && npm run lint && npm run format:check
 
 format:
 	.venv/bin/ruff check --fix .
 	.venv/bin/ruff format .
-	cd web/frontend && npm run lint:fix && npm run format
+	cd src/js && npm run lint:fix && npm run format
 
 # Run the lint checks on every commit (.githooks/pre-commit runs .pre-commit-config.yaml;
 # from git for Windows it runs them inside WSL)
@@ -47,7 +47,7 @@ hooks:
 
 test:
 	.venv/bin/python -m pytest -q
-	cd web/frontend && npm test
+	cd src/js && npm test
 
 vpn-restart:
 	docker restart pollo-vpn

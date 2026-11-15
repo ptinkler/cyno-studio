@@ -22,7 +22,7 @@ repos:
         args: [--fix]
       - id: ruff-format
 
-  # The frontend's own ESLint and Prettier (run `npm install` in web/frontend first)
+  # The frontend's own ESLint and Prettier (run `npm install` in src/js first)
   - repo: local
     hooks:
       - id: basedpyright
@@ -33,11 +33,11 @@ repos:
         always_run: true
       - id: eslint
         name: eslint
-        entry: web/frontend/node_modules/.bin/eslint --fix
+        entry: src/js/node_modules/.bin/eslint --fix
         language: system
-        files: ^web/frontend/.*\.(js|vue)$
+        files: ^src/js/.*\.(js|vue)$
       - id: prettier
         name: prettier
-        entry: web/frontend/node_modules/.bin/prettier --write --ignore-unknown --ignore-path web/frontend/.prettierignore
+        entry: src/js/node_modules/.bin/prettier --write --ignore-unknown --ignore-path src/js/.prettierignore
         language: system
-        files: ^web/frontend/
+        files: ^src/js/

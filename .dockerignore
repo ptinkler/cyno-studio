@@ -20,8 +20,8 @@ assets/
 cache/
 
 # Node
-web/frontend/node_modules/
-web/static/
+src/js/node_modules/
+src/py/web/static/
 
 # Build artifacts
 dist/

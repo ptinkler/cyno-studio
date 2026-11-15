@@ -34,12 +34,12 @@ assets/
 
 # Node.js / Vue frontend
 node_modules/
-web/frontend/node_modules/
-web/static/
+src/js/node_modules/
+src/py/web/static/
 *.local
 # Build artifacts
 dist/
 .vite/
 vite.config.*.timestamp-*
-/web/frontend/coverage/
+/src/js/coverage/
 /.env.bak
