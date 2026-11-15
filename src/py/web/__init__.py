@@ -1,4 +1,4 @@
-"""Pollo Studio backend.
+"""Cyno Studio backend.
 
 Python runs this before any `web.*` module, so it is where the process gets
 prepared: importing web.core.config loads .env (by absolute path), and logging

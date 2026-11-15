@@ -40,7 +40,9 @@ def user_secret() -> bytes:
     """Return the signing key derived from the configured session secret."""
     explicit = os.getenv("SESSION_SECRET", "").strip()
     if explicit:
-        return hashlib.sha256(b"pollo-user-v1\x00" + explicit.encode()).digest()
+        return hashlib.sha256(
+            b"pollo-user-v1\x00" + explicit.encode()
+        ).digest()  # legacy salt: changing it signs every user out
     return hashlib.sha256(b"pollo-user-v1-dev").digest()
 
 

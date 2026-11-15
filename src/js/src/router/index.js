@@ -17,7 +17,7 @@ const page = (path, name, title, extra = {}) => ({
 })
 
 const routes = [
-  page('/', 'studio', 'Pollo Studio'),
+  page('/', 'studio', 'Cyno Studio'),
   page('/settings', 'studio-settings', 'Settings — Pollo'),
   page('/tools', 'studio-tools', 'Tools & library — Pollo'),
   page('/media', 'studio-media', 'Media — Pollo'),
@@ -28,7 +28,7 @@ const routes = [
   page('/presets', 'studio-presets', 'Presets — Pollo'),
   page('/requests', 'studio-requests', 'Request log — Pollo'),
   page('/space/:spaceId', 'studio-space', 'Space — Pollo'),
-  page('/:id/:view(chat|gallery)?', 'studio-thread', 'Pollo Studio'),
+  page('/:id/:view(chat|gallery)?', 'studio-thread', 'Cyno Studio'),
   // Any stray old/unknown URL goes to Studio home.
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
@@ -39,7 +39,7 @@ const router = createRouter({
 })
 
 router.beforeEach((to, from, next) => {
-  document.title = to.meta.title || 'Pollo Studio'
+  document.title = to.meta.title || 'Cyno Studio'
   next()
 })
 

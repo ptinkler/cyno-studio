@@ -6,14 +6,14 @@
 #   Event: Boot-up
 #   User: root
 #   Task Settings → Run command:
-#     bash /path/to/pollo-api/synology-boot.sh
+#     bash /path/to/cyno-studio/synology-boot.sh
 #   (adjust path to wherever your compose project lives)
 # ─────────────────────────────────────────────────────────────────────
 # Uses docker compose up -d which respects depends_on ordering and
 # healthcheck conditions — unlike Docker's raw restart policy.
 # ─────────────────────────────────────────────────────────────────────
 
-COMPOSE_DIR="/path/to/pollo-api"   # ← set to your actual project path
+COMPOSE_DIR="/path/to/cyno-studio"   # ← set to your actual project path
 
 cd "$COMPOSE_DIR" || exit 1
 
@@ -57,7 +57,9 @@ fi
 sleep 10
 
 # Stop any half-started containers from Docker's restart policy
+docker compose -p cyno-studio down 2>/dev/null
+# The stack was called pollo-api before the rename; stop any leftover containers from it too
 docker compose -p pollo-api down 2>/dev/null
 
 # Bring everything up in the correct order (respects depends_on + healthchecks)
-docker compose -p pollo-api up -d
+docker compose -p cyno-studio up -d

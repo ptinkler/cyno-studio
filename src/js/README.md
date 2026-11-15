@@ -1,6 +1,6 @@
-# Pollo Studio - Vue Frontend
+# Cyno Studio - Vue Frontend
 
-A Vue 3 frontend for Pollo Studio with client-side routing.
+A Vue 3 frontend for Cyno Studio with client-side routing.
 
 ## URL Routes
 
