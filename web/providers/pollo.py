@@ -380,6 +380,37 @@ _NO_PROMPT = ("upscale", "bgremove", "subtitle_remove", "faceswap", "motion")
 _TAKES_MODE = ("motion", "upscale", "subtitle_remove")
 
 
+def _check_source_inputs(typ: str, prompt: str, source_video: Path | None, first_frame: Path | None) -> Path:
+    """Raise unless the media and text this family needs are present; returns the source video."""
+    if not source_video:
+        raise SourceVideoRequiredError(_SRC_VIDEO_NEEDS[typ])
+    if typ in _IMAGE_AND_VIDEO and not first_frame:
+        raise ReferenceImageRequiredError(_SRC_VIDEO_NEEDS[typ])
+    if typ == "video_edit" and not (prompt or "").strip():
+        raise EditInstructionRequiredError
+    return source_video
+
+
+def _source_video_options(
+    typ: str,
+    *,
+    first_frame: Path | None,
+    resolution: str | None,
+    duration: int | None,
+    generate_audio: bool | None,
+    mode: str | None,
+) -> dict[str, JsonValue]:
+    """The family-specific generator arguments of a source-video job."""
+    if typ in _IMAGE_AND_VIDEO:  # the reference / face image rides along
+        return {"image_url": _upload(first_frame) if first_frame else None, "mode": mode}
+    kw: dict[str, JsonValue] = {"image_url": None, "resolution": resolution}
+    if typ in _TAKES_MODE:  # resolution carries the one pick (scale / language); mode the rest
+        kw["mode"] = mode
+    if typ == "extend":  # extend lets the user pick added duration + audio
+        kw.update(length=duration, generate_audio=generate_audio)
+    return kw
+
+
 def _submit_source_video_job(
     key: str,
     typ: str | None,
@@ -399,28 +430,58 @@ def _submit_source_video_job(
     """
     if typ not in (*_IMAGE_AND_VIDEO, *_VIDEO_ONLY):
         return None
-    if not source_video:
-        raise SourceVideoRequiredError(_SRC_VIDEO_NEEDS[typ])
-    if typ in _IMAGE_AND_VIDEO and not first_frame:
-        raise ReferenceImageRequiredError(_SRC_VIDEO_NEEDS[typ])
-    if typ == "video_edit" and not (prompt or "").strip():
-        raise EditInstructionRequiredError
+    source = _check_source_inputs(typ, prompt, source_video, first_frame)
     # The source video goes to the host that takes larger files; both are URLs.
     kw: dict[str, JsonValue] = {
         "api_key": keyctx.provider_key("pollo"),
         "prompt": prompt,
-        "video_url": _upload(source_video, "video"),
+        "video_url": _upload(source, "video"),
+        **_source_video_options(
+            typ,
+            first_frame=first_frame,
+            resolution=resolution,
+            duration=duration,
+            generate_audio=generate_audio,
+            mode=mode,
+        ),
     }
-    if typ in _IMAGE_AND_VIDEO:  # the reference / face image rides along
-        kw.update(image_url=_upload(first_frame) if first_frame else None, mode=mode)
-    else:
-        kw.update(image_url=None, resolution=resolution)
-        if typ in _TAKES_MODE:  # resolution carries the one pick (scale / language); mode the rest
-            kw.update(mode=mode)
-        if typ == "extend":  # extend lets the user pick added duration + audio
-            kw.update(length=duration, generate_audio=generate_audio)
     generator = get_video_generator(key, **kw)
     return _job(generator)
+
+
+def _submit_lipsync_job(
+    key: str, prompt: str, first_frame: Path | None, source_audio: Path | None, resolution: str | None
+) -> dict[str, JsonValue]:
+    """Lip sync: a reference image (first frame) driven by an uploaded audio track.
+
+    Both are uploaded to public URLs.
+    """
+    if not first_frame:
+        raise LipsyncPortraitRequiredError
+    if not source_audio:
+        raise LipsyncAudioFileRequiredError
+    generator = get_video_generator(
+        key,
+        api_key=keyctx.provider_key("pollo"),
+        prompt=prompt,
+        image_url=_upload(first_frame),
+        audio_url=_upload(source_audio, "audio"),
+        resolution=resolution,
+    )
+    return _job(generator)
+
+
+def _video_ratio(key: str, aspect_ratio: str | None, first_frame: Path | None) -> str | None:
+    """The aspect ratio to send: a valid one, else (with an image) the image's own shape."""
+    ratios = list(VIDEO_GENERATORS[key].VALID_RATIOS)
+    if aspect_ratio in ratios:
+        return aspect_ratio
+    if first_frame:
+        # Some models (Seedance 2.0, Pollo Dance 2.0) take aspectRatio on the
+        # image branch too, and the generator's fallback is 9:16 — so frame
+        # the video like the image instead
+        return _ratio_for_image(first_frame, ratios)
+    return None
 
 
 def submit_video(
@@ -455,21 +516,7 @@ def submit_video(
             generate_audio=generate_audio,
         )
     if typ == "lipsync":
-        # Lip sync: a reference image (first frame) driven by an uploaded audio
-        # track. Both are uploaded to public URLs.
-        if not first_frame:
-            raise LipsyncPortraitRequiredError
-        if not source_audio:
-            raise LipsyncAudioFileRequiredError
-        generator = get_video_generator(
-            key,
-            api_key=keyctx.provider_key("pollo"),
-            prompt=prompt,
-            image_url=_upload(first_frame),
-            audio_url=_upload(source_audio, "audio"),
-            resolution=resolution,
-        )
-        return _job(generator)
+        return _submit_lipsync_job(key, prompt, first_frame, source_audio, resolution)
     job = _submit_source_video_job(
         key,
         typ,
@@ -483,20 +530,12 @@ def submit_video(
     )
     if job is not None:
         return job
-    ratios = list(VIDEO_GENERATORS[key].VALID_RATIOS)
-    if aspect_ratio not in ratios:
-        aspect_ratio = None
-    if first_frame and not aspect_ratio:
-        # Some models (Seedance 2.0, Pollo Dance 2.0) take aspectRatio on the
-        # image branch too, and the generator's fallback is 9:16 — so frame
-        # the video like the image instead
-        aspect_ratio = _ratio_for_image(first_frame, ratios)
     generator = get_video_generator(
         key,
         api_key=keyctx.provider_key("pollo"),
         prompt=prompt,
         image_url=_upload(first_frame) if first_frame else None,
-        aspect_ratio=aspect_ratio,
+        aspect_ratio=_video_ratio(key, aspect_ratio, first_frame),
         resolution=resolution,
         length=duration,
         generate_audio=generate_audio,
@@ -726,8 +765,8 @@ def _task_urls(task: Mapping[str, JsonValue]) -> list[str]:
 
 def _task_credits(task: Mapping[str, JsonValue]) -> int | None:
     """The credits a task cost, when Pollo reported any."""
-    credits = task.get("credits")
-    return credits if isinstance(credits, int) and not isinstance(credits, bool) else None
+    credit_cost = task.get("credits")
+    return credit_cost if isinstance(credit_cost, int) and not isinstance(credit_cost, bool) else None
 
 
 def _wait(task_id: str) -> dict[str, JsonValue]:

@@ -51,7 +51,7 @@ from web.chat.models import (
     TitleModelIn,
 )
 from web.core import config
-from web.core.metadata import get_db, iso
+from web.core.metadata import MetadataDB, get_db, iso
 from web.core.metadata.models import ChatSpace
 from web.jsonutil import as_list, as_object, as_str
 from web.media_types import VIDEO_SUFFIXES
@@ -478,10 +478,10 @@ def api_fork_conversation(conv_id: str, data: ForkConversation) -> dict[str, Jso
         forked_from_message_id=at.id,
         inherited_cost=round(sum(m.cost or 0 for m in path), 6) or None,
         inherited_credits=sum(
-            credits
+            credit_cost
             for msg in path
             for item in msg.media
-            if isinstance((credits := item.get("credits")), int) and not isinstance(credits, bool)
+            if isinstance((credit_cost := item.get("credits")), int) and not isinstance(credit_cost, bool)
         )
         or None,
     )
@@ -564,16 +564,20 @@ class _Fork:
         params = as_object(item.get("params"))
         if params:
             item["params"] = params
-            if char_ids := as_list(params.get("characters")):
-                params["characters"] = [
-                    self.char_map.get(i, i) if isinstance(i, int) and not isinstance(i, bool) else i for i in char_ids
-                ]
-            if refs := as_list(params.get("refs")):
-                params["refs"] = [self._ref(r) for r in refs if isinstance(r, str)]
-            for key in PARAM_FILES:
-                if value := as_str(params.get(key)):
-                    params[key] = self._ref(value)
+            self._remap_params(params)
         return item
+
+    def _remap_params(self, params: dict[str, JsonValue]) -> None:
+        """Point a copied item's characters, references and param files at the new chat (in place)."""
+        if char_ids := as_list(params.get("characters")):
+            params["characters"] = [
+                self.char_map.get(i, i) if isinstance(i, int) and not isinstance(i, bool) else i for i in char_ids
+            ]
+        if refs := as_list(params.get("refs")):
+            params["refs"] = [self._ref(r) for r in refs if isinstance(r, str)]
+        for key in PARAM_FILES:
+            if value := as_str(params.get(key)):
+                params[key] = self._ref(value)
 
     def _ref(self, ref: str) -> str:
         """A reference for the new chat: a copied character's image, or a chat file (linked over)."""
@@ -599,23 +603,28 @@ class _Fork:
             shutil.copy2(self.src / name, self.dst / name)
 
 
-def _clean_conv_update(data: ConversationUpdate, fields: dict[str, JsonValue]) -> None:
-    """Normalize/validate the mutable ConversationUpdate fields in place.
-
-    (everything except `pinned`, which the route handles separately).
-    """
+def _validate_conv_references(data: ConversationUpdate, fields: dict[str, JsonValue]) -> None:
+    """Check that the instructions, space and characters a chat update names exist."""
     if "instruction_ids" in fields:
         fields["instruction_ids"] = _require_instructions(data.instruction_ids or [])
     if "instruction_group_ids" in fields:
         fields["instruction_group_ids"] = _require_instruction_groups(data.instruction_group_ids or [])
     if data.space_id is not None:
         _require_space(data.space_id)
+    if "character_ids" in fields:
+        characters.require(data.character_ids or [], get_db())
+
+
+def _clean_conv_update(data: ConversationUpdate, fields: dict[str, JsonValue]) -> None:
+    """Normalize/validate the mutable ConversationUpdate fields in place.
+
+    (everything except `pinned`, which the route handles separately).
+    """
+    _validate_conv_references(data, fields)
     if "title" in fields:
         fields["title"] = (data.title or "").strip()[:255] or DEFAULT_TITLE
     if "kind" in fields:
         fields["kind"] = _clean_kind(data.kind)
-    if "character_ids" in fields:
-        characters.require(data.character_ids or [], get_db())
     if "hidden_defaults" in fields:
         fields["hidden_defaults"] = _require_hidden_defaults(data.hidden_defaults)
     if "paused_instructions" in fields:
@@ -840,6 +849,18 @@ def api_delete_exchange_info(message_id: int) -> dict[str, int | dict[str, int]]
     return info
 
 
+def _delete_detached_media(db: MetadataDB, conv_id: str, detached: list[dict[str, JsonValue]]) -> None:
+    """Delete the files and library rows of media detached from a deleted prompt turn."""
+    for item in detached:
+        file = item.get("file")
+        if isinstance(file, str):
+            (conversation_dir(conv_id) / safe_filename(file)).unlink(missing_ok=True)
+        media_id = item.get("id")
+        if not isinstance(media_id, str):
+            raise TypeError(media_id)
+        db.delete_chat_library_item(media_id)
+
+
 @router.delete("/messages/{message_id}")
 def api_delete_exchange(message_id: int, delete_media: bool = False) -> dict[str, JsonValue]:
     """Delete a prompt turn and return the updated conversation.
@@ -857,14 +878,7 @@ def api_delete_exchange(message_id: int, delete_media: bool = False) -> dict[str
     require_idle(msg.conversation_id)
     detached = db.delete_chat_exchange(msg.conversation_id, message_id)
     if delete_media:
-        for item in detached:
-            file = item.get("file")
-            if isinstance(file, str):
-                (conversation_dir(msg.conversation_id) / safe_filename(file)).unlink(missing_ok=True)
-            media_id = item.get("id")
-            if not isinstance(media_id, str):
-                raise TypeError(media_id)
-            db.delete_chat_library_item(media_id)
+        _delete_detached_media(db, msg.conversation_id, detached)
     conversation = db.get_conversation(msg.conversation_id)
     if not conversation:
         raise HTTPException(404, "Conversation not found")

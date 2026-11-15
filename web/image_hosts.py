@@ -140,7 +140,9 @@ class TmpfilesNoDirectLinkError(UploadError):
 # expires. In-memory and per-process, so it helps the common case (consecutive
 # retries on the same worker) without any shared state; a cold worker just
 # re-uploads. Keyed on size+mtime so editing the file forces a fresh upload.
-_url_cache: dict[tuple[str, int, int, str, int], tuple[str, float]] = {}
+# (resolved path, size, mtime_ns, host, expiry minutes) of an uploaded file
+_CacheKey = tuple[str, int, int, str, int]
+_url_cache: dict[_CacheKey, tuple[str, float]] = {}
 _url_cache_lock = threading.Lock()
 # Stop handing out a cached URL this long before it truly lapses, so Pollo never
 # fetches one that dies mid-job: 10% of the span, capped at 5 minutes.
@@ -170,7 +172,7 @@ def cached_url_expiries() -> list[float]:
         return [expires for _, expires in _url_cache.values()]
 
 
-def _cache_key(filepath: Path, host: str, expiry_minutes: int) -> tuple[str, int, int, str, int] | None:
+def _cache_key(filepath: Path, host: str, expiry_minutes: int) -> _CacheKey | None:
     """Build the cache key for this file, host, and retention period.
 
     Return None when the file cannot be inspected.
@@ -182,7 +184,7 @@ def _cache_key(filepath: Path, host: str, expiry_minutes: int) -> tuple[str, int
     return (str(Path(filepath).resolve()), st.st_size, st.st_mtime_ns, host, expiry_minutes)
 
 
-def _cached_url(key: tuple[str, int, int, str, int] | None) -> str | None:
+def _cached_url(key: _CacheKey | None) -> str | None:
     if key is None:
         return None
     with _url_cache_lock:
@@ -194,14 +196,14 @@ def _cached_url(key: tuple[str, int, int, str, int] | None) -> str | None:
     return None
 
 
-def _drop_url(key: tuple[str, int, int, str, int] | None) -> None:
+def _drop_url(key: _CacheKey | None) -> None:
     if key is None:
         return
     with _url_cache_lock:
         _url_cache.pop(key, None)
 
 
-def _store_url(key: tuple[str, int, int, str, int] | None, url: str, expiry_minutes: int) -> None:
+def _store_url(key: _CacheKey | None, url: str, expiry_minutes: int) -> None:
     if key is None:
         return
     lifetime = max(expiry_minutes, 1) * 60
@@ -215,6 +217,44 @@ def _store_url(key: tuple[str, int, int, str, int] | None, url: str, expiry_minu
         _url_cache[key] = (url, good_until)
 
 
+def _host_order(resolved: UploadPrefs) -> list[str]:
+    """The hosts to try, primary first, then the backup when it is a different host."""
+    order: list[str] = [resolved["primary"]]
+    backup = resolved.get("backup")
+    if backup and backup != resolved["primary"]:
+        order.append(backup)
+    return order
+
+
+def _reuse_cached(host: str, key: _CacheKey | None, filepath: Path) -> str | None:
+    """The URL of a still-live earlier upload of this file, or None.
+
+    The file is reused, never re-uploaded while it lives — but the link handed
+    out is re-derived (tmpfiles' download links die after ~5 minutes) and
+    re-checked, since Pollo charges for a job whose source URL it can't fetch.
+    """
+    cached = _cached_url(key)
+    if not cached:
+        return None
+    try:
+        url = _served_url(host, cached, filepath)
+    except (ValueError, requests.RequestException) as exc:
+        log.warning("%s: cached upload no longer served (%s), re-uploading", host, exc)
+        _drop_url(key)
+        return None
+    log.info("%s: reused still-live upload, no re-upload: %s", host, url)
+    return url
+
+
+def _upload_fresh(host: str, key: _CacheKey | None, filepath: Path, resolved: UploadPrefs, expiry: int) -> str:
+    """Upload the file to one host, remember it, and return its public URL."""
+    stored = _dispatch(host, filepath, resolved)
+    url = _served_url(host, stored, filepath)
+    _store_url(key, stored, min(expiry, _FIXED_RETENTION_MIN.get(host, expiry)))
+    log.info("%s: uploaded %s", host, url)
+    return url
+
+
 def upload_file(filepath: Path, prefs: UploadPrefs | None = None) -> str:
     """Upload a source file and return its public URL.
 
@@ -223,39 +263,20 @@ def upload_file(filepath: Path, prefs: UploadPrefs | None = None) -> str:
     """
     resolved = prefs if prefs is not None else current_upload_prefs()
     expiry = resolved.get("expiry_minutes", 60)
-    order: list[str] = [resolved["primary"]]
-    backup = resolved.get("backup")
-    if backup and backup != resolved["primary"]:
-        order.append(backup)
+    order = _host_order(resolved)
     errors: list[str] = []
     for host in order:
         key = _cache_key(filepath, host, expiry)
-        cached = _cached_url(key)
-        if cached:
-            # The file is reused, never re-uploaded while it lives — but the
-            # link handed out is re-derived (tmpfiles' download links die after
-            # ~5 minutes) and re-checked, since Pollo charges for a job whose
-            # source URL it can't fetch.
+        url = _reuse_cached(host, key, filepath)
+        if url is None:
             try:
-                url = _served_url(host, cached, filepath)
+                url = _upload_fresh(host, key, filepath, resolved, expiry)
             except (ValueError, requests.RequestException) as exc:
-                log.warning("%s: cached upload no longer served (%s), re-uploading", host, exc)
-                _drop_url(key)
-            else:
-                log.info("%s: reused still-live upload, no re-upload: %s", host, url)
-                _note_fallback(order, host, errors)
-                return url
-        try:
-            stored = _dispatch(host, filepath, resolved)
-            url = _served_url(host, stored, filepath)
-            _store_url(key, stored, min(expiry, _FIXED_RETENTION_MIN.get(host, expiry)))
-            log.info("%s: uploaded %s", host, url)
-        except (ValueError, requests.RequestException) as exc:
-            log.warning("%s failed (%s), trying the next host", host, exc)
-            errors.append(f"{_HOST_LABEL.get(host, host)}: {exc}")
-        else:
-            _note_fallback(order, host, errors)
-            return url
+                log.warning("%s failed (%s), trying the next host", host, exc)
+                errors.append(f"{_HOST_LABEL.get(host, host)}: {exc}")
+                continue
+        _note_fallback(order, host, errors)
+        return url
     raise ValueError("All upload hosts failed — " + "; ".join(errors))
 
 

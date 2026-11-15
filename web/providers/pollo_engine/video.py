@@ -944,22 +944,33 @@ def _generic_payload(c: VideoCfg, prompt: str, image_url: str | None, s: _Inputs
     return {"input": attrs}
 
 
+def _kling_resolution(attrs: dict[str, JsonValue], c: VideoCfg, tier: JsonValue, s: _Inputs) -> None:
+    """Send Kling's resolution tier as `resolution` or, for mode-tier models, as `mode`."""
+    if tier not in c["VALID_RESOLUTIONS"]:
+        return
+    if not c["RESOLUTION_IS_MODE"]:
+        attrs["resolution"] = tier
+    elif c["MODE_ON_TEXT"] or not s["is_text_only"]:
+        attrs["mode"] = tier
+
+
+def _kling_tail_rules(attrs: dict[str, JsonValue], c: VideoCfg) -> None:
+    """A last frame can force pro mode and rule out generated audio."""
+    if "imageTail" not in attrs:
+        return
+    if c["IMAGE_TAIL_NEEDS_PRO"]:
+        attrs["mode"] = "pro"
+    if c["NO_AUDIO_WITH_IMAGE_TAIL"]:
+        attrs.pop("generateAudio", None)
+
+
 def _kling_payload(c: VideoCfg, prompt: str, image_url: str | None, s: _Inputs, **_: JsonValue) -> Payload:
     if s["is_text_only"] and not c["TEXT_TO_VIDEO"]:
         raise TextToVideoUnsupportedError(c.get("MODEL", ""))
     payload = _generic_payload(c, prompt, image_url, s)
     attrs = payload["input"]
-    tier = attrs.pop("resolution", None)
-    if tier in c["VALID_RESOLUTIONS"]:
-        if not c["RESOLUTION_IS_MODE"]:
-            attrs["resolution"] = tier
-        elif c["MODE_ON_TEXT"] or not s["is_text_only"]:
-            attrs["mode"] = tier
-    if "imageTail" in attrs:
-        if c["IMAGE_TAIL_NEEDS_PRO"]:
-            attrs["mode"] = "pro"
-        if c["NO_AUDIO_WITH_IMAGE_TAIL"]:
-            attrs.pop("generateAudio", None)
+    _kling_resolution(attrs, c, attrs.pop("resolution", None), s)
+    _kling_tail_rules(attrs, c)
     return payload
 
 

@@ -31,7 +31,7 @@ log = logging.getLogger(__name__)
 
 _SCHEMA = "CREATE TABLE IF NOT EXISTS durations (path TEXT PRIMARY KEY, mtime_ns INTEGER, seconds REAL)"
 _TIMEOUT = 5.0
-_swept = False
+_swept = threading.Event()  # set once the stale-row sweep has been started
 _sweep_lock = threading.Lock()
 
 
@@ -110,14 +110,19 @@ def _still_there(path: str, mtime_ns: int) -> bool:
         return False
 
 
+def reset_sweep() -> None:
+    """Allow the stale-row sweep to run again (tests; a fresh process starts this way)."""
+    with _sweep_lock:
+        _swept.clear()
+
+
 def sweep_in_background() -> None:
     """Start the one-time stale-row sweep in a daemon thread.
 
     The sweep stats every cached path, so requests do not wait for it.
     """
-    global _swept
     with _sweep_lock:
-        if _swept:
+        if _swept.is_set():
             return
-        _swept = True
+        _swept.set()
     threading.Thread(target=sweep, daemon=True, name="media-cache-sweep").start()

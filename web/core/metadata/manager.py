@@ -30,23 +30,29 @@ class MetadataDB(
     """
 
 
-_db_instance: MetadataDB | None = None
+class _Shared:
+    """The process-wide database instance, built on first use."""
+
+    instance: MetadataDB | None = None
+
+
+_shared = _Shared()
 _db_init_lock = threading.Lock()
 
 
 def swap_db_instance(new: MetadataDB | None) -> MetadataDB | None:
     """Replace the global database instance (None builds a fresh one on next use); returns the old one."""
-    global _db_instance
     with _db_init_lock:
-        old, _db_instance = _db_instance, new
+        old, _shared.instance = _shared.instance, new
     return old
 
 
 def get_db() -> MetadataDB:
     """Get the global metadata database instance."""
-    global _db_instance
-    if _db_instance is None:
+    db = _shared.instance
+    if db is None:
         with _db_init_lock:
-            if _db_instance is None:
-                _db_instance = MetadataDB()
-    return _db_instance
+            db = _shared.instance
+            if db is None:
+                db = _shared.instance = MetadataDB()
+    return db

@@ -266,15 +266,10 @@ def list_text_models() -> list[dict[str, JsonValue]]:
     return models
 
 
-def list_image_models() -> list[dict[str, JsonValue]]:
-    """Return image API models and chat models that can also produce images.
-
-    Conversational models are marked as such and can receive the whole
-    conversation, as the Gemini app does, instead of a lone prompt.
-    """
-    data = _json_objects(_get("/images/models").get("data", []))
+def _image_api_models() -> list[dict[str, JsonValue]]:
+    """The dedicated image-API models (not yet marked conversational)."""
     models: list[dict[str, JsonValue]] = []
-    for m in data:
+    for m in _json_objects(_get("/images/models").get("data", [])):
         model_id = m.get("id")
         if not isinstance(model_id, str):
             continue
@@ -291,30 +286,52 @@ def list_image_models() -> list[dict[str, JsonValue]]:
                 "conversational": False,
             }
         )
+    return models
+
+
+def _chat_image_model_id(m: dict[str, JsonValue]) -> str | None:
+    """The id of a chat model that can output text and images, else None."""
+    model_id = m.get("id")
+    if not isinstance(model_id, str):
+        return None
+    arch = _json_object(m.get("architecture") or {})
+    if not {"text", "image"} <= set(_strings(arch.get("output_modalities") or [])):
+        return None
+    if model_id.startswith("openrouter/"):
+        return None  # general-purpose routers (openrouter/auto), not image models
+    return model_id
+
+
+def _conversational_entry(m: dict[str, JsonValue], model_id: str) -> dict[str, JsonValue]:
+    """A catalogue row for a chat model that is only reachable through /chat/completions."""
+    arch = _json_object(m.get("architecture") or {})
+    return {
+        "id": model_id,
+        "name": m.get("name") or model_id,
+        "input_modalities": arch.get("input_modalities") or ["text"],
+        "aspect_ratios": None,
+        "resolutions": None,
+        "created": m.get("created"),
+        "conversational": True,
+    }
+
+
+def list_image_models() -> list[dict[str, JsonValue]]:
+    """Return image API models and chat models that can also produce images.
+
+    Conversational models are marked as such and can receive the whole
+    conversation, as the Gemini app does, instead of a lone prompt.
+    """
+    models = _image_api_models()
     by_id = {str(m["id"]): m for m in models}
     for m in _json_objects(_get("/models", {"output_modalities": "image"}).get("data", [])):
-        model_id = m.get("id")
-        if not isinstance(model_id, str):
+        model_id = _chat_image_model_id(m)
+        if model_id is None:
             continue
-        arch = _json_object(m.get("architecture") or {})
-        if not {"text", "image"} <= set(_strings(arch.get("output_modalities") or [])):
-            continue
-        if model_id.startswith("openrouter/"):
-            continue  # general-purpose routers (openrouter/auto), not image models
         if model_id in by_id:
             by_id[model_id]["conversational"] = True
         else:
-            models.append(
-                {
-                    "id": model_id,
-                    "name": m.get("name") or model_id,
-                    "input_modalities": arch.get("input_modalities") or ["text"],
-                    "aspect_ratios": None,
-                    "resolutions": None,
-                    "created": m.get("created"),
-                    "conversational": True,
-                }
-            )
+            models.append(_conversational_entry(m, model_id))
     return models
 
 
@@ -388,6 +405,33 @@ def stream_chat(
         yield from request_log.chat_reply(chunks, outcome)
 
 
+def _image_body(
+    model: str,
+    prompt: str,
+    options: dict[str, JsonValue],
+    input_images: list[str] | None,
+) -> dict[str, JsonValue]:
+    """The /images request body: set options only, streamed for text-to-image.
+
+    Streamed so the connection carries traffic while the image renders:
+    a silent request was cut at exactly 60s by something between us and
+    OpenRouter (TCP keepalive didn't help). Streaming only helps if bytes
+    actually flow before 60s, so we also ask for partial-image frames —
+    without them the stream stays silent until the render is done and a slow
+    model (Seedream ~2 min) is still cut at 60s. Only the final image is kept.
+    OpenRouter rejects streaming for image-to-image (edit) requests, so
+    only stream plain text-to-image — edits come back as plain JSON.
+    """
+    body: dict[str, JsonValue] = {"model": model, "prompt": prompt}
+    body.update({k: v for k, v in options.items() if v})
+    if input_images:
+        body["input_references"] = [{"type": "image_url", "image_url": {"url": u}} for u in input_images]
+    else:
+        body["stream"] = True
+        body["partial_images"] = 2  # keepalive previews; ignored if unsupported
+    return body
+
+
 def generate_image(
     model: str,
     prompt: str,
@@ -397,27 +441,12 @@ def generate_image(
     session_id: str | None = None,
 ) -> tuple[list[tuple[bytes, str]], float | None]:
     """Generate images and return their bytes, media types, and USD cost."""
-    body: dict[str, JsonValue] = {"model": model, "prompt": prompt}
-    if aspect_ratio:
-        body["aspect_ratio"] = aspect_ratio
-    if resolution:
-        body["resolution"] = resolution
-    if input_images:
-        body["input_references"] = [{"type": "image_url", "image_url": {"url": u}} for u in input_images]
-    if session_id:
-        body["session_id"] = session_id
-
-    # Streamed so the connection carries traffic while the image renders:
-    # a silent request was cut at exactly 60s by something between us and
-    # OpenRouter (TCP keepalive didn't help). Streaming only helps if bytes
-    # actually flow before 60s, so we also ask for partial-image frames —
-    # without them the stream stays silent until the render is done and a slow
-    # model (Seedream ~2 min) is still cut at 60s. Only the final image is kept.
-    # OpenRouter rejects streaming for image-to-image (edit) requests, so
-    # only stream plain text-to-image — edits come back as plain JSON.
-    if not input_images:
-        body["stream"] = True
-        body["partial_images"] = 2  # keepalive previews; ignored if unsupported
+    body = _image_body(
+        model,
+        prompt,
+        {"aspect_ratio": aspect_ratio, "resolution": resolution, "session_id": session_id},
+        input_images,
+    )
     with (
         request_log.logged("openrouter", "POST", "/images", body) as outcome,
         _connection_guard("image"),
@@ -453,10 +482,8 @@ def _images_from_json(data: dict[str, JsonValue]) -> tuple[list[tuple[bytes, str
     return images, _cost(usage.get("cost"))
 
 
-def _images_from_stream(lines: Iterator[str]) -> tuple[list[tuple[bytes, str]], float | None]:
-    """Extract completed images from an /images SSE stream, skipping previews and keep-alives."""
-    images: list[tuple[bytes, str]] = []
-    cost = None
+def _stream_events(lines: Iterator[str]) -> Iterator[tuple[str, dict[str, JsonValue]]]:
+    """The (event name, JSON chunk) pairs of an SSE stream, up to "[DONE]"."""
     event = ""
     for line in lines:
         if line.startswith("event:"):
@@ -468,11 +495,18 @@ def _images_from_stream(lines: Iterator[str]) -> tuple[list[tuple[bytes, str]], 
             continue
         payload = line[5:].strip()
         if payload == "[DONE]":
-            break
+            return
         try:
-            chunk = _json_object(cast("object", json.loads(payload)))
+            yield event, _json_object(cast("object", json.loads(payload)))
         except json.JSONDecodeError:
             continue
+
+
+def _images_from_stream(lines: Iterator[str]) -> tuple[list[tuple[bytes, str]], float | None]:
+    """Extract completed images from an /images SSE stream, skipping previews and keep-alives."""
+    images: list[tuple[bytes, str]] = []
+    cost = None
+    for event, chunk in _stream_events(lines):
         image, parsed_cost = _completed_image(chunk, event)
         if image:
             images.append(image)
@@ -501,6 +535,35 @@ def _completed_image(chunk: dict[str, JsonValue], event: str) -> tuple[tuple[byt
     return image, _cost(usage.get("cost"))
 
 
+def _fetch_image(url: str) -> tuple[bytes, str]:
+    """Download an image a provider linked to, guarded against SSRF (loopback/metadata/LAN)."""
+    try:
+        r = net_guard.get_public(http_client, url, timeout=IMAGE_TIMEOUT)
+    except net_guard.UnsafeURLError as exc:
+        raise UnsafeImageUrlError(exc) from exc
+    r.raise_for_status()
+    content_type = cast("object", r.headers.get("content-type", "image/png"))
+    return r.content, content_type.split(";")[0] if isinstance(content_type, str) else "image/png"
+
+
+def _chat_image(part: dict[str, JsonValue]) -> tuple[bytes, str] | None:
+    """The image a chat response part carries (a data: URL or a link), or None."""
+    image_url = _json_object(cast("object", part.get("image_url") or {}))
+    url_value = image_url.get("url")
+    url = url_value if isinstance(url_value, str) else ""
+    if url.startswith("data:"):
+        header, _, b64 = url.partition(",")
+        return base64.b64decode(b64), header[5:].split(";")[0] or "image/png"
+    return _fetch_image(url) if url else None
+
+
+def _no_image_error(message: dict[str, JsonValue]) -> OpenRouterError:
+    """The error for a reply without images (e.g. the model declined — its text says why)."""
+    content = message.get("content")
+    said = content.strip() if isinstance(content, str) else ""
+    return OpenRouterError("The image model returned no image" + (f": {said[:300]}" if said else ""))
+
+
 def generate_image_chat(
     model: str,
     messages: list[dict[str, JsonValue]],
@@ -527,28 +590,10 @@ def generate_image_chat(
     data = _json_object(cast("object", resp.json()))
     choices = _json_objects(data.get("choices") or [])
     message = _json_object(cast("object", choices[0].get("message") or {})) if choices else {}
-    images: list[tuple[bytes, str]] = []
-    for part in _json_objects(message.get("images") or []):
-        image_url = _json_object(cast("object", part.get("image_url") or {}))
-        url_value = image_url.get("url")
-        url = url_value if isinstance(url_value, str) else ""
-        if url.startswith("data:"):
-            header, _, b64 = url.partition(",")
-            images.append((base64.b64decode(b64), header[5:].split(";")[0] or "image/png"))
-        elif url:
-            # Provider-supplied URL — guard against SSRF (loopback/metadata/LAN).
-            try:
-                r = net_guard.get_public(http_client, url, timeout=IMAGE_TIMEOUT)
-            except net_guard.UnsafeURLError as exc:
-                raise UnsafeImageUrlError(exc) from exc
-            r.raise_for_status()
-            content_type = cast("object", r.headers.get("content-type", "image/png"))
-            images.append((r.content, content_type.split(";")[0] if isinstance(content_type, str) else "image/png"))
+    found = (_chat_image(part) for part in _json_objects(message.get("images") or []))
+    images = [image for image in found if image]
     if not images:
-        # e.g. the model declined — its text says why
-        content = message.get("content")
-        said = content.strip() if isinstance(content, str) else ""
-        raise OpenRouterError("The image model returned no image" + (f": {said[:300]}" if said else ""))
+        raise _no_image_error(message)
     usage = _json_object(cast("object", data.get("usage") or {}))
     return images, _cost(usage.get("cost"))
 
@@ -564,19 +609,20 @@ def submit_video(
     session_id: str | None = None,
 ) -> VideoJob:
     """Start a video job. Returns {"id", "polling_url", "status"}."""
+    frames: list[JsonValue] = (
+        [{"type": "image_url", "image_url": {"url": first_frame}, "frame_type": "first_frame"}] if first_frame else []
+    )
+    options: dict[str, JsonValue] = {
+        "duration": duration,
+        "aspect_ratio": aspect_ratio,
+        "resolution": resolution,
+        "frame_images": frames,
+        "session_id": session_id,
+    }
     body: dict[str, JsonValue] = {"model": model, "prompt": prompt}
-    if duration:
-        body["duration"] = duration
-    if aspect_ratio:
-        body["aspect_ratio"] = aspect_ratio
-    if resolution:
-        body["resolution"] = resolution
-    if first_frame:
-        body["frame_images"] = [{"type": "image_url", "image_url": {"url": first_frame}, "frame_type": "first_frame"}]
+    body.update({k: v for k, v in options.items() if v})
     if generate_audio is not None:
         body["generate_audio"] = generate_audio
-    if session_id:
-        body["session_id"] = session_id
 
     with request_log.logged("openrouter", "POST", "/videos", body) as outcome:
         with _connection_guard("video job to start"):

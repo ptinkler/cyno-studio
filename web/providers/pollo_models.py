@@ -143,7 +143,7 @@ MODEL_INFO: dict[str, ModelInfo] = {
         "options": ["generate_audio", "seed"],
         "video_input": True,
     },
-    # lengths/resolutions fall back to the engine config (v1_video.py).
+    # lengths/resolutions fall back to the engine config (video.py).
     "pollov2extender": {"label": "Pollo 2 Extender", "type": "extend", "options": [], "video_input": True},
     "geminiomniextend": {
         "label": "Gemini Omni Extend",
@@ -164,7 +164,7 @@ MODEL_INFO: dict[str, ModelInfo] = {
     # "type": "video_edit" rewrites a source video from a text instruction.
     # Selectable like Extend: source video on video_input, the edit instruction
     # is the prompt. No duration/aspect ratio; resolution falls back to the
-    # engine config (v1_video.py).
+    # engine config (video.py).
     "wanedit27": {
         "label": "Wan 2.7 Edit",
         "type": "video_edit",
@@ -303,7 +303,7 @@ MODEL_INFO: dict[str, ModelInfo] = {
     },
     # "type": "lipsync" drives a reference image (first_frame) with an uploaded
     # audio track (audio_input). No source video; resolution falls back to the
-    # engine config (v1_video.py) where the model offers one.
+    # engine config (video.py) where the model offers one.
     "omnihuman": {
         "label": "OmniHuman",
         "type": "lipsync",
@@ -376,7 +376,7 @@ MODEL_INFO: dict[str, ModelInfo] = {
         },
     },
     # --- Newer frontier models (added 2026-11). lengths/ratios/resolutions
-    # fall back to the engine config (v1_video.py), so they live in one place. ---
+    # fall back to the engine config (video.py), so they live in one place. ---
     "sora2": {"label": "Sora 2", "type": "img2vid", "options": []},
     "sora2pro": {"label": "Sora 2 Pro", "type": "img2vid", "options": []},
     "veo31": {"label": "Veo 3.1", "type": "img2vid", "options": ["generate_audio", "image_tail"]},
@@ -515,7 +515,7 @@ MODEL_INFO: dict[str, ModelInfo] = {
         "options": [],
     },
     # --- Newer frontier image models (added 2026-11). Ratios/resolutions live
-    # in the engine config (v1_image.py). ---
+    # in the engine config (image.py). ---
     "nanobananapro": {"label": "Nano Banana Pro", "type": "image", "options": ["images"]},
     "nanobanana21": {"label": "Nano Banana 2.1", "type": "image", "options": ["images"]},
     "fluxkontextpro": {"label": "Flux Kontext Pro", "type": "image", "options": ["images"]},

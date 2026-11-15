@@ -3025,9 +3025,9 @@ class TestPolloImageModels:
             [("error", "HTTP 502", None, None)],
             [("succeed", None, "https://cdn/x.png", 2)],
         )
-        images, credits, _sent = pollo_provider.generate_image("pollo/nanobanana2", "x")
+        images, credit_cost, _sent = pollo_provider.generate_image("pollo/nanobanana2", "x")
         assert len(images) == 1
-        assert credits == 2
+        assert credit_cost == 2
 
     # ── video ──
     VIDEO: ClassVar = {**SETTINGS, "video_model": "pollo/seedance20fast"}

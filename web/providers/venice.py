@@ -522,21 +522,21 @@ def _price_videos(video: list[VideoEntry]) -> None:
             job.entry.public["price"] = _price_tag(usd, basis)
 
 
+# A model id containing any of these words belongs to that family (checked in order)
+_VIDEO_FAMILY_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("reference", ("reference-to-video",)),
+    ("frames", ("first-last-frame", "transition")),
+    ("angles", ("multi-angle",)),
+    ("upscale", ("upscale",)),
+    ("motion", ("motion-control",)),
+)
+
+
 def _video_family(m: Model) -> str:
-    mtype = as_str(m.constraints.get("model_type"))
-    if "reference-to-video" in m.id:
-        return "reference"
-    if "first-last-frame" in m.id or "transition" in m.id:
-        return "frames"
-    if "multi-angle" in m.id:
-        return "angles"
-    if "upscale" in m.id:
-        return "upscale"
-    if "motion-control" in m.id:
-        return "motion"
-    if mtype == "video":
-        return "video"
-    return "standard"
+    for family, markers in _VIDEO_FAMILY_MARKERS:
+        if any(marker in m.id for marker in markers):
+            return family
+    return "video" if as_str(m.constraints.get("model_type")) == "video" else "standard"
 
 
 def _video_entry(family: str, first: Model, main: Model | None, i2v: Model | None) -> VideoEntry:
@@ -818,6 +818,21 @@ def _snap(value: str | None, allowed: list[str]) -> str | None:
     return value if value and (not allowed or value in allowed) else None
 
 
+def _video_aspect_ratio(aspect_ratio: str | None, c: VideoConstraints, *, image_used: bool) -> str | None:
+    """The aspect ratio to send: one the model allows; none when the image sets the shape."""
+    if image_used and not c.aspect_ratios:
+        return None
+    return _snap(aspect_ratio, c.aspect_ratios)
+
+
+def _remember_job(job_id: str, download_url: str | None, quote: float | None) -> None:
+    """Keep what polling needs later: the download link and the quoted cost."""
+    if download_url:
+        _download_urls.put(job_id, download_url)
+    if quote is not None:
+        _video_quotes.put(job_id, quote)
+
+
 def submit_video(
     model_id: str,
     prompt: str,
@@ -848,9 +863,7 @@ def submit_video(
 
     duration, body["duration"] = _video_duration(c, duration)
     resolution = _video_resolution(body, family, c, resolution)
-    aspect_ratio = _snap(aspect_ratio, c.aspect_ratios)
-    if image_used and not c.aspect_ratios:
-        aspect_ratio = None  # the image sets the shape
+    aspect_ratio = _video_aspect_ratio(aspect_ratio, c, image_used=image_used)
     if aspect_ratio:
         body["aspect_ratio"] = aspect_ratio
     if c.audio_configurable and generate_audio is not None:
@@ -873,11 +886,7 @@ def submit_video(
     if not queue_id:
         raise NoJobIdError
     job_id = f"{JOB_PREFIX}{target.model}:{queue_id}"
-    download_url = as_str(data.get("download_url"))
-    if download_url:
-        _download_urls.put(job_id, download_url)
-    if quote is not None:
-        _video_quotes.put(job_id, quote)
+    _remember_job(job_id, as_str(data.get("download_url")), quote)
     audio = body.get("audio", c.audio or None)
     return {
         "id": job_id,
@@ -1012,6 +1021,41 @@ def _completed(job_id: str) -> dict[str, JsonValue]:
     return {"status": "completed", "usage": {"cost": _video_quotes.get(job_id)}}
 
 
+def _early_result(job_id: str, resp: httpx.Response) -> dict[str, JsonValue] | None:
+    """A retrieve response that settles the poll by itself, else None.
+
+    Rate limits and 5xx raise (the poller's error budget); other client errors
+    fail the job; a video body is saved until ``download_video`` collects it.
+    """
+    if resp.status_code >= 500 or resp.status_code == 429:
+        resp.read()
+        raise VideoCheckFailedError(resp.status_code)
+    if resp.status_code >= 400:
+        resp.read()
+        try:
+            _raise_for_response(resp)
+        except VeniceError as e:
+            return {"status": "failed", "error": str(e)}
+    if (resp.headers.get("content-type") or "").startswith("video/"):
+        _VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+        part = _video_file(job_id).with_suffix(".part")
+        with part.open("wb") as f:
+            f.writelines(resp.iter_bytes())
+        part.replace(_video_file(job_id))
+        return _completed(job_id)
+    return None
+
+
+def _status_from_data(job_id: str, data: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    """Map Venice's JSON status to OpenRouter's."""
+    status = str(data.get("status") or "").upper()
+    if status in ("FAILED", "ERROR", "CANCELLED"):
+        return {"status": "failed", "error": f"Venice: {data.get('error') or data.get('message') or 'video failed'}"}
+    if status == "COMPLETED" and _download_urls.get(job_id) is not None:
+        return _completed(job_id)
+    return {"status": "in_progress"}
+
+
 def get_video(job_id: str) -> dict[str, JsonValue]:
     """Return Venice job status in OpenRouter's shape.
 
@@ -1030,33 +1074,15 @@ def get_video(job_id: str) -> dict[str, JsonValue]:
             json={"model": model, "queue_id": queue_id},
             timeout=IMAGE_TIMEOUT,
         ) as resp:
-            if resp.status_code >= 500 or resp.status_code == 429:
-                resp.read()
-                raise VideoCheckFailedError(resp.status_code)
-            if resp.status_code >= 400:
-                resp.read()
-                try:
-                    _raise_for_response(resp)
-                except VeniceError as e:
-                    return {"status": "failed", "error": str(e)}
-            if (resp.headers.get("content-type") or "").startswith("video/"):
-                _VIDEO_DIR.mkdir(parents=True, exist_ok=True)
-                part = _video_file(job_id).with_suffix(".part")
-                with part.open("wb") as f:
-                    f.writelines(resp.iter_bytes())
-                part.replace(_video_file(job_id))
-                return _completed(job_id)
+            early = _early_result(job_id, resp)
+            if early is not None:
+                return early
             resp.read()
             _note_balance(resp)
             data = as_object(body_of(resp))
     except (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError, httpx.ConnectError) as e:
         raise PollDroppedError(round(time.monotonic() - start), e) from e
-    status = str(data.get("status") or "").upper()
-    if status in ("FAILED", "ERROR", "CANCELLED"):
-        return {"status": "failed", "error": f"Venice: {data.get('error') or data.get('message') or 'video failed'}"}
-    if status == "COMPLETED" and _download_urls.get(job_id) is not None:
-        return _completed(job_id)
-    return {"status": "in_progress"}
+    return _status_from_data(job_id, data)
 
 
 def download_video(job_id: str, dest: Path) -> None:

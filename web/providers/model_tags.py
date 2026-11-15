@@ -65,25 +65,8 @@ def _strings(value: JsonValue) -> list[str]:
 
 def tags_for(kind: str, m: ModelEntry) -> list[str]:
     """The capability tags for one shaped catalogue model of `kind`."""
-    out: list[str] = []
-
-    def add(*ts: str) -> None:
-        for t in ts:
-            if t not in out:
-                out.append(t)
-
-    if kind == "video":
-        _video_tags(m, add)
-    elif kind == "image":
-        _image_tags(m, add)
-    elif kind == "audio":
-        add(*_AUDIO_TYPE_TAGS.get(_text(m.get("type")), ()))
-    elif kind == "text":
-        if "image" in _strings(m.get("input_modalities")):
-            add("vision")
-        if m.get("supports_tools"):
-            add("functions")
-    return out
+    build = _BUILDERS.get(kind)
+    return list(dict.fromkeys(build(m))) if build else []
 
 
 _AUDIO_TYPE_TAGS = {"speech": ("tts",), "music": ("music",)}
@@ -125,59 +108,78 @@ _EDIT_TYPES = {
 _VENICE_EDIT_FAMS = {"video", "motion", "upscale", "reference"}
 
 
-def _video_tags(m: ModelEntry, add: Callable[..., None]) -> None:
+def _video_tags(m: ModelEntry) -> list[str]:
+    """Tags for a video model (may repeat; `tags_for` dedupes, keeping first-seen order)."""
     typ = _text(m.get("type"))  # Pollo
     fam = _text(m.get("family"))  # Venice
     frames = _strings(m.get("frame_images"))
-    add(*_POLLO_TYPE_TAGS.get(typ, ()))
-    add(*_VENICE_FAMILY_TAGS.get(fam, ()))
-    if fam == "standard":
-        add("text2vid")
-    if m.get("reference_images"):
-        add("ref2vid")
     ref_mode = m.get("ref_mode")
     refs: Mapping[str, JsonValue] = (
         ref_mode if isinstance(ref_mode, Mapping) else {}
     )  # the model's reference-to-video branch
-    if refs:
-        add("ref2vid")
-    if "video" in _strings(refs.get("types")):
-        add("video_refs")  # takes a source video as a reference: replace/restyle part of a clip
-    if "last_frame" in frames:
-        add("first_last")
-    if m.get("generate_audio"):
-        add("audio")
-    _video_img_tags(m, typ, fam, frames, add)
+    tags = [*_POLLO_TYPE_TAGS.get(typ, ()), *_VENICE_FAMILY_TAGS.get(fam, ())]
+    # (condition, tag) in the order the tags are reported
+    conditional = (
+        (fam == "standard", "text2vid"),
+        (bool(m.get("reference_images")), "ref2vid"),
+        (bool(refs), "ref2vid"),
+        # takes a source video as a reference: replace/restyle part of a clip
+        ("video" in _strings(refs.get("types")), "video_refs"),
+        ("last_frame" in frames, "first_last"),
+        (bool(m.get("generate_audio")), "audio"),
+    )
+    tags.extend(tag for present, tag in conditional if present)
+    return [*tags, *_video_img_tags(m, typ, fam, frames)]
 
 
-def _video_img_tags(
-    m: ModelEntry,
-    typ: str,
-    fam: str,
-    frames: list[str],
-    add: Callable[..., None],
-) -> None:
-    """Add image-to-video and text-to-video tags supported by the model.
+def _video_img_tags(m: ModelEntry, typ: str, fam: str, frames: list[str]) -> list[str]:
+    """Image-to-video and text-to-video tags supported by the model.
 
     ``first_frame`` means image-to-video only for plain generators, not edit
     families where the image plays a different role.
     """
     special = typ in _EDIT_TYPES or fam in _VENICE_EDIT_FAMS
+    tags: list[str] = []
     if "first_frame" in frames and not special:
-        add("img2vid")
+        tags.append("img2vid")
     if not typ and not fam:  # OpenRouter video carries neither field
         if "image" in _strings(m.get("input_modalities")) or "first_frame" in frames:
-            add("img2vid")
-        add("text2vid")
+            tags.append("img2vid")
+        tags.append("text2vid")
+    return tags
 
 
-def _image_tags(m: ModelEntry, add: Callable[..., None]) -> None:
+def _image_tags(m: ModelEntry) -> list[str]:
+    """Tags for an image model."""
     # Image tools (face-swap, background remover, …) are their own thing and
     # don't generate from a bare prompt — a later stage sets `tool`.
     if m.get("tool"):
-        add("tools")
-        return
-    add("text2img")
+        return ["tools"]
+    tags = ["text2img"]
     mods = _strings(m.get("input_modalities"))
     if "image" in mods or m.get("conversational") or m.get("max_refs"):
-        add("image_edit")
+        tags.append("image_edit")
+    return tags
+
+
+def _audio_tags(m: ModelEntry) -> list[str]:
+    """Tags for an audio (speech / music) model."""
+    return list(_AUDIO_TYPE_TAGS.get(_text(m.get("type")), ()))
+
+
+def _text_tags(m: ModelEntry) -> list[str]:
+    """Tags for a text model."""
+    tags: list[str] = []
+    if "image" in _strings(m.get("input_modalities")):
+        tags.append("vision")
+    if m.get("supports_tools"):
+        tags.append("functions")
+    return tags
+
+
+_BUILDERS: dict[str, Callable[[ModelEntry], list[str]]] = {
+    "video": _video_tags,
+    "image": _image_tags,
+    "audio": _audio_tags,
+    "text": _text_tags,
+}

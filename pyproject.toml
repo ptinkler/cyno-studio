@@ -47,6 +47,11 @@ select = [
     "FAST",     # FastAPI-specific lint rules
     "PTH",      # flake8-use-pathlib: enforces pathlib over os.path
     "TRY",      # tryceratops: clean exception handling patterns
+    "A",        # flake8-builtins: no variable shadows a Python builtin
+    "PLW",      # pylint warnings: no `global`, no clobbered loop variables
+    "PLR0911",  # at most 6 return statements per function
+    "PLR0912",  # at most 12 branches per function
+    "PLR0915",  # at most 50 statements per function
 ]
 
 ignore = [
@@ -58,9 +63,8 @@ ignore = [
 ]
 
 [tool.ruff.lint.mccabe]
-# Target is 7. Held at 10 while the 36 functions that score 8-10 are broken
-# up one at a time — complexity is never silenced with `noqa`, it gets fixed.
-max-complexity = 10
+# Functions that grow past this are split up — complexity is never silenced with `noqa`.
+max-complexity = 7
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"  # Standardized docstring formatting

@@ -72,20 +72,23 @@ def _renamed(value: _JsonValue, to_v1: bool) -> _JsonValue:
 
 def _walk(data: _JsonValue, to_v1: bool) -> bool:
     """Rewrite every model id in a decoded JSON value; True if anything changed."""
-    changed = False
     if isinstance(data, list):
-        for item in data:
-            changed |= _walk(item, to_v1)
-    elif isinstance(data, dict):
-        for key, value in data.items():
-            if key in _JSON_KEYS:
-                new = _renamed(value, to_v1)
-                if new != value:
-                    data[key] = new
-                    changed = True
-            elif isinstance(value, list | dict):
-                changed |= _walk(value, to_v1)
-    return changed
+        return sum(_walk(item, to_v1) for item in data) > 0  # sum, not any: every item must be visited
+    if isinstance(data, dict):
+        return sum(_walk_entry(data, key, to_v1) for key in list(data)) > 0
+    return False
+
+
+def _walk_entry(data: dict[str, _JsonValue], key: str, to_v1: bool) -> bool:
+    """Rewrite one key of a JSON object (a model id, or a nested value to descend into)."""
+    value = data[key]
+    if key in _JSON_KEYS:
+        new = _renamed(value, to_v1)
+        if new == value:
+            return False
+        data[key] = new
+        return True
+    return isinstance(value, list | dict) and _walk(value, to_v1)
 
 
 def _table(table: str, column: str) -> sa.TableClause:
@@ -93,14 +96,9 @@ def _table(table: str, column: str) -> sa.TableClause:
     return sa.table(table, sa.column("rowid", sa.Integer), sa.column(column, sa.Text()))
 
 
-def rewrite(bind: Connection, to_v1: bool = False) -> int:
-    """Rewrite every stored Pollo model id; returns how many rows changed.
-
-    Takes the bind so it can be tested without an Alembic context.
-    """
+def _rewrite_columns(bind: Connection, tables: set[str], to_v1: bool) -> int:
+    """Rewrite the plain model-id columns; returns how many rows changed."""
     changed_rows = 0
-    tables = set(sa.inspect(bind).get_table_names())
-
     for table, column in _COLUMNS:
         if table not in tables:
             continue
@@ -116,7 +114,12 @@ def rewrite(bind: Connection, to_v1: bool = False) -> int:
             if new != value:
                 bind.execute(sa.update(target).where(target.c.rowid == rowid).values({column: new}))
                 changed_rows += 1
+    return changed_rows
 
+
+def _rewrite_json_columns(bind: Connection, tables: set[str], to_v1: bool) -> int:
+    """Rewrite model ids nested inside the JSON columns; returns how many rows changed."""
+    changed_rows = 0
     for table, column, _is_list in _JSON_COLUMNS:
         if table not in tables:
             continue
@@ -136,6 +139,15 @@ def rewrite(bind: Connection, to_v1: bool = False) -> int:
                 bind.execute(sa.update(target).where(target.c.rowid == rowid).values({column: json.dumps(data)}))
                 changed_rows += 1
     return changed_rows
+
+
+def rewrite(bind: Connection, to_v1: bool = False) -> int:
+    """Rewrite every stored Pollo model id; returns how many rows changed.
+
+    Takes the bind so it can be tested without an Alembic context.
+    """
+    tables = set(sa.inspect(bind).get_table_names())
+    return _rewrite_columns(bind, tables, to_v1) + _rewrite_json_columns(bind, tables, to_v1)
 
 
 def upgrade() -> None:

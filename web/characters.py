@@ -129,8 +129,8 @@ def named(chars: list[Character], names: list[str] | None) -> list[Character]:
     same name as one of this chat's own, the name means the chat's own.
     """
     out: list[Character] = []
-    for n in names or []:
-        n = str(n).strip().lower()
+    for raw in names or []:
+        n = str(raw).strip().lower()
         same = sorted((c for c in chars if c.name.strip().lower() == n), key=lambda c: c.conversation_id is None)
         hit = (same[0] if same else None) or next(
             (c for c in chars if (s := _short_name(c, chars)) and s.lower() == n), None

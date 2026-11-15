@@ -128,8 +128,9 @@ def _clamp(value: JsonValue, lo: float, hi: float) -> float:
     return max(lo, min(hi, as_float(value)))
 
 
-def _speech_payload(c: AudioCfg, prompt: str, **kw: JsonValue) -> Payload:
-    attrs: dict[str, JsonValue] = {"prompt": prompt}
+def _voice_attrs(c: AudioCfg, kw: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    """The voice a speech model needs: a stock voice id and/or a reference clip."""
+    attrs: dict[str, JsonValue] = {}
     if c["NEEDS_VOICE"]:
         if not kw.get("voice"):
             raise VoiceRequiredError
@@ -139,13 +140,24 @@ def _speech_payload(c: AudioCfg, prompt: str, **kw: JsonValue) -> Payload:
             raise VoiceReferenceRequiredError
         # the shape of the spec's own voiceRefs example
         attrs["voiceRefs"] = [{"type": "audio", "name": "voice", "audioUrl": kw["voice_ref_url"]}]
+    return attrs
+
+
+def _tuning_attrs(kw: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    """Speed / volume / pitch, clamped to the ranges the API accepts."""
+    attrs: dict[str, JsonValue] = {}
+    for name, lo, hi in (("speed", 0.5, 2), ("volume", 0.5, 2)):
+        if (value := kw.get(name)) is not None:
+            attrs[name] = _clamp(value, lo, hi)
+    if (pitch := kw.get("pitch")) is not None:
+        attrs["pitch"] = int(_clamp(pitch, -12, 12))
+    return attrs
+
+
+def _speech_payload(c: AudioCfg, prompt: str, **kw: JsonValue) -> Payload:
+    attrs: dict[str, JsonValue] = {"prompt": prompt, **_voice_attrs(c, kw)}
     if c["HAS_TUNING"]:
-        if (speed := kw.get("speed")) is not None:
-            attrs["speed"] = _clamp(speed, 0.5, 2)
-        if (volume := kw.get("volume")) is not None:
-            attrs["volume"] = _clamp(volume, 0.5, 2)
-        if (pitch := kw.get("pitch")) is not None:
-            attrs["pitch"] = int(_clamp(pitch, -12, 12))
+        attrs.update(_tuning_attrs(kw))
     return {"input": attrs}
 
 

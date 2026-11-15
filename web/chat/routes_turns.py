@@ -10,6 +10,7 @@ import queue
 import threading
 import uuid
 from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass
 from typing import cast
 
 from fastapi import HTTPException
@@ -17,7 +18,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from web.chat import polling
-from web.chat.audio import audio_params, submit_audio_generation
+from web.chat.audio import AudioJob, audio_params, submit_audio_generation
 from web.chat.catalogue import fit_video_params, model_info
 from web.chat.constants import DEFAULT_IMAGE_LIMIT
 from web.chat.deps import router
@@ -51,10 +52,10 @@ from web.chat.turn import Turn
 from web.chat.workers import ctx_thread, with_owner_keys
 from web.core.metadata import get_db, iso
 from web.core.metadata.models import ChatMessage
-from web.jsonutil import as_list, as_object, as_str
+from web.jsonutil import as_int, as_list, as_object, as_str
 from web.media_types import kind_of
 from web.providers import openrouter, pollo
-from web.types import JsonValue
+from web.types import JsonValue, VideoJob
 from web.uploads import safe_filename
 
 log = logging.getLogger(__name__)
@@ -301,6 +302,38 @@ def _text_versions_json(items: list[dict[str, JsonValue]], shown: int) -> str:
     return json.dumps({"items": items, "shown": shown})
 
 
+def _require_rewordable(msg: ChatMessage | None, conv_id: str, instruction: str) -> ChatMessage:
+    """The assistant message to reword, or the HTTP error saying why it can't be."""
+    if not msg or msg.conversation_id != conv_id or msg.role != "assistant":
+        raise HTTPException(400, "Can only reword an assistant message in this conversation")
+    if msg.status == "streaming":
+        raise HTTPException(409, "Wait for the reply to finish first")
+    if any(i.get("status") == "pending" for i in msg.media):
+        raise HTTPException(409, "Wait for this reply's media to finish first")
+    if instruction and not (msg.content or "").strip():
+        raise HTTPException(400, "This reply has no words to edit yet")
+    return msg
+
+
+def _reword_finisher(
+    message_id: int, previous: str, items: list[dict[str, JsonValue]], text_model: str | None
+) -> Callable[[], ChatMessage | None]:
+    """A callback that files the new words as the latest version (or restores the old ones)."""
+
+    def after() -> ChatMessage | None:
+        """File the new words as the latest version — or, if none came, put the old ones back."""
+        db = get_db()
+        done = db.get_chat_message(message_id)
+        if not done:
+            return None
+        if not (done.content or "").strip():
+            return db.update_chat_message(message_id, content=previous)
+        versions: list[dict[str, JsonValue]] = [*items, {"content": done.content, "model": text_model}]
+        return db.update_chat_message(message_id, text_versions_json=_text_versions_json(versions, len(versions) - 1))
+
+    return after
+
+
 @router.post("/conversations/{conv_id}/reword")
 def api_reword(conv_id: str, data: RewordMessage) -> StreamingResponse:
     """Write this reply's words again, keeping the pictures it already made.
@@ -314,17 +347,9 @@ def api_reword(conv_id: str, data: RewordMessage) -> StreamingResponse:
     require_text_provider("text")
     conv = require_conv(conv_id)
     db = get_db()
-    msg = db.get_chat_message(data.message_id)
-    if not msg or msg.conversation_id != conv_id or msg.role != "assistant":
-        raise HTTPException(400, "Can only reword an assistant message in this conversation")
-    if msg.status == "streaming":
-        raise HTTPException(409, "Wait for the reply to finish first")
-    if any(i.get("status") == "pending" for i in msg.media):
-        raise HTTPException(409, "Wait for this reply's media to finish first")
     instruction = data.instruction.strip()
+    msg = _require_rewordable(db.get_chat_message(data.message_id), conv_id, instruction)
     previous = msg.content or ""
-    if instruction and not previous.strip():
-        raise HTTPException(400, "This reply has no words to edit yet")
     # Only the words are generated again, whatever mode the composer is in.
     settings = data.model_copy(update={"mode": "text"})
     # The words being replaced were paid for too (and stay as a version you
@@ -334,16 +359,7 @@ def api_reword(conv_id: str, data: RewordMessage) -> StreamingResponse:
     if not items:  # first rewrite: the words it has become version 1
         items = [{"content": previous, "model": msg.model}]
     message_id = msg.id
-
-    def after() -> ChatMessage | None:
-        """File the new words as the latest version — or, if none came, put the old ones back."""
-        done = db.get_chat_message(message_id)
-        if not done:
-            return None
-        if not (done.content or "").strip():
-            return db.update_chat_message(message_id, content=previous)
-        versions: list[dict[str, JsonValue]] = [*items, {"content": done.content, "model": settings.text_model}]
-        return db.update_chat_message(message_id, text_versions_json=_text_versions_json(versions, len(versions) - 1))
+    after = _reword_finisher(message_id, previous, items, settings.text_model)
 
     with _start_lock:
         require_idle(conv_id, msg.lane)
@@ -526,10 +542,8 @@ _NOT_REROLLED = (
 )
 
 
-def _regeneration_inputs(
-    message_id: int, media_id: str, data: RegenerateMedia
-) -> tuple[dict[str, JsonValue], str, str, dict[str, JsonValue]]:
-    """Validate a regenerate request; the item, model, prompt and params to run it with."""
+def _regenerable_item(message_id: int, media_id: str) -> dict[str, JsonValue]:
+    """The generated item a regenerate request targets, or the HTTP error saying why it can't be."""
     msg = get_db().get_chat_message(message_id)
     if not msg:
         raise HTTPException(404, "Message not found")
@@ -540,6 +554,14 @@ def _regeneration_inputs(
         raise HTTPException(404, "Media not found")
     if item.get("status") not in ("error", "done"):
         raise HTTPException(400, "Wait for the generation to finish first")
+    return item
+
+
+def _regeneration_inputs(
+    message_id: int, media_id: str, data: RegenerateMedia
+) -> tuple[dict[str, JsonValue], str, str, dict[str, JsonValue]]:
+    """Validate a regenerate request; the item, model, prompt and params to run it with."""
+    item = _regenerable_item(message_id, media_id)
     prompt = (data.prompt or "").strip() or as_str(item.get("prompt"))
     if not prompt:
         raise HTTPException(400, "This item has no stored prompt to retry")
@@ -747,6 +769,87 @@ def api_active_generations(data: ActiveQuery) -> dict[str, list[dict[str, JsonVa
     return {"items": items}
 
 
+@dataclass
+class _Regen:
+    """One media card being regenerated, and what to regenerate it with."""
+
+    conv_id: str
+    message_id: int
+    media_id: str
+    model: str
+    prompt: str
+    params: dict[str, JsonValue]
+
+
+def _regen_image_context(r: _Regen) -> list[dict[str, JsonValue]] | None:
+    """The conversation sent to a conversational image model, or None for a lone prompt."""
+    if not is_conversational(r.model):
+        return None
+    msg = get_db().get_chat_message(r.message_id)
+    history = branch_to(get_db().get_chat_messages(r.conv_id), r.message_id)[:-1]
+    refs = r.params.get("refs")
+    image_limit = as_int(r.params.get("image_limit"))
+    return image_context(
+        r.conv_id,
+        history,
+        as_int(r.params.get("history_limit")),
+        msg.content if msg else "",
+        None if r.params.get("direct") is True else r.prompt,
+        [ref for ref in refs if isinstance(ref, str)] if isinstance(refs, list) else [],
+        conversation_instructions(r.conv_id),
+        param_characters(r.params),
+        image_limit if image_limit is not None else DEFAULT_IMAGE_LIMIT,
+    )
+
+
+def _regen_image(r: _Regen) -> None:
+    """Regenerate an image card; extra images the model returns become further cards."""
+    db = get_db()
+    context = _regen_image_context(r)
+    r.params["context"] = context is not None
+    names, cost, credit_cost, sent = run_image_generation(r.conv_id, r.model, r.prompt, r.params, context)
+    sent, exchange = take_log(sent)
+    db.update_chat_media_item(
+        r.message_id,
+        r.media_id,
+        status="done",
+        file=names[0],
+        cost=cost,
+        credits=credit_cost,
+        params={**r.params, **sent},
+        **exchange,
+    )
+    for extra in names[1:]:
+        db.append_chat_media_item(
+            r.message_id, saved_media("image", "generated", extra, prompt=r.prompt, model=r.model)
+        )
+    add_message_cost(r.message_id, cost)
+
+
+def _record_job(r: _Regen, job: VideoJob | AudioJob) -> None:
+    """Store a submitted job on its card and start polling it."""
+    get_db().update_chat_media_item(
+        r.message_id,
+        r.media_id,
+        job_id=job["id"],
+        params={**r.params, **job.get("params", {})},
+        **exchange_fields(job.get("log")),
+    )
+    polling.start_video_poller(r.conv_id, r.message_id, r.media_id, job["id"])
+
+
+def _regen_video(r: _Regen) -> None:
+    """Regenerate a video card; a different model may support different durations/ratios."""
+    params = r.params
+    params["duration"], params["aspect_ratio"], params["resolution"] = fit_video_params(
+        r.model,
+        as_int(params.get("duration")),
+        as_str(params.get("aspect_ratio")),
+        as_str(params.get("resolution")),
+    )
+    _record_job(r, submit_video_generation(r.conv_id, r.model, r.prompt, params))
+
+
 @with_owner_keys
 def _regenerate_worker(conv_id: str, message_id: int, item: Mapping[str, JsonValue], model: str) -> None:
     db = get_db()
@@ -757,77 +860,14 @@ def _regenerate_worker(conv_id: str, message_id: int, item: Mapping[str, JsonVal
         raise InvalidMediaItemError
     raw_params = item.get("params")
     params: dict[str, JsonValue] = dict(raw_params) if isinstance(raw_params, Mapping) else {}
+    r = _Regen(conv_id, message_id, media_id, model, prompt, params)
     try:
         if kind == "image":
-            context = None
-            if is_conversational(model):
-                msg = db.get_chat_message(message_id)
-                history = branch_to(db.get_chat_messages(conv_id), message_id)[:-1]
-                direct = params.get("direct") is True
-                history_limit = params.get("history_limit")
-                refs = params.get("refs")
-                image_limit = params.get("image_limit")
-                context = image_context(
-                    conv_id,
-                    history,
-                    history_limit if isinstance(history_limit, int) and not isinstance(history_limit, bool) else None,
-                    msg.content if msg else "",
-                    None if direct else prompt,
-                    [ref for ref in refs if isinstance(ref, str)] if isinstance(refs, list) else [],
-                    conversation_instructions(conv_id),
-                    param_characters(params),
-                    image_limit
-                    if isinstance(image_limit, int) and not isinstance(image_limit, bool)
-                    else DEFAULT_IMAGE_LIMIT,
-                )
-            params["context"] = context is not None
-            names, cost, credits, sent = run_image_generation(conv_id, model, prompt, params, context)
-            sent, exchange = take_log(sent)
-            db.update_chat_media_item(
-                message_id,
-                media_id,
-                status="done",
-                file=names[0],
-                cost=cost,
-                credits=credits,
-                params={**params, **sent},
-                **exchange,
-            )
-            for extra in names[1:]:
-                db.append_chat_media_item(
-                    message_id, saved_media("image", "generated", extra, prompt=prompt, model=model)
-                )
-            add_message_cost(message_id, cost)
+            _regen_image(r)
         elif kind == "audio":
-            job = submit_audio_generation(conv_id, model, prompt, params)
-            db.update_chat_media_item(
-                message_id,
-                media_id,
-                job_id=job["id"],
-                params={**params, **job.get("params", {})},
-                **exchange_fields(job.get("log")),
-            )
-            polling.start_video_poller(conv_id, message_id, media_id, job["id"])
+            _record_job(r, submit_audio_generation(conv_id, model, prompt, params))
         else:
-            # A different model may support different durations/ratios
-            duration = params.get("duration")
-            aspect_ratio = params.get("aspect_ratio")
-            resolution = params.get("resolution")
-            params["duration"], params["aspect_ratio"], params["resolution"] = fit_video_params(
-                model,
-                duration if isinstance(duration, int) and not isinstance(duration, bool) else None,
-                aspect_ratio if isinstance(aspect_ratio, str) else None,
-                resolution if isinstance(resolution, str) else None,
-            )
-            job = submit_video_generation(conv_id, model, prompt, params)
-            db.update_chat_media_item(
-                message_id,
-                media_id,
-                job_id=job["id"],
-                params={**params, **job.get("params", {})},
-                **exchange_fields(job.get("log")),
-            )
-            polling.start_video_poller(conv_id, message_id, media_id, job["id"])
+            _regen_video(r)
     except openrouter.OpenRouterError as e:
         db.update_chat_media_item(message_id, media_id, **failure_fields(e))
     except Exception as e:  # never leave the card stuck on "pending"

@@ -147,28 +147,46 @@ def _video_seconds(path: str, _mtime_ns: int) -> float | None:
 # a request reads a handful of the rest for the page it returns (the length is
 # a caption on a tile, so arriving a request later costs nothing).
 _DURATION_FILL_BUDGET = 48
-_durations: dict[str, tuple[int, float | None]] | None = None
-_durations_lock = threading.Lock()
+
+
+class _Durations:
+    """Known video lengths by path: (mtime_ns, seconds), read from the media cache once per process."""
+
+    def __init__(self) -> None:
+        self._known: dict[str, tuple[int, float | None]] | None = None
+        self._lock = threading.Lock()
+
+    def reset(self, *, loaded: bool) -> None:
+        """Drop the in-memory lengths: empty but loaded, or unloaded (as a fresh process starts)."""
+        with self._lock:
+            self._known = {} if loaded else None
+
+    def get(self) -> dict[str, tuple[int, float | None]]:
+        """The known lengths; the first call loads them and starts the stale-row sweep."""
+        with self._lock:
+            if self._known is None:
+                self._known = media_cache.durations()
+                media_cache.sweep_in_background()
+            return self._known
+
+    def update(self, read: list[tuple[str, int, float | None]]) -> None:
+        """Add freshly read lengths (nothing to do while the cache is still unloaded)."""
+        with self._lock:
+            if self._known is not None:
+                self._known.update({path: (mtime_ns, seconds) for path, mtime_ns, seconds in read})
+
+
+_durations = _Durations()
 
 
 def reset_durations(*, loaded: bool) -> None:
     """Drop the in-memory lengths: empty but loaded, or unloaded (as a fresh process starts)."""
-    global _durations
-    with _durations_lock:
-        _durations = {} if loaded else None
+    _durations.reset(loaded=loaded)
 
 
 def _durations_map() -> dict[str, tuple[int, float | None]]:
-    """Return known lengths mapped to path, mtime, and seconds.
-
-    The cache is read once per process; duration filling adds to it.
-    """
-    global _durations
-    with _durations_lock:
-        if _durations is None:
-            _durations = media_cache.durations()
-            media_cache.sweep_in_background()
-        return _durations
+    """Return known lengths mapped to path, mtime, and seconds."""
+    return _durations.get()
 
 
 def _duration_known(path: Path) -> bool:
@@ -206,6 +224,22 @@ def _read_duration(path: Path) -> tuple[int, float | None] | None:
         return None
 
 
+def _unread_video_path(item: MediaItem) -> Path | None:
+    """The file of a video item whose length isn't known yet, else None."""
+    if item.get("kind") != "video" or item.get("duration") is not None:
+        return None
+    path = _item_path(item)
+    return None if path is None or _duration_known(path) else path
+
+
+def _remember_durations(read: list[tuple[str, int, float | None]]) -> None:
+    """Keep freshly read lengths in memory and on disk."""
+    if not read:
+        return
+    _durations.update(read)
+    media_cache.remember(read)
+
+
 def _fill_durations(items: list[MediaItem]) -> None:
     """Fill missing video durations in items, subject to a read budget.
 
@@ -217,10 +251,8 @@ def _fill_durations(items: list[MediaItem]) -> None:
     for item in items:
         if budget <= 0:
             break
-        if item.get("kind") != "video" or item.get("duration") is not None:
-            continue
-        path = _item_path(item)
-        if path is None or _duration_known(path):
+        path = _unread_video_path(item)
+        if path is None:
             continue
         budget -= 1
         got = _read_duration(path)
@@ -228,12 +260,7 @@ def _fill_durations(items: list[MediaItem]) -> None:
             continue
         item["duration"] = got[1]
         read.append((str(path), *got))
-    if not read:
-        return
-    with _durations_lock:
-        if _durations is not None:
-            _durations.update({path: (mtime_ns, seconds) for path, mtime_ns, seconds in read})
-    media_cache.remember(read)
+    _remember_durations(read)
 
 
 def _item_path(item: MediaItem) -> Path | None:
@@ -433,16 +460,50 @@ def referenced_files(item: MediaItem) -> list[str]:
     return [f for f in files if isinstance(f, str) and f]
 
 
-def _chat_orphans(msgs: list[ChatMessage], lib_items: list[ChatLibraryItem], titles: dict[str, str]) -> list[MediaItem]:
-    """Files in chat folders that no message or library entry records."""
-    root = config.ROOT_DIR / "chat"
-    if not root.is_dir():
-        return []
+def _used_files(msgs: list[ChatMessage], lib_items: list[ChatLibraryItem]) -> set[tuple[str, str]]:
+    """Every (conversation id, file name) that a message or library entry records."""
     used: set[tuple[str, str]] = set()
     for msg in msgs:
         used.update((msg.conversation_id, f) for i in msg.media for f in referenced_files(i))
     for lib in lib_items:
         used.update((lib.conversation_id, f) for f in referenced_files(lib.item))
+    return used
+
+
+def _orphan_item(p: Path, conv_id: str, kind: str, titles: dict[str, str]) -> MediaItem:
+    """The library row for one unrecorded file in a chat's folder."""
+    media_id = f"chat:{conv_id}:{p.name}"
+    return {
+        "id": media_id,
+        "kind": kind,
+        "source": "upload" if p.name.startswith("up_") else "generated",
+        "origin": "orphan",
+        "name": p.name,
+        "url": f"/api/chat/media/{conv_id}/{p.name}",
+        "thumb_url": _thumb_url(media_id),
+        "created_at": _mtime_iso(p),
+        "duration": _known_duration(p, kind),
+        "conversation_id": conv_id if conv_id in titles else None,
+        "conversation_title": titles.get(conv_id),
+    }
+
+
+def _orphans_in(folder: Path, used: set[tuple[str, str]], cutoff: float, titles: dict[str, str]) -> list[MediaItem]:
+    """The old-enough, unrecorded media files in one chat folder."""
+    items: list[MediaItem] = []
+    for p in folder.iterdir():
+        kind = _kind(p) if p.is_file() and (folder.name, p.name) not in used else None
+        if kind and p.stat().st_mtime <= cutoff:
+            items.append(_orphan_item(p, folder.name, kind, titles))
+    return items
+
+
+def _chat_orphans(msgs: list[ChatMessage], lib_items: list[ChatLibraryItem], titles: dict[str, str]) -> list[MediaItem]:
+    """Files in chat folders that no message or library entry records."""
+    root = config.ROOT_DIR / "chat"
+    if not root.is_dir():
+        return []
+    used = _used_files(msgs, lib_items)
     cutoff = time.time() - ORPHAN_GRACE
     items: list[MediaItem] = []
     # Only the current user's conversation folders (titles is tenant-scoped), so
@@ -451,26 +512,7 @@ def _chat_orphans(msgs: list[ChatMessage], lib_items: list[ChatLibraryItem], tit
         d = root / conv_id
         if not d.is_dir() or d.name.startswith("."):  # .deleting-<id>: a deleted chat's files, going
             continue
-        for p in d.iterdir():
-            kind = _kind(p) if p.is_file() and (d.name, p.name) not in used else None
-            if not kind or p.stat().st_mtime > cutoff:
-                continue
-            media_id = f"chat:{d.name}:{p.name}"
-            items.append(
-                {
-                    "id": media_id,
-                    "kind": kind,
-                    "source": "upload" if p.name.startswith("up_") else "generated",
-                    "origin": "orphan",
-                    "name": p.name,
-                    "url": f"/api/chat/media/{d.name}/{p.name}",
-                    "thumb_url": _thumb_url(media_id),
-                    "created_at": _mtime_iso(p),
-                    "duration": _known_duration(p, kind),
-                    "conversation_id": d.name if d.name in titles else None,
-                    "conversation_title": titles.get(d.name),
-                }
-            )
+        items.extend(_orphans_in(d, used, cutoff, titles))
     return items
 
 
@@ -674,9 +716,21 @@ def _delete_item(media_id: str) -> dict[str, str]:
 # Which saved images are solid black, per file version, kept on disk: the
 # Media page asks on every load, and decoding every chat image again after
 # each restart takes minutes on a NAS
-_blank_cache: dict[str, bool] | None = None
-_blank_lock = threading.Lock()
+class _BlankChecks:
+    """Which saved images are blank, by file version; loaded from disk on first use."""
+
+    def __init__(self) -> None:
+        self.checks: dict[str, bool] | None = None
+        self.lock = threading.Lock()
+
+
+_blank = _BlankChecks()
 _BLANK_CHECKS = TypeAdapter(dict[str, bool])
+
+
+def reset_blank_checks() -> None:
+    """Forget the in-memory results so they are read from disk again (as after a restart)."""
+    _blank.checks = None
 
 
 def _blank_cache_path() -> Path:
@@ -684,14 +738,13 @@ def _blank_cache_path() -> Path:
 
 
 def _blank_checks() -> dict[str, bool]:
-    global _blank_cache
-    checks = _blank_cache
+    checks = _blank.checks
     if checks is None:
         try:
             checks = _BLANK_CHECKS.validate_json(_blank_cache_path().read_text())
         except (OSError, ValueError):  # missing, unreadable or malformed: start over (ValidationError is a ValueError)
             checks = {}
-        _blank_cache = checks
+        _blank.checks = checks
     return checks
 
 
@@ -717,7 +770,7 @@ def _is_blank_file(path: Path) -> bool:
     if key not in checks:
         thumb = thumb_path(path)
         data = thumb.read_bytes() if thumb.is_file() else path.read_bytes()
-        with _blank_lock:
+        with _blank.lock:
             checks[key] = is_blank_image(data)
     return checks[key]
 

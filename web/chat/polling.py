@@ -9,6 +9,7 @@ import threading
 import time
 import uuid
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast
 from urllib.parse import urlsplit
@@ -18,7 +19,7 @@ from web.chat.constants import CHAT_PREVIEW_SIZE, VIDEO_MAX_POLL_ERRORS, VIDEO_P
 from web.chat.generation import MODERATION
 from web.chat.helpers import add_message_cost, chat_root, conversation_dir
 from web.chat.workers import with_owner_keys
-from web.core.metadata import get_db
+from web.core.metadata import MetadataDB, get_db
 from web.media_types import AUDIO_SUFFIXES, IMAGE_SUFFIXES, VIDEO_SUFFIXES
 from web.providers import provider_for_job
 from web.types import JsonValue
@@ -55,11 +56,90 @@ def start_video_poller(conv_id: str, message_id: int, media_id: str, job_id: str
     ).start()
 
 
+@dataclass(frozen=True)
+class _PollTarget:
+    """The chat media card a poller is working for."""
+
+    conv_id: str
+    message_id: int
+    media_id: str
+    job_id: str
+
+
+def _record_completed(
+    db: MetadataDB,
+    source: _VideoProvider,
+    target: _PollTarget,
+    item: dict[str, JsonValue],
+    job: Mapping[str, JsonValue],
+) -> None:
+    """Download a finished job's file and mark its card done (or errored if the download fails)."""
+    kind = item.get("kind")
+    name = _result_name(kind if isinstance(kind, str) else None, job)
+    try:
+        source.download_video(target.job_id, conversation_dir(target.conv_id) / name)
+    except Exception as e:  # convert download failures into a terminal media state
+        log.exception("video %s: download failed", target.job_id)
+        db.update_chat_media_item(target.message_id, target.media_id, status="error", error=f"Download failed: {e}")
+        return
+    usage = job.get("usage")
+    cost = usage.get("cost") if isinstance(usage, Mapping) else None
+    cost = float(cost) if isinstance(cost, int | float) and not isinstance(cost, bool) else None
+    msg = db.update_chat_media_item(
+        target.message_id, target.media_id, status="done", file=name, cost=cost, credits=job.get("credits")
+    )
+    if msg:
+        add_message_cost(target.message_id, cost)
+    log.info("video %s saved as %s", target.job_id, name)
+
+
+def _record_failed(
+    db: MetadataDB, target: _PollTarget, item: dict[str, JsonValue], job: Mapping[str, JsonValue]
+) -> None:
+    """Mark a card errored with the provider's verdict (failed / cancelled / expired)."""
+    kind = item.get("kind")
+    kind_name = kind if isinstance(kind, str) else "video"
+    error_value = job.get("error")
+    error = error_value if isinstance(error_value, str) else f"{kind_name.title()} {job.get('status')}"
+    # A provider that charges for a failed job says so here; record it so
+    # the charge shows up in the usage breakdown like any other. The
+    # verdict replaces the submit reply as the stored response, so the
+    # request view doesn't still read "accepted".
+    extra = {k: job[k] for k in ("credits", "response") if job.get(k) is not None}
+    db.update_chat_media_item(
+        target.message_id,
+        target.media_id,
+        status="error",
+        error=error,
+        moderated=bool(MODERATION.search(error)),
+        **extra,
+    )
+
+
+def _settle(
+    db: MetadataDB,
+    source: _VideoProvider,
+    target: _PollTarget,
+    item: dict[str, JsonValue],
+    job: Mapping[str, JsonValue],
+) -> bool:
+    """Record a finished job on its card; False while it is still running."""
+    status = job.get("status")
+    if status == "completed":
+        _record_completed(db, source, target, item, job)
+        return True
+    if status in ("failed", "cancelled", "expired"):
+        _record_failed(db, target, item, job)
+        return True
+    return False
+
+
 @with_owner_keys
 def poll_video(conv_id: str, message_id: int, media_id: str, job_id: str) -> None:
     """Follow a video job until it finishes, then record the result (or the error) on its card."""
     db = get_db()
     source = cast("_VideoProvider", provider_for_job(job_id))
+    target = _PollTarget(conv_id, message_id, media_id, job_id)
     deadline = time.time() + VIDEO_POLL_TIMEOUT
     errors = 0
     while time.time() < deadline:
@@ -77,52 +157,13 @@ def poll_video(conv_id: str, message_id: int, media_id: str, job_id: str) -> Non
                 db.update_chat_media_item(message_id, media_id, status="error", error=f"Polling failed: {e}")
                 return
             continue
-
-        status = job.get("status")
-        if status == "completed":
-            kind = item.get("kind")
-            name = _result_name(kind if isinstance(kind, str) else None, job)
-            try:
-                source.download_video(job_id, conversation_dir(conv_id) / name)
-            except Exception as e:  # convert download failures into a terminal media state
-                log.exception("video %s: download failed", job_id)
-                db.update_chat_media_item(message_id, media_id, status="error", error=f"Download failed: {e}")
-                return
-            usage = job.get("usage")
-            cost = usage.get("cost") if isinstance(usage, Mapping) else None
-            cost = float(cost) if isinstance(cost, int | float) and not isinstance(cost, bool) else None
-            msg = db.update_chat_media_item(
-                message_id, media_id, status="done", file=name, cost=cost, credits=job.get("credits")
-            )
-            if msg:
-                add_message_cost(message_id, cost)
-            log.info("video %s saved as %s", job_id, name)
-            return
-        if status in ("failed", "cancelled", "expired"):
-            kind = item.get("kind")
-            kind_name = kind if isinstance(kind, str) else "video"
-            error_value = job.get("error")
-            error = error_value if isinstance(error_value, str) else f"{kind_name.title()} {status}"
-            # A provider that charges for a failed job says so here; record it so
-            # the charge shows up in the usage breakdown like any other. The
-            # verdict replaces the submit reply as the stored response, so the
-            # request view doesn't still read "accepted".
-            extra = {k: job[k] for k in ("credits", "response") if job.get(k) is not None}
-            db.update_chat_media_item(
-                message_id,
-                media_id,
-                status="error",
-                error=error,
-                moderated=bool(MODERATION.search(error)),
-                **extra,
-            )
+        if _settle(db, source, target, item, job):
             return
     db.update_chat_media_item(message_id, media_id, status="error", error="Timed out waiting for the file")
 
 
-def startup_resume_chat() -> None:
-    """Resume video pollers and fail turns orphaned by a restart."""
-    db = get_db()
+def _resume_message_media(db: MetadataDB) -> int:
+    """Restart pollers for pending media on messages; fail the ones that can't be resumed."""
     resumed = 0
     for msg in db.get_chat_messages_with_pending_media():
         for item in msg.media:
@@ -132,9 +173,14 @@ def startup_resume_chat() -> None:
             if isinstance(media_id, str) and isinstance(job_id, str):
                 start_video_poller(msg.conversation_id, msg.id, media_id, job_id)
                 resumed += 1
-            else:
-                if isinstance(media_id, str):
-                    db.update_chat_media_item(msg.id, media_id, status="error", error="Interrupted by server restart")
+            elif isinstance(media_id, str):
+                db.update_chat_media_item(msg.id, media_id, status="error", error="Interrupted by server restart")
+    return resumed
+
+
+def _resume_library_media(db: MetadataDB) -> int:
+    """Restart pollers for pending media that has been detached to the library."""
+    resumed = 0
     for lib in db.list_chat_library():
         item = lib.item
         media_id, job_id = item.get("id"), item.get("job_id")
@@ -142,6 +188,13 @@ def startup_resume_chat() -> None:
             # message_id 0 never exists, so updates go straight to the library row
             start_video_poller(lib.conversation_id, 0, media_id, job_id)
             resumed += 1
+    return resumed
+
+
+def startup_resume_chat() -> None:
+    """Resume video pollers and fail turns orphaned by a restart."""
+    db = get_db()
+    resumed = _resume_message_media(db) + _resume_library_media(db)
     for msg in db.get_chat_messages_by_status("streaming"):
         db.update_chat_message(msg.id, status="error", error="Interrupted by server restart")
     if resumed:
