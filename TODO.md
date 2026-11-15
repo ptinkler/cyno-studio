@@ -62,3 +62,9 @@ Backend line counts (functions at module level):
 - [ ] Keep the refs-to-video docs and the audit/probe scripts (`scripts/`) in sync with what Pollo actually accepts (frontend/backend `[@name]` naming contract).
 - [ ] Periodically re-diff `docs.pollo.ai/openapi.json` against `MODEL_INFO` for newly added models. The Pollo build-out itself is finished: tags and filters, video extend/edit, motion, lip-sync, upscale, image tools and TTS/music are all wired.
 - [ ] Deferred Pollo gaps: Sora-2 extend (uses `generationId`, not a video URL), Runway extend (takes `images`), video-edit extras (images, seed, audio).
+
+## 7. Rename clean-up (after every deployment has moved to the new names)
+
+- [ ] Drop the legacy `POLLO_DATA_DIR` fallback (`src/py/web/core/config.py`, its tests, `tests/conftest.py`) and the `${POLLO_HOST_DATA_DIR}` fallback in `docker-compose.yml`.
+- [ ] Drop the `docker compose -p pollo-api down` line in `synology-boot.sh` and the "Renamed from pollo-api" note in `README.md`.
+- [ ] Delete the old GHCR packages `ghcr.io/ptinkler/pollo-api` and `pollo-nginx` (GitHub profile -> Packages) and the old images on the NAS.

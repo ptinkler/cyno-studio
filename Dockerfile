@@ -11,6 +11,9 @@ RUN npm run build
 # ── Stage 2: Python API runtime ─────────────────────────────────────
 FROM mirror.gcr.io/library/python:3.13-slim
 
+# Links the GHCR package to this repo (so it inherits the repo's visibility and access)
+LABEL org.opencontainers.image.source="https://github.com/ptinkler/cyno-studio"
+
 # System deps for opencv (cv2)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
