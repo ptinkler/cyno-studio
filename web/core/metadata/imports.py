@@ -9,6 +9,8 @@ import uuid
 from datetime import datetime
 from typing import NotRequired, TypedDict
 
+from sqlalchemy.orm import Session
+
 from web.core.metadata._base import DBBase
 from web.core.metadata.models import ChatConversation, ChatImportSkip, ChatLibraryItem, ChatMessage
 from web.types import JsonValue
@@ -61,6 +63,85 @@ class NativeLibraryItem(TypedDict):
     detached_at: datetime
 
 
+def _import_parent(row: ImportedMessage, ids: dict[str, int], conversation_id: str) -> int | None:
+    """The parent id of a staged message: given outright, or an earlier row's new id."""
+    if "parent_id" in row:
+        return row["parent_id"]
+    parent_import_id = row.get("parent_import_id")
+    if parent_import_id is None:
+        raise ValueError(conversation_id)
+    return ids[parent_import_id]
+
+
+def _apply_message_update(session: Session, msg_id: int, fields: ImportedMessageUpdate) -> None:
+    """Bring an existing message up to date with the re-imported content / media."""
+    msg = session.get(ChatMessage, msg_id)
+    if not msg:
+        return
+    if "content" in fields:
+        msg.content = fields["content"]
+    if "media" in fields:
+        media = fields["media"]
+        msg.media_json = json.dumps(media) if media else None
+
+
+def _library_taken(session: Session, library: list[NativeLibraryItem]) -> set[str]:
+    """Which of the exported media ids already exist (ids are unique server-wide)."""
+    return {
+        r[0]
+        for r in session.query(ChatLibraryItem.media_id).filter(
+            ChatLibraryItem.media_id.in_([i["media_id"] for i in library])
+        )
+    }
+
+
+def _import_library(session: Session, conversation_id: str, library: list[NativeLibraryItem]) -> None:
+    """Add the exported detached media a chat doesn't already have."""
+    # Already brought over by an earlier import of this chat
+    have = {
+        str(lib.item.get("import_media_id"))
+        for lib in session.query(ChatLibraryItem).filter(ChatLibraryItem.conversation_id == conversation_id)
+    }
+    taken = _library_taken(session, library)
+    for lib in library:
+        if lib["media_id"] in have:
+            continue
+        # Media ids are unique server-wide: importing into the server it
+        # came from (a copy of the chat) needs a fresh one
+        media_id = uuid.uuid4().hex[:8] if lib["media_id"] in taken else lib["media_id"]
+        item = {**lib["item"], "id": media_id, "import_media_id": lib["media_id"]}
+        session.add(
+            ChatLibraryItem(
+                media_id=media_id,
+                conversation_id=conversation_id,
+                item_json=json.dumps(item),
+                created_at=lib["created_at"],
+                detached_at=lib["detached_at"],
+            )
+        )
+
+
+def _native_fields(row: NativeMessage) -> dict[str, JsonValue]:
+    """The updatable columns of an exported message."""
+    return {
+        "content": row["content"],
+        "media_json": json.dumps(row["media"]) if row["media"] else None,
+        "status": row["status"],
+        "error": row["error"],
+        "cost": row["cost"],
+        "text_versions_json": row["text_versions_json"],
+    }
+
+
+def _refresh_message(prev: ChatMessage, fields: dict[str, JsonValue]) -> bool:
+    """Set any changed column on an already-imported message; True if something changed."""
+    if not any(getattr(prev, k) != v for k, v in fields.items()):
+        return False
+    for k, v in fields.items():
+        setattr(prev, k, v)
+    return True
+
+
 class ImportMixin(DBBase):
     """Provide database operations for imported conversations."""
 
@@ -104,16 +185,9 @@ class ImportMixin(DBBase):
             ids: dict[str, int] = {}
             last = None
             for row in rows:
-                if "parent_id" in row:
-                    parent = row["parent_id"]
-                else:
-                    parent_import_id = row.get("parent_import_id")
-                    if parent_import_id is None:
-                        raise ValueError(conversation_id)
-                    parent = ids[parent_import_id]
                 msg = ChatMessage(
                     conversation_id=conversation_id,
-                    parent_id=parent,
+                    parent_id=_import_parent(row, ids, conversation_id),
                     role=row["role"],
                     content=row["content"],
                     media_json=json.dumps(row["media"]) if row["media"] else None,
@@ -126,14 +200,7 @@ class ImportMixin(DBBase):
                 session.flush()
                 ids[row["import_id"]] = last = msg.id
             for msg_id, fields in updates.items():
-                msg = session.get(ChatMessage, msg_id)
-                if not msg:
-                    continue
-                if "content" in fields:
-                    msg.content = fields["content"]
-                if "media" in fields:
-                    media = fields["media"]
-                    msg.media_json = json.dumps(media) if media else None
+                _apply_message_update(session, msg_id, fields)
             conv.import_updated_at = import_updated_at
             if show and last is not None:
                 conv.current_leaf_id = last
@@ -183,21 +250,10 @@ class ImportMixin(DBBase):
             ids = {key: m.id for key, m in existing.items()}
             added = updated = 0
             for row in messages:
-                media_json = json.dumps(row["media"]) if row["media"] else None
-                fields = {
-                    "content": row["content"],
-                    "media_json": media_json,
-                    "status": row["status"],
-                    "error": row["error"],
-                    "cost": row["cost"],
-                    "text_versions_json": row["text_versions_json"],
-                }
+                fields = _native_fields(row)
                 prev = existing.get(row["import_id"])
                 if prev is not None:
-                    if any(getattr(prev, k) != v for k, v in fields.items()):
-                        for k, v in fields.items():
-                            setattr(prev, k, v)
-                        updated += 1
+                    updated += _refresh_message(prev, fields)
                     continue
                 parent = row["parent_import_id"]
                 msg = ChatMessage(
@@ -215,33 +271,7 @@ class ImportMixin(DBBase):
                 session.flush()
                 ids[row["import_id"]] = msg.id
                 added += 1
-            # Already brought over by an earlier import of this chat
-            have = {
-                str(lib.item.get("import_media_id"))
-                for lib in session.query(ChatLibraryItem).filter(ChatLibraryItem.conversation_id == conversation_id)
-            }
-            taken = {
-                r[0]
-                for r in session.query(ChatLibraryItem.media_id).filter(
-                    ChatLibraryItem.media_id.in_([i["media_id"] for i in library])
-                )
-            }
-            for lib in library:
-                if lib["media_id"] in have:
-                    continue
-                # Media ids are unique server-wide: importing into the server it
-                # came from (a copy of the chat) needs a fresh one
-                media_id = uuid.uuid4().hex[:8] if lib["media_id"] in taken else lib["media_id"]
-                item = {**lib["item"], "id": media_id, "import_media_id": lib["media_id"]}
-                session.add(
-                    ChatLibraryItem(
-                        media_id=media_id,
-                        conversation_id=conversation_id,
-                        item_json=json.dumps(item),
-                        created_at=lib["created_at"],
-                        detached_at=lib["detached_at"],
-                    )
-                )
+            _import_library(session, conversation_id, library)
             if not carried_on and leaf_import_id in ids:
                 conv.current_leaf_id = ids[leaf_import_id]
             conv.import_updated_at = import_updated_at

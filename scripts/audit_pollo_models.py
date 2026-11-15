@@ -9,7 +9,7 @@ the public spec):
      source of truth for a model's FEATURES — whether it has a reference-to-
      video branch, the refs cap, allowed ref types, durations, resolutions,
      ratios. This script extracts those and diffs them against our registry
-     (web/providers/pollo_engine/v1_video.py VIDEO_MODELS + pollo_models.MODEL_INFO)
+     (web/providers/pollo_engine/video.py VIDEO_MODELS + pollo_models.MODEL_INFO)
      so you never hand-find a model's feature set again.
 
   2. ENABLED ON YOUR KEY?  (--key / POLLO_API_KEY) The free estimate probe
@@ -214,25 +214,31 @@ def _our_models() -> dict[str, OurModel]:
     return out
 
 
+def _refs_mismatches(rm: RefMode, doc_refs: DocRefs) -> list[str]:
+    """Where our ref_mode numbers disagree with the docs' refs branch."""
+    msgs: list[str] = []
+    if doc_refs["max"] and rm.get("max") != doc_refs["max"]:
+        msgs.append(f"refs max ours={rm.get('max')} docs={doc_refs['max']}")
+    our_limits = rm.get("limits") or {}
+    msgs.extend(
+        f"{t} cap ours={our_limits.get(t)} docs={n}" for t, n in doc_refs["limits"].items() if our_limits.get(t) != n
+    )
+    return msgs
+
+
 def _mismatches(ours: OurModel, docs: DocFeature | None) -> list[str]:
     """Where our ref_mode config disagrees with the docs (empty = consistent)."""
     if not docs:
         return []
-    msgs: list[str] = []
     rm = ours["info"].get("ref_mode")
     doc_refs = docs["refs"]
     if doc_refs and not rm:
-        msgs.append(f"docs has refs (max {doc_refs['max']}) but we declare no ref_mode")
-    elif rm and not doc_refs:
-        msgs.append("we declare ref_mode but docs show no refs branch")
-    elif rm and doc_refs:
-        if doc_refs["max"] and rm.get("max") != doc_refs["max"]:
-            msgs.append(f"refs max ours={rm.get('max')} docs={doc_refs['max']}")
-        our_limits = rm.get("limits") or {}
-        for t, n in doc_refs["limits"].items():
-            if our_limits.get(t) != n:
-                msgs.append(f"{t} cap ours={our_limits.get(t)} docs={n}")
-    return msgs
+        return [f"docs has refs (max {doc_refs['max']}) but we declare no ref_mode"]
+    if rm and not doc_refs:
+        return ["we declare ref_mode but docs show no refs branch"]
+    if rm and doc_refs:
+        return _refs_mismatches(rm, doc_refs)
+    return []
 
 
 def _enablement(keys: list[str], api_key: str) -> dict[str, str]:
@@ -242,13 +248,13 @@ def _enablement(keys: list[str], api_key: str) -> dict[str, str]:
 
 # ── --write: safe, surgical edits to our source (you review the git diff) ──
 # Only the mechanical, derivable fields are touched: `hidden` (enablement) and
-# `ref_mode` in pollo_models.py, and `HAS_REFS` in v1_video.py. Curated bits —
+# `ref_mode` in pollo_models.py, and `HAS_REFS` in video.py. Curated bits —
 # labels, deliberate "Superseded" hides, ref_mode's own quirks like
 # `no_audio_with_video` — are merged around, never overwritten.
 REMOVE: Final = _Remove.REMOVE
 _REPO = Path(__file__).resolve().parent.parent  # repo root
 MODELS_FILE = _REPO / "web" / "providers" / "pollo_models.py"
-ENGINE_FILE = _REPO / "web" / "providers" / "pollo_engine" / "v1_video.py"
+ENGINE_FILE = _REPO / "web" / "providers" / "pollo_engine" / "video.py"
 # A hide we may clear is one justified by enablement; a deliberate hide is kept.
 _ENABLEMENT_HIDE = re.compile(r"enabled|403|404|unavailable|access", re.IGNORECASE)
 
@@ -333,6 +339,38 @@ def _field_range(lines: list[str], start: int, end: int, field: str) -> tuple[in
     return None
 
 
+def _member_line(field: str, val: str) -> str:
+    """A new `"field": value,` dict member.
+
+    The comma terminates the member and must sit before any trailing comment,
+    else it gets commented out and breaks the dict.
+    """
+    cm = re.match(r"^(.*?)(\s+#.*)$", val)
+    return f'        "{field}": {cm.group(1)},{cm.group(2)}' if cm else f'        "{field}": {val},'
+
+
+def _apply_edit(lines: list[str], blk: tuple[int, int], field: str, val: EditValue) -> int:
+    """Apply one field edit to a model's block in place; returns 1 if it changed, else 0."""
+    s, e = blk
+    if s == e:  # one-line inline entry
+        if isinstance(val, _Remove):
+            return 0
+        lines[s] = _edit_inline(lines[s], field, val)
+        return 1
+    fr = _field_range(lines, s, e, field)
+    if isinstance(val, _Remove):
+        if not fr:
+            return 0
+        del lines[fr[0] : fr[1] + 1]
+        return 1
+    newline = _member_line(field, val)
+    if fr:
+        lines[fr[0] : fr[1] + 1] = [newline]
+    else:
+        lines.insert(s + 1, newline)
+    return 1
+
+
 def apply_edits(path: str, edits: Mapping[str, Mapping[str, EditValue]], warnings: list[str]) -> int:
     """Apply model-field edits to a source file and return the edit count.
 
@@ -346,29 +384,28 @@ def apply_edits(path: str, edits: Mapping[str, Mapping[str, EditValue]], warning
             if not blk:
                 warnings.append(f"{Path(path).name}: {key!r} not found — skipped {field}")
                 continue
-            s, e = blk
-            if s == e:  # one-line inline entry
-                if not isinstance(val, _Remove):
-                    lines[s] = _edit_inline(lines[s], field, val)
-                    n += 1
-                continue
-            fr = _field_range(lines, s, e, field)
-            if isinstance(val, _Remove):
-                if fr:
-                    del lines[fr[0] : fr[1] + 1]
-                    n += 1
-                continue
-            # The comma terminates the member and must sit before any trailing
-            # comment, else it gets commented out and breaks the dict.
-            cm = re.match(r"^(.*?)(\s+#.*)$", val)
-            newline = f'        "{field}": {cm.group(1)},{cm.group(2)}' if cm else f'        "{field}": {val},'
-            if fr:
-                lines[fr[0] : fr[1] + 1] = [newline]
-            else:
-                lines.insert(s + 1, newline)
-            n += 1
+            n += _apply_edit(lines, blk, field, val)
     Path(path).write_text("\n".join(lines), encoding="utf-8")
     return n
+
+
+def _plan_hidden(info: ModelInfo, verdict: str | None, today: str) -> str | _Remove | None:
+    """The `hidden` edit the enablement probe calls for, if any."""
+    hide = info.get("hidden")
+    if verdict == "ENABLED" and hide and _ENABLEMENT_HIDE.search(hide):
+        return REMOVE
+    if verdict == "DISABLED" and not hide:
+        return f'"Not enabled for API access on this key (403)"  # audit {today}'
+    return None
+
+
+def _merged_ref_mode(info: ModelInfo, doc_refs: DocRefs) -> tuple[dict[str, JsonValue], dict[str, JsonValue]]:
+    """Our current ref_mode, and it merged with the docs' numbers (curated keys survive)."""
+    cur = _ref_mode_json(info.get("ref_mode") or {})
+    merged: dict[str, JsonValue] = {**cur, "types": doc_refs["types"], "max": doc_refs["max"]}
+    if doc_refs["limits"]:
+        merged["limits"] = {str(k): v for k, v in doc_refs["limits"].items()}
+    return cur, merged
 
 
 def plan_writes(
@@ -386,20 +423,13 @@ def plan_writes(
     for slug, o in ours.items():
         key, info, d = o["key"], o["info"], docs.get(slug)
         # Enablement → hidden (needs the probe)
-        verdict = enabled.get(key)
-        hide = info.get("hidden")
-        if verdict == "ENABLED" and hide and _ENABLEMENT_HIDE.search(hide):
-            models_edits.setdefault(key, {})["hidden"] = REMOVE
-        elif verdict == "DISABLED" and not hide:
-            reason = f'"Not enabled for API access on this key (403)"  # audit {today}'
-            models_edits.setdefault(key, {})["hidden"] = reason
+        hidden = _plan_hidden(info, enabled.get(key), today)
+        if hidden is not None:
+            models_edits.setdefault(key, {})["hidden"] = hidden
         # Features → ref_mode (+ engine HAS_REFS), merged so curated keys survive
         doc_refs = d["refs"] if d else None
         if doc_refs:
-            cur = _ref_mode_json(info.get("ref_mode") or {})
-            merged: dict[str, JsonValue] = {**cur, "types": doc_refs["types"], "max": doc_refs["max"]}
-            if doc_refs["limits"]:
-                merged["limits"] = {str(k): v for k, v in doc_refs["limits"].items()}
+            cur, merged = _merged_ref_mode(info, doc_refs)
             if merged != cur:
                 models_edits.setdefault(key, {})["ref_mode"] = py_literal(merged)
             if not o["cfg"].get("HAS_REFS"):
@@ -420,7 +450,7 @@ def _write(ours: Mapping[str, OurModel], docs: Mapping[str, DocFeature], enabled
         write("\nHand-review (not auto-applied):")
         for note in notes:
             write(f"  - {note}")
-    write(f"\nApplied {n} edit(s) to pollo_models.py / v1_video.py.")
+    write(f"\nApplied {n} edit(s) to pollo_models.py / video.py.")
     write("Run `ruff format` on them, then review with `git diff` before committing.")
 
 

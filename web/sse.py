@@ -16,6 +16,33 @@ def timeout_message(seconds: int) -> str:
     return f"The model didn't finish within {seconds}s"
 
 
+def _data_payload(line: str) -> str | None:
+    """The payload of an SSE "data:" line (None for separators and ":" keep-alives)."""
+    return line[5:].strip() if line.startswith("data:") else None
+
+
+def _parse_chunk(payload: str) -> dict[str, JsonValue] | None:
+    """A payload's JSON object, or None when it isn't readable JSON."""
+    try:
+        return cast("dict[str, JsonValue]", json.loads(payload))
+    except json.JSONDecodeError:
+        return None
+
+
+def _error_message(err: JsonValue) -> str:
+    """The text of a chunk's error value (a bare string, or an object with a message)."""
+    if isinstance(err, dict):
+        message = err.get("message")
+        return message if isinstance(message, str) else str(message)
+    return str(err)
+
+
+def _check_deadline(deadline: float | None, limit: int, error: Callable[[str, int | None], Exception]) -> None:
+    """Raise `error` (a 504) once the whole-call time limit has passed."""
+    if deadline and time.monotonic() > deadline:
+        raise error(timeout_message(limit), 504)
+
+
 def chat_chunks(
     lines: Iterable[str],
     error: Callable[[str, int | None], Exception],
@@ -34,21 +61,16 @@ def chat_chunks(
     for line in lines:
         if should_stop and should_stop():
             return
-        if deadline and time.monotonic() > deadline:
-            raise error(timeout_message(limit), 504)
-        if not line.startswith("data:"):
+        _check_deadline(deadline, limit, error)
+        payload = _data_payload(line)
+        if payload is None:
             continue
-        payload = line[5:].strip()
         if payload == "[DONE]":
             return
-        try:
-            chunk = cast("dict[str, JsonValue]", json.loads(payload))
-        except json.JSONDecodeError:
+        chunk = _parse_chunk(payload)
+        if chunk is None:
             continue
         err = chunk.get("error")
         if err:
-            if isinstance(err, dict):
-                message = err.get("message")
-                raise error(message if isinstance(message, str) else str(message), None)
-            raise error(str(err), None)
+            raise error(_error_message(err), None)
         yield cast("ChatChunk", chunk)

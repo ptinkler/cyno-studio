@@ -265,6 +265,14 @@ def _tool_payload(c: ImageCfg, image_url: str | None, **kw: JsonValue) -> Payloa
     return {"input": attrs}
 
 
+def _source_images(c: ImageCfg, image_url: str | None, kw: dict[str, JsonValue]) -> list[str]:
+    """The reference images to send: none for text-only models, capped at the model's maximum."""
+    if not c["ACCEPTS_IMAGES"]:
+        return []
+    images = ([image_url] if image_url else []) + as_str_list(kw.get("images"))
+    return images[: c["MAX_IMAGES"]] if c["MAX_IMAGES"] else images
+
+
 def image_payload(model_id: str, *, prompt: str, image_url: str | None, **kw: JsonValue) -> Payload:
     """Build the image API request body."""
     c = img_cfg(model_id)
@@ -272,22 +280,14 @@ def image_payload(model_id: str, *, prompt: str, image_url: str | None, **kw: Js
         return _tool_payload(c, image_url, **kw)
     aspect_ratio = as_str(kw.get("aspect_ratio")) or parse_aspect_ratio(c["DEFAULT_RATIO_KEYWORD"])
     resolution = as_str(kw.get("resolution"))
-    resolution = resolution if resolution in c["VALID_RESOLUTIONS"] else None
-    seed = kw.get("seed") if c["HAS_SEED"] else None
-
-    images = ([image_url] if image_url else []) + as_str_list(kw.get("images"))
-    if not c["ACCEPTS_IMAGES"]:
-        images = []
-    elif c["MAX_IMAGES"]:
-        images = images[: c["MAX_IMAGES"]]
-
+    images = _source_images(c, image_url, kw)
+    # (value, sent only when) — a value of None is never sent
+    candidates: dict[str, tuple[JsonValue, bool]] = {
+        "aspectRatio": (aspect_ratio, not images or c["ASPECT_RATIO_WITH_IMAGES"]),
+        "images": (images or None, True),
+        "resolution": (resolution if resolution in c["VALID_RESOLUTIONS"] else None, True),
+        "seed": (kw.get("seed") if c["HAS_SEED"] else None, True),
+    }
     attrs: dict[str, JsonValue] = {"prompt": prompt}
-    if not images or c["ASPECT_RATIO_WITH_IMAGES"]:
-        attrs["aspectRatio"] = aspect_ratio
-    if images:
-        attrs["images"] = images
-    if resolution:
-        attrs["resolution"] = resolution
-    if seed is not None:
-        attrs["seed"] = seed
+    attrs.update({k: v for k, (v, allowed) in candidates.items() if v is not None and allowed})
     return {"input": attrs}

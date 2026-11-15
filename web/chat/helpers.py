@@ -148,10 +148,10 @@ def spend(conv: ChatConversation) -> dict[str, float | int]:
 
     came with the messages copied in when it was branched off another chat.
     """
-    usd, credits = get_db().get_chat_spend(conv.id)
+    usd, credit_cost = get_db().get_chat_spend(conv.id)
     return {
         "usd": usd,
-        "credits": credits,
+        "credits": credit_cost,
         "inherited_usd": conv.inherited_cost or 0,
         "inherited_credits": conv.inherited_credits or 0,
     }

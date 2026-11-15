@@ -33,6 +33,7 @@ from web.chat.errors import (
     VideoInputRequiredError,
 )
 from web.chat.generation import (
+    ImageResult,
     characters_note,
     conversation,
     conversation_instructions,
@@ -65,7 +66,7 @@ from web.chat.workers import ctx_thread
 from web.core.metadata import get_db
 from web.core.metadata.models import Character, ChatInstruction, ChatMessage
 from web.providers import openrouter, provider_for, stream_chat
-from web.types import JsonValue
+from web.types import ChatChunk, JsonValue, ToolCallDelta
 
 log = logging.getLogger(__name__)
 
@@ -134,14 +135,7 @@ class Turn:
         """Run this turn, persist its final state, and emit the completion event."""
         title_job = self._start_title()
         try:
-            if self.s.mode == "image":
-                self._direct_image()
-            elif self.s.mode == "video":
-                self._direct_video()
-            elif self.s.mode == "audio":
-                self._direct_audio()
-            else:
-                self._chat(tools_enabled=self.s.mode == "auto")
+            self._run_mode()
             status, error = ("done", None)
         except openrouter.OpenRouterError as e:
             status, error = "error", str(e)
@@ -161,6 +155,17 @@ class Turn:
         if error:
             self.emit({"type": "error", "message": error})
         self.emit({"type": "done", "message": message_out(msg) if msg else None})
+
+    def _run_mode(self) -> None:
+        """Do the turn's work in the composer's mode (explicit media, or chat with tools)."""
+        if self.s.mode == "image":
+            self._direct_image()
+        elif self.s.mode == "video":
+            self._direct_video()
+        elif self.s.mode == "audio":
+            self._direct_audio()
+        else:
+            self._chat(tools_enabled=self.s.mode == "auto")
 
     # ― explicit modes ―
     def _last_user(self) -> ChatMessage | None:
@@ -313,30 +318,50 @@ class Turn:
             messages.append(
                 cast("dict[str, JsonValue]", {"role": "assistant", "content": text or None, "tool_calls": tool_calls})
             )
-            results: list[dict[str, JsonValue]] = []
-            for call in tool_calls:
-                result = self._run_tool(call)
-                results.append(result)
-                messages.append({"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result)})
-                if self.cancel.is_set():
-                    return
-            # A moderation block ends the turn: the user chooses Retry or
-            # another model on the failed card (no automatic re-attempt)
-            if any(r.get("moderated") for r in results):
+            results = self._run_tool_calls(tool_calls, messages)
+            if results is None:
                 return
-            # Saving a character or an instruction makes nothing to show — carry on
-            no_media = ("create_character", "create_instruction")
-            made_media = any(c["function"]["name"] not in no_media for c in tool_calls)
-            if made_media and all(r.get("ok") for r in results):
-                # The media was made. If the model also wrote its reply, the
-                # reply is complete — asking it to continue just makes it
-                # start over (duplicate story + duplicate image). If it called
-                # the tool before writing anything, let it write, without tools.
-                if text.strip():
-                    return
-                offer_tools = False
-            # (After a non-moderation failure the model keeps its tools and
-            # can explain or try again.)
+            offer = self._offer_tools_next(offer_tools, text, tool_calls, results)
+            if offer is None:
+                return
+            offer_tools = offer
+
+    def _run_tool_calls(
+        self, tool_calls: list[_ToolCall], messages: list[dict[str, JsonValue]]
+    ) -> list[dict[str, JsonValue]] | None:
+        """Run each tool call, adding its result to `messages`; None if the turn was cancelled."""
+        results: list[dict[str, JsonValue]] = []
+        for call in tool_calls:
+            result = self._run_tool(call)
+            results.append(result)
+            messages.append({"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result)})
+            if self.cancel.is_set():
+                return None
+        return results
+
+    @staticmethod
+    def _offer_tools_next(
+        offer_tools: bool, text: str, tool_calls: list[_ToolCall], results: list[dict[str, JsonValue]]
+    ) -> bool | None:
+        """Whether the next round still offers tools; None when the turn is over."""
+        # A moderation block ends the turn: the user chooses Retry or
+        # another model on the failed card (no automatic re-attempt)
+        if any(r.get("moderated") for r in results):
+            return None
+        # Saving a character or an instruction makes nothing to show — carry on
+        no_media = ("create_character", "create_instruction")
+        made_media = any(c["function"]["name"] not in no_media for c in tool_calls)
+        if made_media and all(r.get("ok") for r in results):
+            # The media was made. If the model also wrote its reply, the
+            # reply is complete — asking it to continue just makes it
+            # start over (duplicate story + duplicate image). If it called
+            # the tool before writing anything, let it write, without tools.
+            return None if text.strip() else False
+        # (After a non-moderation failure the model keeps its tools and
+        # can explain or try again.)
+        return offer_tools
+        # (After a non-moderation failure the model keeps its tools and
+        # can explain or try again.)
 
     def _tools(self) -> list[dict[str, JsonValue]]:
         names = list(dict.fromkeys(c.name for c in self.characters))  # a name shared by two is listed once
@@ -352,6 +377,29 @@ class Turn:
         # Needs no media model: applies to the chat model itself.
         tools.append(cast("dict[str, JsonValue]", TOOLS_CREATE_INSTRUCTION))
         return tools
+
+    def _add_chunk_cost(self, chunk: ChatChunk) -> None:
+        """Add the cost a chunk reports (providers send it with the usage)."""
+        usage = chunk.get("usage")
+        chunk_cost = usage.get("cost") if usage else None
+        if isinstance(chunk_cost, int | float | str) and not isinstance(chunk_cost, bool):
+            self.cost += float(chunk_cost)
+
+    @staticmethod
+    def _merge_tool_call_deltas(calls: dict[int, _ToolCall], deltas: list[ToolCallDelta]) -> None:
+        """Fold streamed tool-call fragments into the calls built so far (by slot index)."""
+        for tc in deltas:
+            slot = calls.setdefault(
+                tc.get("index", 0),
+                {"id": "", "type": "function", "function": {"name": "", "arguments": ""}},
+            )
+            call_id = tc.get("id")
+            if isinstance(call_id, str):
+                slot["id"] = call_id
+            fn = tc.get("function") or {}
+            fn_name, arguments = fn.get("name"), fn.get("arguments")
+            slot["function"]["name"] += fn_name if isinstance(fn_name, str) else ""
+            slot["function"]["arguments"] += arguments if isinstance(arguments, str) else ""
 
     def _stream_round(
         self, model: str, messages: list[dict[str, JsonValue]], tools: list[dict[str, JsonValue]] | None
@@ -372,10 +420,7 @@ class Turn:
         ):
             if self.cancel.is_set():
                 break
-            usage = chunk.get("usage")
-            chunk_cost = usage.get("cost") if usage else None
-            if isinstance(chunk_cost, int | float | str) and not isinstance(chunk_cost, bool):
-                self.cost += float(chunk_cost)
+            self._add_chunk_cost(chunk)
             for choice in chunk.get("choices") or []:
                 finish = choice.get("finish_reason") or finish
                 delta = choice.get("delta") or {}
@@ -383,19 +428,7 @@ class Turn:
                 if isinstance(content, str) and content:
                     text += content
                     self._append(content)
-                for tc in delta.get("tool_calls") or []:
-                    index = tc.get("index", 0)
-                    slot = calls.setdefault(
-                        index,
-                        {"id": "", "type": "function", "function": {"name": "", "arguments": ""}},
-                    )
-                    call_id = tc.get("id")
-                    if isinstance(call_id, str):
-                        slot["id"] = call_id
-                    fn = tc.get("function") or {}
-                    fn_name, arguments = fn.get("name"), fn.get("arguments")
-                    slot["function"]["name"] += fn_name if isinstance(fn_name, str) else ""
-                    slot["function"]["arguments"] += arguments if isinstance(arguments, str) else ""
+                self._merge_tool_call_deltas(calls, delta.get("tool_calls") or [])
         tool_calls = [c for _, c in sorted(calls.items()) if c["function"]["name"]]
         for i, c in enumerate(tool_calls):
             c["id"] = c["id"] or f"call_{i}"
@@ -711,18 +744,15 @@ class Turn:
             self.db.update_chat_media_item(self.message_id, media_id, **fields)
         self.emit({"type": "media", "message_id": self.message_id, "item": dict(item)})
 
-    def _generate_image(
+    def _image_params(
         self,
-        prompt: str,
         aspect_ratio: str | None,
         ref_files: list[str],
-        ref_args: dict[str, JsonValue] | None = None,
-        chars: list[Character] | None = None,
-        dropped: list[str] | None = None,
-    ) -> None:
-        if not self.s.image_model:
-            raise ModelNotSelectedError("image")
-        # Params are stored on the item so a failed image can be retried as-is
+        ref_args: dict[str, JsonValue] | None,
+        chars: list[Character] | None,
+        dropped: list[str] | None,
+    ) -> dict[str, JsonValue]:
+        """The settings stored on an image card so a failed image can be retried as-is."""
         params: dict[str, JsonValue] = {
             "aspect_ratio": aspect_ratio,
             "resolution": self.s.image_options.resolution,
@@ -735,47 +765,69 @@ class Turn:
         if chars:
             params["characters"] = [c.id for c in chars]  # described in the prompt at generation time
             params["character_names"] = [c.name for c in chars]  # for display
-        context = None
-        if is_conversational(self.s.image_model):
-            # Like the Gemini app: the image model gets the conversation
-            direct = self.s.mode == "image"
-            params.update(
-                context=True, direct=direct, history_limit=self.s.history_limit, image_limit=self.s.image_limit
-            )
-            context = image_context(
-                self.conv_id,
-                self.history,
-                self.s.history_limit,
-                self.content,
-                None if direct else prompt,
-                ref_files,
-                self.instructions,
-                chars,
-                self.s.image_limit,
-            )
+        return params
+
+    def _conversation_for_image(
+        self, prompt: str, ref_files: list[str], chars: list[Character] | None, params: dict[str, JsonValue]
+    ) -> list[dict[str, JsonValue]]:
+        """The conversation sent to a conversational image model, like the Gemini app.
+
+        Also records on `params` that it was used, so a retry does the same.
+        """
+        direct = self.s.mode == "image"
+        params.update(context=True, direct=direct, history_limit=self.s.history_limit, image_limit=self.s.image_limit)
+        return image_context(
+            self.conv_id,
+            self.history,
+            self.s.history_limit,
+            self.content,
+            None if direct else prompt,
+            ref_files,
+            self.instructions,
+            chars,
+            self.s.image_limit,
+        )
+
+    def _store_images(
+        self, item: dict[str, JsonValue], params: dict[str, JsonValue], prompt: str, result: ImageResult
+    ) -> None:
+        """Put the first image on its card; any further images become cards of their own."""
+        names, cost, credit_cost, sent = result
+        sent, exchange = take_log(sent)
+        self._update_media(
+            item, status="done", file=names[0], cost=cost, credits=credit_cost, params={**params, **sent}, **exchange
+        )
+        for name in names[1:]:
+            self._add_media(saved_media("image", "generated", name, prompt=prompt, model=self.s.image_model))
+
+    def _generate_image(
+        self,
+        prompt: str,
+        aspect_ratio: str | None,
+        ref_files: list[str],
+        ref_args: dict[str, JsonValue] | None = None,
+        chars: list[Character] | None = None,
+        dropped: list[str] | None = None,
+    ) -> None:
+        if not self.s.image_model:
+            raise ModelNotSelectedError("image")
+        params = self._image_params(aspect_ratio, ref_files, ref_args, chars, dropped)
+        context = (
+            self._conversation_for_image(prompt, ref_files, chars, params)
+            if is_conversational(self.s.image_model)
+            else None
+        )
         item = new_media("image", "generated", prompt=prompt, model=self.s.image_model, params=params)
         self._add_media(item)
         try:
-            names, cost, credits, sent = run_image_generation(self.conv_id, self.s.image_model, prompt, params, context)
+            result = run_image_generation(self.conv_id, self.s.image_model, prompt, params, context)
         except openrouter.OpenRouterError as e:
             self._update_media(item, **failure_fields(e))
             raise
+        cost = result[1]
         if cost:
             self.cost += float(cost)
-        sent, exchange = take_log(sent)
-        for i, name in enumerate(names):
-            if i == 0:
-                self._update_media(
-                    item,
-                    status="done",
-                    file=name,
-                    cost=cost,
-                    credits=credits,
-                    params={**params, **sent},
-                    **exchange,
-                )
-            else:
-                self._add_media(saved_media("image", "generated", name, prompt=prompt, model=self.s.image_model))
+        self._store_images(item, params, prompt, result)
 
     def _generate_video(
         self,

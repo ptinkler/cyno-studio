@@ -137,10 +137,10 @@ def generate_image(
     owner = provider_for(model)
     refs = list(ref_paths or [])
     if owner is pollo:
-        images, credits, sent = pollo.generate_image(
+        images, credit_cost, sent = pollo.generate_image(
             model, prompt, aspect_ratio=aspect_ratio, resolution=resolution, ref_paths=refs
         )
-        return images, None, credits, sent
+        return images, None, credit_cost, sent
     if owner is venice:
         images, cost, sent = venice.generate_image(
             model, prompt, aspect_ratio=aspect_ratio, resolution=resolution, ref_paths=refs

@@ -32,6 +32,12 @@ jobs:
           ruff check .
           ruff format --check .
 
+      # Strict type check with no baseline; needs the project's deps to resolve imports.
+      - name: Python — basedpyright
+        run: |
+          pip install -r requirements-dev.txt
+          basedpyright
+
       - name: Frontend — ESLint and Prettier
         working-directory: web/frontend
         run: |

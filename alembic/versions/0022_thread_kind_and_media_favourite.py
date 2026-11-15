@@ -47,6 +47,44 @@ def _set_favourite_from_pinned(items: list[dict[str, object]]) -> bool:
     return changed
 
 
+def _backfill_message_favourites(session: Session) -> None:
+    """Set favourite=true on every pinned item in a chat message's media list."""
+    for mid, media_json in cast(
+        "list[tuple[str, str | None]]",
+        session.execute(sa.text("SELECT id, media_json FROM chat_messages WHERE media_json LIKE '%\"pinned\"%'"))
+        .tuples()
+        .all(),
+    ):
+        try:
+            items = cast("list[dict[str, object]]", json.loads(media_json)) if media_json else []
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if _set_favourite_from_pinned(items):
+            session.execute(
+                sa.text("UPDATE chat_messages SET media_json = :j WHERE id = :id"),
+                {"j": json.dumps(items), "id": mid},
+            )
+
+
+def _backfill_library_favourites(session: Session) -> None:
+    """Set favourite=true on every pinned library item."""
+    for lid, item_json in cast(
+        "list[tuple[str, str | None]]",
+        session.execute(sa.text("SELECT id, item_json FROM chat_library_items WHERE item_json LIKE '%\"pinned\"%'"))
+        .tuples()
+        .all(),
+    ):
+        try:
+            item = cast("dict[str, object]", json.loads(item_json)) if item_json else {}
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if _set_favourite_from_pinned([item]):
+            session.execute(
+                sa.text("UPDATE chat_library_items SET item_json = :j WHERE id = :id"),
+                {"j": json.dumps(item), "id": lid},
+            )
+
+
 def upgrade() -> None:
     """Add thread kinds and media favourites."""
     bind = op.get_bind()
@@ -63,37 +101,8 @@ def upgrade() -> None:
     # Backfill favourite=true wherever a media item is currently pinned.
     session = Session(bind=bind)
     try:
-        for mid, media_json in cast(
-            "list[tuple[str, str | None]]",
-            session.execute(sa.text("SELECT id, media_json FROM chat_messages WHERE media_json LIKE '%\"pinned\"%'"))
-            .tuples()
-            .all(),
-        ):
-            try:
-                items = cast("list[dict[str, object]]", json.loads(media_json)) if media_json else []
-            except (json.JSONDecodeError, TypeError):
-                continue
-            if _set_favourite_from_pinned(items):
-                session.execute(
-                    sa.text("UPDATE chat_messages SET media_json = :j WHERE id = :id"),
-                    {"j": json.dumps(items), "id": mid},
-                )
-        for lid, item_json in cast(
-            "list[tuple[str, str | None]]",
-            session.execute(sa.text("SELECT id, item_json FROM chat_library_items WHERE item_json LIKE '%\"pinned\"%'"))
-            .tuples()
-            .all(),
-        ):
-            try:
-                item = cast("dict[str, object]", json.loads(item_json)) if item_json else {}
-            except (json.JSONDecodeError, TypeError):
-                continue
-            if item.get("pinned") and not item.get("favourite"):
-                item["favourite"] = True
-                session.execute(
-                    sa.text("UPDATE chat_library_items SET item_json = :j WHERE id = :id"),
-                    {"j": json.dumps(item), "id": lid},
-                )
+        _backfill_message_favourites(session)
+        _backfill_library_favourites(session)
         session.commit()
     finally:
         session.close()

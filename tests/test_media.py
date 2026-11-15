@@ -7,6 +7,7 @@ import threading
 import time
 import types
 import zipfile
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import NoReturn
@@ -368,8 +369,10 @@ class TestBlocked:
         return d
 
     @pytest.fixture(autouse=True)
-    def _fresh_blank_checks(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(media_mod, "_blank_cache", None)
+    def _fresh_blank_checks(self) -> Iterator[None]:
+        media_mod.reset_blank_checks()
+        yield
+        media_mod.reset_blank_checks()
 
     def test_counts(self, client: TestClient, blocked: Path) -> None:
         """Test that counts."""
@@ -380,7 +383,7 @@ class TestBlocked:
     ) -> None:
         """Test that black images are checked once even across restarts."""
         assert integer(client.get("/api/media/blocked"), "black") == 1
-        monkeypatch.setattr(media_mod, "_blank_cache", None)  # as after a restart
+        media_mod.reset_blank_checks()  # as after a restart
 
         def no_decoding(data: bytes) -> NoReturn:
             pytest.fail("decoded again")
@@ -454,7 +457,7 @@ class TestThumbnails:
         (config.ROOT_DIR / "chat" / conv.id / "vid.mp4").write_bytes(b"fake mp4")
         buf = io.BytesIO()
         Image.new("RGB", (640, 360), "orange").save(buf, "JPEG")
-        monkeypatch.setattr(media_mod, "first_frame_jpeg", stub(lambda: buf.getvalue()))
+        monkeypatch.setattr(media_mod, "first_frame_jpeg", stub(buf.getvalue))
         r = client.get(f"/api/media/thumb/chat:{conv.id}:vid.mp4")
         assert r.status_code == 200
         assert Image.open(io.BytesIO(r.content)).size == (569, 320)
@@ -687,7 +690,7 @@ class TestMediaCache:
         assert media_cache.durations()
         shutil.rmtree(config.ROOT_DIR / "cache")  # what a user wiping the cache does
         assert media_cache.durations() == {}
-        monkeypatch.setattr(media_cache, "_swept", False)
+        media_cache.reset_sweep()
         assert client.get("/api/media").status_code == 200  # reads them again, no complaint
 
     def test_a_re_encoded_file_replaces_its_row(

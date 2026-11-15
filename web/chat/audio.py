@@ -28,7 +28,9 @@ _OPTION_FIELDS = (
 )
 
 
-class _AudioJob(TypedDict):
+class AudioJob(TypedDict):
+    """A submitted audio job: its id, the parameters sent, and the request log."""
+
     id: str
     params: dict[str, JsonValue]
     log: NotRequired[dict[str, JsonValue] | None]
@@ -40,7 +42,7 @@ def audio_params(opts: AudioOptions) -> dict[str, JsonValue]:
     return {key: value for key in _OPTION_FIELDS if (value := values.get(key)) not in (None, "")}
 
 
-def submit_audio_generation(conv_id: str, model: str, prompt: str, params: dict[str, JsonValue]) -> _AudioJob:
+def submit_audio_generation(conv_id: str, model: str, prompt: str, params: dict[str, JsonValue]) -> AudioJob:
     """Start the job. Returns the job plus "log": what was sent and answered."""
     if not pollo.is_pollo(model):
         raise PolloModelRequiredError

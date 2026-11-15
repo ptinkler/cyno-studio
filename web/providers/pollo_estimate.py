@@ -99,8 +99,8 @@ def _credits(data: JsonValue) -> dict[str, JsonValue] | None:
     discounted = _number(data.get("discountCost"))
     if full is None and discounted is None:
         return None
-    credits = discounted if discounted is not None else full
-    return {"credits": credits, "full_credits": full if full is not None else credits}
+    credit_cost = discounted if discounted is not None else full
+    return {"credits": credit_cost, "full_credits": full if full is not None else credit_cost}
 
 
 def _number(value: JsonValue) -> int | float | None:

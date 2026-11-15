@@ -237,28 +237,33 @@ def _current(turns: list[_Turn], time: float) -> _Turn:
     return turns[-1]
 
 
+def _add_to_turns(turns: list[_Turn], msg: Mapping[str, JsonValue], time: float) -> None:
+    """Fold one exported message into the turns: a prompt starts one, a reply joins the latest."""
+    role = _json_object(msg.get("author")).get("role")
+    text, files = _parts(msg)
+    if role == "tool" and files:
+        # Older exports kept the image tool's results: those are generated images
+        _current(turns, time).generated.extend({"id": file_id} for file_id in files)
+    elif not _shown(msg):
+        return
+    elif role == "user" and (text or files):
+        msg_id = msg.get("id")
+        if isinstance(msg_id, str):
+            turns.append(_Turn(msg_id, text, time, files))
+    elif role == "assistant":
+        turn = _current(turns, time)
+        turn.reply += [text] if text else []
+        turn.reply_time = turn.reply_time or _timestamp(msg.get("create_time"))
+        model = _json_object(msg.get("metadata")).get("model_slug")
+        turn.model = model if isinstance(model, str) else turn.model
+
+
 def _turns(data: Mapping[str, JsonValue], library: list[Mapping[str, JsonValue]]) -> list[_Turn]:
     turns: list[_Turn] = []
     time = _timestamp(data.get("create_time")) or 0.0
     for msg in _chain(data):
         time = _timestamp(msg.get("create_time")) or time
-        role = _json_object(msg.get("author")).get("role")
-        text, files = _parts(msg)
-        if role == "tool" and files:
-            # Older exports kept the image tool's results: those are generated images
-            _current(turns, time).generated.extend({"id": file_id} for file_id in files)
-        elif not _shown(msg):
-            continue
-        elif role == "user" and (text or files):
-            msg_id = msg.get("id")
-            if isinstance(msg_id, str):
-                turns.append(_Turn(msg_id, text, time, files))
-        elif role == "assistant":
-            turn = _current(turns, time)
-            turn.reply += [text] if text else []
-            turn.reply_time = turn.reply_time or _timestamp(msg.get("create_time"))
-            model = _json_object(msg.get("metadata")).get("model_slug")
-            turn.model = model if isinstance(model, str) else turn.model
+        _add_to_turns(turns, msg, time)
     if turns:
         _place_generated(turns, library)
     return turns
@@ -292,9 +297,8 @@ def _place_generated(turns: list[_Turn], library: list[Mapping[str, JsonValue]])
         )
 
 
-def _ext(raw: bytes, mime: str | None) -> str:
-    if mime in IMAGE_EXTS or mime in VIDEO_EXTS:
-        return IMAGE_EXTS.get(mime) or VIDEO_EXTS[mime]
+def _sniffed_ext(raw: bytes) -> str:
+    """The extension for image / video bytes, from their magic numbers (PNG when unrecognised)."""
     if raw.startswith(b"\x89PNG"):
         return ".png"
     if raw.startswith(b"\xff\xd8"):
@@ -306,6 +310,12 @@ def _ext(raw: bytes, mime: str | None) -> str:
     if raw[4:8] == b"ftyp":
         return ".mp4"
     return ".png"
+
+
+def _ext(raw: bytes, mime: str | None) -> str:
+    if mime in IMAGE_EXTS or mime in VIDEO_EXTS:
+        return IMAGE_EXTS.get(mime) or VIDEO_EXTS[mime]
+    return _sniffed_ext(raw)
 
 
 class _ChatMedia:
@@ -493,12 +503,8 @@ def _import_conversation(
     return "updated" if changed else "unchanged"
 
 
-def run_import(path: Path, progress: dict[str, JsonValue] | None = None) -> _ImportStats:
-    """Import the export at `path`.
-
-    Returns (and keeps `progress` up to
-    date with) how many chats were new, updated, unchanged or skipped.
-    """
+def _fresh_stats(progress: dict[str, JsonValue] | None) -> _ImportStats:
+    """Zero the import counters (in `progress` when given, so a poller sees them move)."""
     stats: _ImportStats = cast("_ImportStats", progress) if progress is not None else cast("_ImportStats", {})
     stats.update(
         total=0,
@@ -513,6 +519,41 @@ def run_import(path: Path, progress: dict[str, JsonValue] | None = None) -> _Imp
         failed=[],
     )
     stats.pop("space_id", None)  # the space new chats went in, once there are some
+    return stats
+
+
+def _conversation_outcome(
+    export: _Export,
+    data: dict[str, JsonValue],
+    imported: Mapping[str, ChatConversation],
+    skips: set[str],
+    stats: _ImportStats,
+) -> str | None:
+    """Import one exported chat; "new" / "updated" / "unchanged" / "deleted" / "empty", None if it failed."""
+    conv_id = data.get("id") or data.get("conversation_id")
+    if not isinstance(conv_id, str):
+        return "empty"
+    data["id"] = conv_id
+    conv = imported.get(conv_id)
+    if conv_id in skips:
+        return "deleted"
+    if conv and conv.import_updated_at == _timestamp(data.get("update_time")):
+        return "unchanged"
+    try:
+        return _import_conversation(export, data, conv, stats)
+    except Exception as e:  # one bad chat shouldn't stop the rest
+        log.exception("importing one ChatGPT conversation failed")
+        stats["failed"].append({"title": data.get("title"), "error": str(e)})
+        return None
+
+
+def run_import(path: Path, progress: dict[str, JsonValue] | None = None) -> _ImportStats:
+    """Import the export at `path`.
+
+    Returns (and keeps `progress` up to
+    date with) how many chats were new, updated, unchanged or skipped.
+    """
+    stats = _fresh_stats(progress)
     db = get_db()
     with zipfile.ZipFile(path) as zf:
         if chat_export.is_native_export(zf):
@@ -524,23 +565,7 @@ def run_import(path: Path, progress: dict[str, JsonValue] | None = None) -> _Imp
         imported = db.get_imported_conversations(SOURCE)
         skips = db.get_import_skips(SOURCE)
         for data in export.conversations:
-            conv_id = data.get("id") or data.get("conversation_id")
-            if not isinstance(conv_id, str):
-                outcome = "empty"
-            else:
-                data["id"] = conv_id
-                conv = imported.get(conv_id)
-                if conv_id in skips:
-                    outcome = "deleted"
-                elif conv and conv.import_updated_at == _timestamp(data.get("update_time")):
-                    outcome = "unchanged"
-                else:
-                    try:
-                        outcome = _import_conversation(export, data, conv, stats)
-                    except Exception as e:  # one bad chat shouldn't stop the rest
-                        log.exception("importing one ChatGPT conversation failed")
-                        outcome = None
-                        stats["failed"].append({"title": data.get("title"), "error": str(e)})
+            outcome = _conversation_outcome(export, data, imported, skips, stats)
             if outcome:
                 stats[outcome] += 1
             stats["processed"] += 1

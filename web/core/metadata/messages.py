@@ -48,8 +48,8 @@ def _charge(item: Mapping[str, JsonValue]) -> tuple[float, float]:
     fixed rate, and the usage page converts credits itself), so an item with
     credits counts only those; anything else counts its dollar `cost`.
     """
-    credits = _number(item.get("credits"))
-    return (0.0, credits) if credits else (_number(item.get("cost")), 0.0)
+    credit_cost = _number(item.get("credits"))
+    return (0.0, credit_cost) if credit_cost else (_number(item.get("cost")), 0.0)
 
 
 def _item_charge(item: dict[str, JsonValue], key: str) -> float:
@@ -64,7 +64,7 @@ def _item_charge(item: dict[str, JsonValue], key: str) -> float:
     earlier = replaced if isinstance(replaced, list) else []
     live = [] if item.get("status") == "error" else [_charge(item)]
     charges = live + [_charge(v) for v in earlier if isinstance(v, dict)]
-    return sum(usd if key == "cost" else credits for usd, credits in charges)
+    return sum(usd if key == "cost" else credit_cost for usd, credit_cost in charges)
 
 
 # add_chat_message's default parent: continue the branch being shown
@@ -295,15 +295,15 @@ class MessageMixin(DBBase):
         remains included even after its message is gone.
         """
         with self._session() as session:
-            usd, credits = 0.0, 0
+            usd, credit_cost = 0.0, 0
             for msg in session.query(ChatMessage).filter(ChatMessage.conversation_id == conversation_id):
                 usd += msg.cost or 0
                 for item in msg.media:
-                    credits += int(_item_charge(item, "credits"))
+                    credit_cost += int(_item_charge(item, "credits"))
             for lib in session.query(ChatLibraryItem).filter(ChatLibraryItem.conversation_id == conversation_id):
                 usd += _item_charge(lib.item, "cost")
-                credits += int(_item_charge(lib.item, "credits"))
-            return round(usd, 6), int(credits)
+                credit_cost += int(_item_charge(lib.item, "credits"))
+            return round(usd, 6), int(credit_cost)
 
     def spend_rows(self, conversation_ids: list[str]) -> list[SpendRow]:
         """Return one usage-breakdown row per charge across the given chats.

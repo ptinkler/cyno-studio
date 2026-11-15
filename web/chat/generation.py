@@ -266,6 +266,31 @@ def _assistant_messages(msg: ChatMessage, as_tool_calls: bool) -> list[dict[str,
     return [{"role": "assistant", "content": text}] if text else []
 
 
+def _tool_call_turn(conv_id: str, reply_text: str, prompt: str, refs: list[str]) -> list[dict[str, JsonValue]]:
+    """The assistant's reply and a user turn (prompt + reference images) for a tool call."""
+    messages: list[dict[str, JsonValue]] = []
+    if reply_text.strip():
+        messages.append({"role": "assistant", "content": reply_text.strip()})
+    parts: list[dict[str, JsonValue]] = [{"type": "text", "text": prompt}]
+    for path in (_ref_file(conv_id, f) for f in refs):
+        if path.is_file():
+            image_url: dict[str, JsonValue] = {"url": file_to_data_url(path)}
+            parts.append({"type": "image_url", "image_url": image_url})
+    messages.append({"role": "user", "content": parts})
+    return messages
+
+
+def _attach_character_images(messages: list[dict[str, JsonValue]], conv_id: str, refs: list[str]) -> None:
+    """Image mode: the user's message is last; their characters' images go with it."""
+    paths = [_ref_file(conv_id, f) for f in refs if f.startswith(characters.REF_PREFIX)]
+    if not paths or not messages or messages[-1]["role"] != "user":
+        return
+    content = messages[-1]["content"]
+    if isinstance(content, list):
+        extra = [{"type": "image_url", "image_url": {"url": file_to_data_url(p)}} for p in paths if p.is_file()]
+        messages[-1] = {**messages[-1], "content": [*content, *extra]}
+
+
 def image_context(
     conv_id: str,
     history: list[ChatMessage],
@@ -286,32 +311,9 @@ def image_context(
     system = [s for s in (instructions, characters.describe(chars or [])) if s]
     messages[:0] = [{"role": "system", "content": s} for s in system]
     if prompt is not None:
-        if reply_text.strip():
-            messages.append({"role": "assistant", "content": reply_text.strip()})
-        paths = [_ref_file(conv_id, f) for f in refs]
-        parts: list[dict[str, JsonValue]] = [{"type": "text", "text": prompt}]
-        for path in paths:
-            if path.is_file():
-                image_url: dict[str, JsonValue] = {"url": file_to_data_url(path)}
-                parts.append({"type": "image_url", "image_url": image_url})
-        messages.append({"role": "user", "content": parts})
+        messages.extend(_tool_call_turn(conv_id, reply_text, prompt, refs))
     elif chars:
-        # Image mode: the user's message is last; their characters' images go with it
-        paths = [_ref_file(conv_id, f) for f in refs if f.startswith(characters.REF_PREFIX)]
-        if paths and messages and messages[-1]["role"] == "user":
-            content = messages[-1]["content"]
-            if isinstance(content, list):
-                messages[-1] = {
-                    **messages[-1],
-                    "content": [
-                        *content,
-                        *[
-                            {"type": "image_url", "image_url": {"url": file_to_data_url(p)}}
-                            for p in paths
-                            if p.is_file()
-                        ],
-                    ],
-                }
+        _attach_character_images(messages, conv_id, refs)
     return messages
 
 
@@ -460,13 +462,17 @@ BLACK_IMAGE_ERROR = (
 )
 
 
+# Saved file names, cost (USD), credits, and the parameters actually sent
+type ImageResult = tuple[list[str], float | None, int | None, dict[str, JsonValue]]
+
+
 def run_image_generation(
     conv_id: str,
     model: str,
     prompt: str,
     params: dict[str, JsonValue],
     context: list[dict[str, JsonValue]] | None = None,
-) -> tuple[list[str], float | None, int | None, dict[str, JsonValue]]:
+) -> ImageResult:
     """Generate images and return saved files, cost, credits, and sent parameters.
 
     Conversational models receive `context`; other providers receive the prompt
@@ -484,7 +490,7 @@ def run_image_generation(
     ratio = params.get("aspect_ratio")
     aspect_ratio = ratio if isinstance(ratio, str) else auto_ratio("image", model)
     resolution = params.get("resolution")
-    images, cost, credits, sent = providers.generate_image(
+    images, cost, credit_cost, sent = providers.generate_image(
         model,
         prompt,
         aspect_ratio=aspect_ratio,
@@ -501,7 +507,7 @@ def run_image_generation(
         name = f"img_{uuid.uuid4().hex[:12]}{IMAGE_EXTS.get(media_type, '.png')}"
         (conv_dir / name).write_bytes(data)
         names.append(name)
-    return names, cost, credits, {**sent, "log": request_log.take_last()}
+    return names, cost, credit_cost, {**sent, "log": request_log.take_last()}
 
 
 def submit_video_generation(conv_id: str, model: str, prompt: str, params: dict[str, JsonValue]) -> VideoJob:
