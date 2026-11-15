@@ -58,8 +58,6 @@ sleep 10
 
 # Stop any half-started containers from Docker's restart policy
 docker compose -p cyno-studio down 2>/dev/null
-# The stack was called pollo-api before the rename; stop any leftover containers from it too
-docker compose -p pollo-api down 2>/dev/null
 
 # Bring everything up in the correct order (respects depends_on + healthchecks)
 docker compose -p cyno-studio up -d

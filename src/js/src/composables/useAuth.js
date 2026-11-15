@@ -17,10 +17,20 @@ async function _post(url, body) {
   return data
 }
 
+// Everything the app holds in memory (threads, instructions, characters, balances, preferences) belongs
+// to whoever was signed in when the page loaded — and if nobody was, the first load was refused with a
+// 401 and is still empty. So signing in or out starts the app over with a page reload, rather than
+// patching each piece of state: you see your data straight away, and the next person to sign in on
+// this browser never sees the last person's.
+function _restart() {
+  location.reload()
+}
+
 function _signedIn(user) {
   isAuthenticated.value = true
   currentUser.value = user
   showLogin.value = false
+  _restart()
 }
 
 async function _checkStatus() {
@@ -52,6 +62,7 @@ export function useAuth() {
     isAuthenticated.value = false
     currentUser.value = null
     showLogin.value = true
+    _restart()
   }
 
   function promptLogin() {

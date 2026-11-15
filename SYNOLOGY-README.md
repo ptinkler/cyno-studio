@@ -74,7 +74,7 @@ CYNO_DATA_DIR=/data
 # Host port the app is exposed on
 APP_PORT=8080
 
-# Hostname used for HTTPS redirect (see synology-boot.sh)
+# Hostname of the DSM reverse proxy rule, also used for the HTTPS redirect (see "HTTPS reverse proxy" below and synology-boot.sh)
 APP_HOSTNAME=your-hostname.local
 
 # Container user (run `id` on your NAS shell)
@@ -178,7 +178,55 @@ Networking and ports
 - The host port is configured via `APP_PORT` in `.env` (default `8080` if unset). The compose file maps `${APP_PORT}:80` on the host to the container's internal HTTP port.
 - If using the VPN stack, `gluetun` provides the network for the whole stack (via `network_mode: "service:gluetun"`). Adjust firewall and router rules to allow external traffic to the mapped port if you want public access.
 
-If you use a reverse proxy on DSM (Reverse Proxy or Application Portal), follow the note in `synology-boot.sh`: remove any HTTP (port 80) reverse proxy for the hostname and keep only the HTTPS (port 443) proxy entry — the boot script injects a redirect that will forward HTTP to HTTPS automatically.
+HTTPS reverse proxy (DSM)
+-------------------------
+Put the app behind DSM's reverse proxy so it is served over HTTPS on a friendly hostname. Traffic flows:
+
+```
+browser --HTTPS:443--> DSM reverse proxy --HTTP--> nginx container (APP_PORT) --> app
+```
+
+`APP_HOSTNAME` in `.env` must be the hostname you use below (e.g. `cyno.your-nas.local`).
+
+1. **DNS.** Make the hostname resolve to the NAS's IP address. A `.local` name with a subdomain (`cyno.your-nas.local`) is not resolved by mDNS, so it needs a record where your network's DNS lives. Check which DNS server your devices use (`nslookup <hostname>` prints it as `Server`/`Address`) and add the record there:
+
+   - **DSM's DNS Server package** (Package Center → DNS Server): open it → **Zones** → select your zone (e.g. `your-nas.local`) → **Edit** → **Resource Record** → **Create → A**: Name = the host part (`cyno`), IP address = the NAS's IP. When you rename the app, edit the existing A record's name (or add a new one) instead of leaving the old one. The zone's serial number updates automatically.
+   - **A router, Pi-hole or AdGuard Home:** add a Local / Static DNS record for the hostname pointing at the NAS's IP.
+   - **No DNS server:** add a line to each device's hosts file (`<NAS IP>  <hostname>`).
+
+   Check from another machine with `nslookup <hostname>` (on Windows run `ipconfig /flushdns` first if you changed a record). It must return the NAS's IP before the reverse proxy rule can answer on that name.
+
+2. **Certificate.** In DSM → Control Panel → Security → Certificate, make sure there is a certificate that covers the hostname (Let's Encrypt for a public name; a self-signed one or a wildcard for a local name). You assign it to the rule in step 3, via Configure.
+
+3. **Create the reverse proxy rule.** DSM → Control Panel → Login Portal → Advanced → Reverse Proxy → Create:
+
+   | Setting | Value |
+   |---|---|
+   | Source: Protocol | HTTPS |
+   | Source: Hostname | the same as `APP_HOSTNAME` |
+   | Source: Port | 443 |
+   | Destination: Protocol | HTTP |
+   | Destination: Hostname | `localhost` |
+   | Destination: Port | your `APP_PORT` (default `8080`) |
+
+   Then edit the rule:
+   - **Advanced Settings:** raise the proxy connect / send / read timeouts to `300` seconds (DSM's default is 60). Streamed chat replies and large uploads can take longer, and the app's own nginx already allows 300s.
+   - **Custom Header (only if needed):** the app marks the sign-in cookie `Secure` when it sees `X-Forwarded-Proto: https`. DSM normally sends it. If you can sign in but are signed straight out again, add a custom header `X-Forwarded-Proto` = `https` to the rule.
+   - **Certificate:** Control Panel → Security → Certificate → Configure, and select your certificate for this rule's hostname.
+
+4. **HTTP → HTTPS redirect.** Do not create a port-80 rule for the hostname: keep only the HTTPS (443) rule. `synology-boot.sh` installs a redirect for `APP_HOSTNAME` into DSM's nginx at boot (run `sudo bash synology-boot.sh`, or reboot, to apply it after a change).
+
+5. **Check it.**
+
+   ```bash
+   nslookup <hostname>              # returns the NAS IP
+   curl -I http://<hostname>        # 301 to https://
+   curl -kI https://<hostname>      # 200 from the app (drop -k once the certificate is trusted)
+   ```
+
+**Changing the hostname later:** change or add the DNS record (the A record in the DNS Server zone), edit the rule's source hostname, assign a certificate that covers the new name, set `APP_HOSTNAME` in `.env`, and run `synology-boot.sh`. Browsers treat each hostname separately, so everyone has to sign in again and locally stored preferences (favourite models, picker filters) start fresh. Nothing on the server changes.
+
+A public sign-in (Google, Microsoft or X) needs a real public HTTPS host: see "OAuth sign-in" above. A `.local` name cannot be used for it.
 
 Updating the stack
 ------------------

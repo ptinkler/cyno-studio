@@ -66,5 +66,5 @@ Backend line counts (functions at module level):
 ## 7. Rename clean-up (after every deployment has moved to the new names)
 
 - [ ] Drop the legacy `POLLO_DATA_DIR` fallback (`src/py/web/core/config.py`, its tests, `tests/conftest.py`) and the `${POLLO_HOST_DATA_DIR}` fallback in `docker-compose.yml`.
-- [ ] Drop the `docker compose -p pollo-api down` line in `synology-boot.sh` and the "Renamed from pollo-api" note in `README.md`.
+- [ ] Drop the "Renamed from pollo-api" note in `README.md` (the old-project cleanup line in `synology-boot.sh` is already gone).
 - [ ] Delete the old GHCR packages `ghcr.io/ptinkler/pollo-api` and `pollo-nginx` (GitHub profile -> Packages) and the old images on the NAS.
