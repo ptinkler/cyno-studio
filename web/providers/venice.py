@@ -23,9 +23,7 @@ import base64
 import contextlib
 import json
 import logging
-import mimetypes
 import os
-import re
 import shutil
 import tempfile
 import threading
@@ -44,23 +42,33 @@ from web.core.cache import MISS, TTLCache
 from web.core.metadata import current_tenant
 from web.jsonutil import as_list, as_number, as_object, as_objects, as_str, body_of
 from web.providers.openrouter import CHAT_TIMEOUT, IMAGE_TIMEOUT, keepalive_socket_options
+from web.providers.venice_catalogue import (
+    PREFIX,
+    by_price,
+    edit_model_for,
+    edit_only_entry,
+    float_or_none,
+    image_entry,
+    image_price,
+    price_tag,
+    res_rank,
+    second_options,
+    text_entry,
+    usd_or_none,
+    video_entry,
+    video_family,
+)
 from web.providers.venice_errors import (
     AnswerTimeoutError,
     ApiKeyMissingError,
     ConnectionDroppedError,
     ContentViolationError,
     EditOnlyModelError,
-    FirstAndLastFrameRequiredError,
-    ImageToAnimateRequiredError,
-    MotionImageRequiredError,
     NoImageReturnedError,
     NoJobIdError,
     PollDroppedError,
-    ReferenceImagesRequiredError,
     RequestRejectedError,
-    SourceVideoRequiredError,
     StreamDroppedError,
-    TextToVideoOnlyError,
     UnknownModelError,
     VeniceError,
     VideoCheckFailedError,
@@ -74,47 +82,28 @@ from web.providers.venice_types import (
     ImageSettings,
     ImageTarget,
     Model,
-    PriceSpec,
-    TextEntry,
-    VideoConstraints,
     VideoEntry,
-    VideoTarget,
-    max_input_images,
     parse_model,
-    strs,
-    video_constraints,
+)
+from web.providers.venice_video import (
+    DEFAULT_CAMERA_TRAJECTORY,
+    VIDEO_INPUTS,
+    VideoFrames,
+    data_url,
+    snap,
+    standard_inputs,
+    video_aspect_ratio,
+    video_duration,
+    video_model,
+    video_resolution,
 )
 from web.types import ChatChunk, JsonValue, ModelEntry, VideoJob
 
 log = logging.getLogger(__name__)
 VENICE_BASE = os.getenv("VENICE_BASE_URL", "https://api.venice.ai/api/v1").rstrip("/")
-PREFIX = "venice/"
 JOB_PREFIX = "venice:"
 CATALOGUE_TTL = 30 * 60
 DEFAULT_TIMEOUT = httpx.Timeout(30)
-# Video model families, by what they need from the chat (see _video_family)
-VIDEO_FAMILIES = {
-    "standard": "text → video, or animate an image",
-    "reference": "reference images (characters, pins, attached images) → video",
-    "frames": "first frame + last frame → video",
-    "angles": "image → video with a camera move around the subject",
-    "video": "the chat's latest video → a new video",
-    "motion": "the chat's latest video's motion + an image → video",
-    "upscale": "upscale the chat's latest video",
-}
-FAMILY_LABELS = {
-    "reference": "refs→video",
-    "frames": "first+last frame",
-    "angles": "multi-angle",
-    "video": "video→video",
-    "motion": "motion control",
-    "upscale": "upscale",
-}
-# Multi-angle models need a camera path; chat uses a slow quarter orbit
-DEFAULT_CAMERA_TRAJECTORY: list[dict[str, int]] = [
-    {"time": 0, "azimuth": 0, "elevation": 0, "distance": 1},
-    {"time": 1, "azimuth": 90, "elevation": 10, "distance": 1},
-]
 
 
 @dataclass(slots=True)
@@ -257,215 +246,45 @@ def _send(
     return resp
 
 
-def _data_url(path: Path) -> str:
-    media_type = mimetypes.guess_type(path.name)[0] or "image/png"
-    return f"data:{media_type};base64,{base64.b64encode(path.read_bytes()).decode()}"
-
-
 def _fetch_models(kind: str) -> list[Model]:
     """Venice's online models of one kind."""
     data = as_object(body_of(_request("GET", "/models", params={"type": kind}))).get("data")
     return [model for raw in as_objects(data) if (model := parse_model(raw)) is not None]
 
 
-def _float(value: JsonValue) -> float | None:
-    """The value as a float when it is a number or numeric text, else None."""
-    if isinstance(value, (int, float, str)):
-        try:
-            return float(value)
-        except ValueError:
-            return None
-    return None
-
-
-def _usd(price: JsonValue) -> float | None:
-    """A price as USD: a plain number, numeric text, or an object with a ``usd`` field."""
-    if isinstance(price, Mapping):
-        price = price.get("usd")
-    return _float(price)
-
-
-def _seconds(values: list[str]) -> list[int]:
-    out: list[int] = []
-    for v in values:
-        with contextlib.suppress(ValueError):  # "auto", "1 gen" — not a length chat can ask for
-            out.append(int(v.lower().rstrip("s")))
-    return sorted(set(out))
-
-
-def _uncensored(*models: Model | None) -> bool | None:
-    """Venice's own "uncensored" flag on a model (on any of a pair)."""
-    return any(m.uncensored for m in models if m) or None
-
-
-def _privacy(*models: Model | None) -> str | None:
-    """Return the least-private level across a model pair.
-
-    Venice reports ``private`` for its own servers and ``anonymized`` for
-    third-party providers that receive requests without user identity.
-    """
-    levels = {m.privacy for m in models if m} - {None}
-    return "anonymized" if "anonymized" in levels else ("private" if levels else None)
-
-
-def _edit_model_for(image_id: str, edit_ids: set[str]) -> str | None:
-    """Find an image model's edit twin among the available inpaint models.
-
-    The match may drop ``-image`` before adding ``-edit``.
-    """
-    for candidate in (f"{image_id}-edit", image_id.replace("-image", "", 1) + "-edit"):
-        if candidate in edit_ids:
-            return candidate
-    return None
-
-
-def _text_entry(m: Model) -> TextEntry:
-    caps = m.capabilities
-    prompt_usd, completion_usd = _usd(m.pricing.get("input")), _usd(m.pricing.get("output"))
-    # Venice prices per million tokens; the picker expects per token
-    prompt_price = prompt_usd / 1e6 if prompt_usd is not None else None
-    completion_price = completion_usd / 1e6 if completion_usd is not None else None
-    public: ModelEntry = {
-        "id": PREFIX + m.id,
-        "name": f"Venice: {m.name}",
-        "context_length": m.context_length,
-        "input_modalities": ["text", "image"] if caps.get("supportsVision") else ["text"],
-        "supports_tools": bool(caps.get("supportsFunctionCalling")),
-        "uncensored": _uncensored(m),
-        "privacy": _privacy(m),
-        "prompt_price": prompt_price,
-        "completion_price": completion_price,
-        "created": m.created,
-        "price": _price_tag(completion_price * 1e6, "per 1M output tokens") if completion_price is not None else None,
-    }
-    return TextEntry(PREFIX + m.id, public, prompt_price, completion_price)
-
-
-def _image_entry(m: Model, edit: Model | None) -> ImageEntry:
-    """A text-to-image model, with its edit twin when it has one."""
-    c = m.constraints
-    default_res = as_str(c.get("defaultResolution"))
-    generate = ImageTarget(m.id, PriceSpec("generation", m.pricing, default_res))
-    edit_target = (
-        ImageTarget(edit.id, PriceSpec("inpaint", edit.pricing, as_str(edit.constraints.get("defaultResolution"))))
-        if edit
-        else None
-    )
-    max_refs = max_input_images(edit.constraints) if edit else 1
-    aspect_ratios, resolutions = strs(c.get("aspectRatios")), strs(c.get("resolutions"))
-    public: ModelEntry = {
-        "id": PREFIX + m.id,
-        "name": f"Venice: {m.name}",
-        "input_modalities": ["text", "image"] if edit else ["text"],
-        "uncensored": _uncensored(m, edit),
-        "privacy": _privacy(m, edit),
-        "aspect_ratios": aspect_ratios,
-        "resolutions": resolutions,
-        "created": m.created,
-        "conversational": False,
-        # Reference images its edit twin takes (one when Venice doesn't say)
-        "max_refs": max_refs if edit else None,
-        "price": _price_tag(_image_price(m.pricing, "generation", None, default_res), default_res),
-    }
-    return ImageEntry(PREFIX + m.id, public, generate, edit_target, max_refs, aspect_ratios or [], resolutions or [])
-
-
-def _edit_only_entry(m: Model) -> ImageEntry:
-    """An edit model with no text-to-image twin: it only works on a reference image."""
-    c = m.constraints
-    default_res = as_str(c.get("defaultResolution"))
-    max_refs = max_input_images(c)
-    aspect_ratios, resolutions = strs(c.get("aspectRatios")), strs(c.get("resolutions"))
-    public: ModelEntry = {
-        "id": PREFIX + m.id,
-        "name": f"Venice: {m.name} (edit only)",
-        "input_modalities": ["text", "image"],
-        "uncensored": _uncensored(m),
-        "privacy": _privacy(m),
-        "aspect_ratios": aspect_ratios,
-        "resolutions": resolutions,
-        "created": m.created,
-        "conversational": False,
-        "max_refs": max_refs,
-        "price": _price_tag(_image_price(m.pricing, "inpaint", None, default_res), default_res),
-    }
-    edit_target = ImageTarget(m.id, PriceSpec("inpaint", m.pricing, default_res))
-    return ImageEntry(PREFIX + m.id, public, None, edit_target, max_refs, aspect_ratios or [], resolutions or [])
-
-
 def _build_catalogue() -> Catalogue:
-    text = [_text_entry(m) for m in _fetch_models("text")]
+    text = [text_entry(m) for m in _fetch_models("text")]
 
     edits = {m.id: m for m in _fetch_models("inpaint")}
     image: list[ImageEntry] = []
     paired: set[str] = set()
     for m in _fetch_models("image"):
-        edit_id = _edit_model_for(m.id, set(edits))
+        edit_id = edit_model_for(m.id, set(edits))
         edit = edits.get(edit_id) if edit_id else None
         if edit_id:
             paired.add(edit_id)
-        image.append(_image_entry(m, edit))
+        image.append(image_entry(m, edit))
     # Edit models with no text-to-image twin: they only work on a reference image
-    image.extend(_edit_only_entry(m) for edit_id, m in edits.items() if edit_id not in paired)
+    image.extend(edit_only_entry(m) for edit_id, m in edits.items() if edit_id not in paired)
 
     # Plain models: pair "…-text-to-video…" with "…-image-to-video…" under
     # one entry. Every other family is listed as it is.
     groups: dict[str, dict[str | None, Model]] = {}
     video: list[VideoEntry] = []
     for m in _fetch_models("video"):
-        family = _video_family(m)
+        family = video_family(m)
         if family == "standard":
             key = m.id.replace("text-to-video", "*").replace("image-to-video", "*")
             groups.setdefault(key, {})[as_str(m.constraints.get("model_type"))] = m
         else:
-            video.append(_video_entry(family, m, m, None))
+            video.append(video_entry(family, m, m, None))
     for pair in groups.values():
         t2v, i2v = pair.get("text-to-video"), pair.get("image-to-video")
         first = t2v or i2v
         if first is not None:
-            video.append(_video_entry("standard", first, t2v, i2v))
+            video.append(video_entry("standard", first, t2v, i2v))
     _price_videos(video)
-    return Catalogue(text=_by_price(text), image=_by_price(image), video=_by_price(video))
-
-
-def _by_price[E: Entry](models: list[E]) -> list[E]:
-    """Uncensored first (as the user asked), then cheapest first; unpriced last."""
-
-    def key(m: E) -> tuple[bool, bool, int | float, str]:
-        usd = as_number(as_object(m.public.get("price")).get("usd"))
-        return (not m.public.get("uncensored"), usd is None, usd or 0, (as_str(m.public.get("name")) or "").lower())
-
-    return sorted(models, key=key)
-
-
-def _price_tag(usd: float | None, basis: str | None = None) -> dict[str, JsonValue] | None:
-    return {"usd": round(usd, 4), "basis": basis or ""} if usd is not None else None
-
-
-def _image_price(
-    pricing: dict[str, JsonValue], key: str, resolution: str | None, default_res: str | None
-) -> float | None:
-    """One image's USD price: the resolution's tier if priced that way, else the flat price."""
-    tiers = as_object(pricing.get("resolutions"))
-    for res in (resolution, None, default_res):
-        if res is None:
-            flat = _usd(pricing.get(key))
-            if flat is not None:
-                return flat
-        elif res in tiers:
-            tier = _usd(tiers[res])
-            if tier is not None:
-                return tier
-    prices = [p for p in (_usd(v) for v in tiers.values()) if p is not None]
-    return min(prices) if prices else None
-
-
-def _res_rank(res: str) -> int:
-    """Rough vertical pixels, to find a model's lowest resolution ("480p", "768P", "2K", "4k")."""
-    s = res.lower()
-    if m := re.match(r"(\d+)p", s):
-        return int(m.group(1))
-    return {"1k": 1080, "2k": 1440, "4k": 2160}.get(s, 10_000)
+    return Catalogue(text=by_price(text), image=by_price(image), video=by_price(video))
 
 
 class _QuoteJob(NamedTuple):
@@ -494,7 +313,7 @@ def _quote_video(job: _QuoteJob) -> float | None:
 
 def _quote_of(resp: httpx.Response) -> float | None:
     """The USD price in a ``/video/quote`` reply."""
-    return _usd(as_object(body_of(resp)).get("quote"))
+    return usd_or_none(as_object(body_of(resp)).get("quote"))
 
 
 def _price_videos(video: list[VideoEntry]) -> None:
@@ -511,76 +330,15 @@ def _price_videos(video: list[VideoEntry]) -> None:
             entry.public["price"] = None
             continue
         c = target.constraints
-        seconds = _seconds(c.durations)
+        seconds = second_options(c.durations)
         duration = min(seconds, key=lambda d: (abs(d - QUOTE_SECONDS), d)) if seconds else None
-        res = min(c.resolutions, key=_res_rank, default=None)
+        res = min(c.resolutions, key=res_rank, default=None)
         jobs.append(_QuoteJob(entry, target.model, duration, res))
 
     with ThreadPoolExecutor(max_workers=8) as pool:
         for job, usd in zip(jobs, pool.map(_quote_video, jobs), strict=False):
             basis = " · ".join(x for x in (f"{job.duration}s" if job.duration else "", job.resolution or "") if x)
-            job.entry.public["price"] = _price_tag(usd, basis)
-
-
-# A model id containing any of these words belongs to that family (checked in order)
-_VIDEO_FAMILY_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("reference", ("reference-to-video",)),
-    ("frames", ("first-last-frame", "transition")),
-    ("angles", ("multi-angle",)),
-    ("upscale", ("upscale",)),
-    ("motion", ("motion-control",)),
-)
-
-
-def _video_family(m: Model) -> str:
-    for family, markers in _VIDEO_FAMILY_MARKERS:
-        if any(marker in m.id for marker in markers):
-            return family
-    return "video" if as_str(m.constraints.get("model_type")) == "video" else "standard"
-
-
-def _video_entry(family: str, first: Model, main: Model | None, i2v: Model | None) -> VideoEntry:
-    """Build one catalogue entry from a video model family.
-
-    ``first`` is the model that names the entry. For ``standard``, ``main`` is
-    the text-to-video model (or None if only an image-to-video model exists),
-    and ``i2v`` is its twin.
-    """
-    c = video_constraints(first.constraints)
-    name = f"Venice: {first.name}"
-    if family == "standard" and not main:
-        name += " (image→video only)"
-    elif family != "standard":
-        name += f" ({FAMILY_LABELS[family]})"
-    frames = {
-        "standard": ["first_frame"] if i2v else [],
-        "frames": ["first_frame", "last_frame"],
-        "angles": ["first_frame"],
-        "motion": ["first_frame"],
-    }.get(family, [])
-    video_input = family in ("video", "motion", "upscale")
-    public: ModelEntry = {
-        "id": PREFIX + first.id,
-        "name": name,
-        "family": family,
-        "family_hint": VIDEO_FAMILIES[family],
-        "durations": _seconds(c.durations) or None,
-        "resolutions": c.resolutions or None,
-        "aspect_ratios": c.aspect_ratios or None,
-        "frame_images": frames,
-        "reference_images": family == "reference",
-        "video_input": video_input,
-        "uncensored": _uncensored(main, i2v),
-        "privacy": _privacy(main, i2v),
-        "generate_audio": c.audio_configurable,
-        "created": first.created,
-    }
-    if family == "standard":
-        text = VideoTarget(main.id, video_constraints(main.constraints)) if main else None
-        image = VideoTarget(i2v.id, video_constraints(i2v.constraints)) if i2v else None
-    else:
-        text, image = None, VideoTarget(first.id, c)
-    return VideoEntry(PREFIX + first.id, public, family, video_input, text, image)
+            job.entry.public["price"] = price_tag(usd, basis)
 
 
 def _get_catalogue(refresh: bool = False) -> Catalogue:
@@ -655,10 +413,10 @@ def get_balances() -> dict[str, float | None]:
     except VeniceError:
         return {"usd": _balance.get(key), "credits": None}
     balances = as_object(as_object(data.get("data") or data).get("balances"))
-    usd = _float(balances.get("USD"))
+    usd = float_or_none(balances.get("USD"))
     if usd is not None:
         _balance[key] = usd
-    return {"usd": _balance.get(key), "credits": _float(balances.get("BUNDLED_CREDITS"))}
+    return {"usd": _balance.get(key), "credits": float_or_none(balances.get("BUNDLED_CREDITS"))}
 
 
 def stream_chat(
@@ -713,7 +471,7 @@ def _stream_error(message: str, status: int | None) -> VeniceError:
 
 
 def _chat_cost(model_id: str, usage: dict[str, JsonValue], top_level_cost: JsonValue = None) -> float | None:
-    cost = _usd(usage.get("cost")) if usage.get("cost") is not None else _usd(top_level_cost)
+    cost = usd_or_none(usage.get("cost")) if usage.get("cost") is not None else usd_or_none(top_level_cost)
     if cost is not None:
         return cost
     try:
@@ -751,8 +509,8 @@ def generate_image(
     model runs.
     """
     info = _find(_get_catalogue().image, "image", model_id)
-    aspect_ratio = _snap(aspect_ratio, info.aspect_ratios)
-    resolution = _snap(resolution, info.resolutions)
+    aspect_ratio = snap(aspect_ratio, info.aspect_ratios)
+    resolution = snap(resolution, info.resolutions)
     size: dict[str, str] = {}
     if aspect_ratio:
         size["aspect_ratio"] = aspect_ratio
@@ -778,7 +536,7 @@ def _edit_image(
         "modelId": target.model,
         "prompt": prompt,
         "safe_mode": False,
-        "images": [_data_url(p) for p in refs],
+        "images": [data_url(p) for p in refs],
         **size,
     }
     resp = _request("POST", "/image/multi-edit", json_body=body, timeout=IMAGE_TIMEOUT, waiting_for="image", log=True)
@@ -787,7 +545,7 @@ def _edit_image(
     if not media_type.startswith("image/"):
         raise NoImageReturnedError
     key, pricing, default_res = target.price
-    return [(resp.content, media_type)], _image_price(pricing, key, size.get("resolution"), default_res)
+    return [(resp.content, media_type)], image_price(pricing, key, size.get("resolution"), default_res)
 
 
 def _new_image(target: ImageTarget, prompt: str, size: dict[str, str]) -> tuple[list[tuple[bytes, str]], float | None]:
@@ -806,23 +564,10 @@ def _new_image(target: ImageTarget, prompt: str, size: dict[str, str]) -> tuple[
     if not images:
         raise NoImageReturnedError
     key, pricing, default_res = target.price
-    return images, _image_price(pricing, key, size.get("resolution"), default_res)
+    return images, image_price(pricing, key, size.get("resolution"), default_res)
 
 
-MAX_VIDEO_REFS = 30
 QUOTED_FIELDS = ("model", "duration", "aspect_ratio", "resolution", "audio", "upscale_factor")
-
-
-def _snap(value: str | None, allowed: list[str]) -> str | None:
-    """Value if allowed (or nothing is known), else None."""
-    return value if value and (not allowed or value in allowed) else None
-
-
-def _video_aspect_ratio(aspect_ratio: str | None, c: VideoConstraints, *, image_used: bool) -> str | None:
-    """The aspect ratio to send: one the model allows; none when the image sets the shape."""
-    if image_used and not c.aspect_ratios:
-        return None
-    return _snap(aspect_ratio, c.aspect_ratios)
 
 
 def _remember_job(job_id: str, download_url: str | None, quote: float | None) -> None:
@@ -853,17 +598,17 @@ def submit_video(
     """
     info = _find(_get_catalogue().video, "video", model_id)
     family = info.family
-    target = _video_model(info, first_frame)
+    target = video_model(info, first_frame)
     c = target.constraints
-    frames = _VideoFrames(first_frame, last_frame, [p for p in refs or [] if p.is_file()], source_video)
-    inputs, sent, image_used = _VIDEO_INPUTS.get(family, _standard_inputs)(frames)
+    frames = VideoFrames(first_frame, last_frame, [p for p in refs or [] if p.is_file()], source_video)
+    inputs, sent, image_used = VIDEO_INPUTS.get(family, standard_inputs)(frames)
     body: dict[str, JsonValue] = {"model": target.model, "prompt": prompt, **inputs}
     if family == "angles":
         body["camera_trajectory"] = DEFAULT_CAMERA_TRAJECTORY
 
-    duration, body["duration"] = _video_duration(c, duration)
-    resolution = _video_resolution(body, family, c, resolution)
-    aspect_ratio = _video_aspect_ratio(aspect_ratio, c, image_used=image_used)
+    duration, body["duration"] = video_duration(c, duration)
+    resolution = video_resolution(body, family, c, resolution)
+    aspect_ratio = video_aspect_ratio(aspect_ratio, c, image_used=image_used)
     if aspect_ratio:
         body["aspect_ratio"] = aspect_ratio
     if c.audio_configurable and generate_audio is not None:
@@ -898,103 +643,6 @@ def submit_video(
             **sent,
         },
     }
-
-
-def _video_model(info: VideoEntry, first_frame: Path | None) -> VideoTarget:
-    """Select the Venice model and constraints for a video family.
-
-    Standard families pair text-to-video with image-to-video; others use one
-    model.
-    """
-    target = info.image if info.family != "standard" or first_frame else info.text
-    if target is None:
-        raise TextToVideoOnlyError if first_frame else ImageToAnimateRequiredError
-    return target
-
-
-@dataclass(frozen=True, slots=True)
-class _VideoFrames:
-    """The media the chat has on hand for a video request."""
-
-    first: Path | None
-    last: Path | None
-    refs: list[Path]
-    source_video: Path | None
-
-
-# Each family's inputs: (body fields, settings to report, whether an image sets the shape)
-VideoInputs = tuple[dict[str, JsonValue], dict[str, JsonValue], bool]
-
-
-def _reference_inputs(f: _VideoFrames) -> VideoInputs:
-    refs = (f.refs or ([f.first] if f.first else []))[:MAX_VIDEO_REFS]
-    if not refs:
-        raise ReferenceImagesRequiredError
-    return {"reference_image_urls": [_data_url(p) for p in refs]}, {"refs_used": len(refs)}, False
-
-
-def _frames_inputs(f: _VideoFrames) -> VideoInputs:
-    if not (f.first and f.last):
-        raise FirstAndLastFrameRequiredError
-    return {"image_url": _data_url(f.first), "end_image_url": _data_url(f.last)}, {}, True
-
-
-def _source_video_inputs(f: _VideoFrames) -> VideoInputs:
-    if not f.source_video or not f.source_video.is_file():
-        raise SourceVideoRequiredError
-    return {"video_url": _data_url(f.source_video)}, {"source_video": f.source_video.name}, False
-
-
-def _motion_inputs(f: _VideoFrames) -> VideoInputs:
-    body, sent, _ = _source_video_inputs(f)
-    image = f.first or (f.refs[0] if f.refs else None)
-    if not image:
-        raise MotionImageRequiredError
-    return {**body, "image_url": _data_url(image)}, sent, True
-
-
-def _standard_inputs(f: _VideoFrames) -> VideoInputs:
-    """Standard image→video and multi-angle: the first frame, if any."""
-    return ({"image_url": _data_url(f.first)}, {}, True) if f.first else ({}, {}, False)
-
-
-_VIDEO_INPUTS: dict[str, Callable[[_VideoFrames], VideoInputs]] = {
-    "reference": _reference_inputs,
-    "frames": _frames_inputs,
-    "video": _source_video_inputs,
-    "upscale": _source_video_inputs,
-    "motion": _motion_inputs,
-}
-
-
-def _video_duration(c: VideoConstraints, duration: int | None) -> tuple[int | None, str]:
-    """Return the selected duration and its API representation.
-
-    The requested value snaps to the nearest allowed length; unset values
-    default to five seconds when supported.
-    """
-    allowed = c.durations
-    seconds = _seconds(allowed)
-    if not seconds:
-        return None, allowed[0] if allowed else "auto"  # e.g. "Auto": follows the source video
-    if not duration or duration not in seconds:
-        target = duration or 5
-        duration = min(seconds, key=lambda d: (abs(d - target), d))
-    return duration, f"{duration}s"
-
-
-def _video_resolution(
-    body: dict[str, JsonValue], family: str, c: VideoConstraints, resolution: str | None
-) -> str | None:
-    """Put the resolution (an upscale's factor) on the body; the setting to report."""
-    if family == "upscale":
-        factor = {"2x": 2, "4x": 4}.get(str(resolution).lower()) or 2
-        body["upscale_factor"] = factor
-        return f"{factor}x"
-    resolution = _snap(resolution, c.resolutions)
-    if resolution:
-        body["resolution"] = resolution
-    return resolution
 
 
 def _video_quote(body: dict[str, JsonValue]) -> float | None:

@@ -6,23 +6,18 @@ Turn, media-generation, and SSE routes are defined in `routes_turns.py`.
 import shutil
 import threading
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TypedDict
 
-from fastapi import File, HTTPException, UploadFile
-from fastapi.responses import FileResponse, Response
+from fastapi import HTTPException
 
-from web import characters, media, request_log
-from web.chat.catalogue import get_models
+from web import characters
 from web.chat.constants import (
-    CHAT_PREVIEW_SIZE,
     CONVERSATION_LIST_LIMIT,
     DEFAULT_TITLE,
-    KINDS,
     PARAM_FILES,
-    PAUSE_KINDS,
     SNIPPET_CHARS,
     THREAD_KINDS,
 )
@@ -34,30 +29,27 @@ from web.chat.helpers import (
     message_out,
     require_conv,
     require_idle,
-    require_own_conversation,
-    require_text_provider,
     shown_branch,
     spend,
 )
 from web.chat.models import (
     ConversationCreate,
     ConversationUpdate,
-    DefaultsIn,
     ForkConversation,
-    InstructionGroupIn,
-    InstructionIn,
-    SpaceIn,
     SwitchBranch,
-    TitleModelIn,
+)
+from web.chat.routes_settings import (
+    require_hidden_defaults,
+    require_instruction_groups,
+    require_instructions,
+    require_paused,
+    require_space,
 )
 from web.core import config
-from web.core.metadata import MetadataDB, get_db, iso
-from web.core.metadata.models import ChatSpace
+from web.core.metadata import MetadataDB, get_db
 from web.jsonutil import as_list, as_object, as_str
-from web.media_types import VIDEO_SUFFIXES
-from web.providers import openrouter, venice
-from web.types import Catalogue, JsonValue
-from web.uploads import read_audio_upload, read_image_upload, read_video_upload, safe_filename, store_deduped
+from web.types import JsonValue
+from web.uploads import safe_filename
 
 
 class _SpendGroup(TypedDict):
@@ -66,45 +58,6 @@ class _SpendGroup(TypedDict):
     usd: float
     credits: int
     count: int
-
-
-@router.get("/status")
-def api_chat_status() -> dict[str, bool]:
-    """Report which chat providers are configured."""
-    return {
-        "configured": openrouter.is_configured() or venice.is_configured(),
-        "openrouter": openrouter.is_configured(),
-        "venice": venice.is_configured(),
-    }
-
-
-@router.get("/credits")
-def api_chat_credits() -> dict[str, float]:
-    """OpenRouter balance for the chat header (Pollo's is /api/usage/balance)."""
-    require_text_provider()
-    try:
-        return openrouter.get_credits()
-    except openrouter.OpenRouterError as e:
-        raise HTTPException(502, f"Couldn't fetch the OpenRouter balance: {e}") from e
-
-
-@router.get("/venice-balance")
-def api_venice_balance() -> dict[str, float | None]:
-    """Venice balance for the chat header: USD, and the plan's bundled credits."""
-    if not venice.is_configured():
-        raise HTTPException(503, "No Venice API key set — add one in Settings → Keys")
-    return venice.get_balances()
-
-
-@router.get("/models")
-def api_chat_models(refresh: bool = False) -> Catalogue:
-    """Return the model catalogue for the configured providers."""
-    # No provider gate: the catalogue lists each provider independently
-    # (get_models swallows a provider's failure and an unconfigured provider
-    # returns []), so media models show with only a Pollo key, and new
-    # providers slot in without touching this endpoint. Chat generation still
-    # requires a text provider — that gate lives on the turn routes.
-    return get_models(refresh)
 
 
 @router.get("/conversations")
@@ -165,15 +118,15 @@ def _clean_kind(kind: str | None) -> str:
 def api_create_conversation(data: ConversationCreate) -> dict[str, JsonValue]:
     """Create a conversation with validated model and settings references."""
     db = get_db()
-    space = _require_space(data.space_id) if data.space_id is not None else None
+    space = require_space(data.space_id) if data.space_id is not None else None
     # Only what's attached to this chat itself: the global and space defaults
     # apply live on top (see inherited_ids), so they aren't copied in
-    instruction_ids = _require_instructions(data.instruction_ids)
-    instruction_group_ids = _require_instruction_groups(data.instruction_group_ids)
+    instruction_ids = require_instructions(data.instruction_ids)
+    instruction_group_ids = require_instruction_groups(data.instruction_group_ids)
     characters.require(data.character_ids, db)
     character_ids = list(dict.fromkeys(data.character_ids))
-    hidden_defaults = _require_hidden_defaults(data.hidden_defaults)
-    paused_instructions = _require_paused(data.paused_instructions)
+    hidden_defaults = require_hidden_defaults(data.hidden_defaults)
+    paused_instructions = require_paused(data.paused_instructions)
 
     conv = db.create_conversation(
         title=(data.title or DEFAULT_TITLE).strip()[:255] or DEFAULT_TITLE,
@@ -189,170 +142,6 @@ def api_create_conversation(data: ConversationCreate) -> dict[str, JsonValue]:
         paused_instructions=paused_instructions,
     )
     return conv.to_dict()
-
-
-def _require_hidden_defaults(value: dict[str, list[int]] | None) -> dict[str, list[int]]:
-    unknown = set(value or {}) - set(KINDS)
-    if unknown:
-        raise HTTPException(400, f"Unknown kind of default: {', '.join(sorted(unknown))}")
-    return {k: list(dict.fromkeys(ids)) for k, ids in (value or {}).items()}
-
-
-def _require_paused(value: dict[str, list[int]] | None) -> dict[str, list[int]]:
-    unknown = set(value or {}) - set(PAUSE_KINDS)
-    if unknown:
-        raise HTTPException(400, f"Can't pause kind: {', '.join(sorted(unknown))}")
-    return {k: list(dict.fromkeys(ids)) for k, ids in (value or {}).items()}
-
-
-def _require_ids(ids: list[int], get: Callable[[int], object | None], label: str) -> list[int]:
-    """`ids` without repeats, or 400 naming the first that `get` can't find."""
-    for i in ids:
-        if not get(i):
-            raise HTTPException(400, f"{label} {i} not found")
-    return list(dict.fromkeys(ids))
-
-
-def _require_instructions(ids: list[int]) -> list[int]:
-    return _require_ids(ids, get_db().get_instruction, "Instruction")
-
-
-def _require_instruction_groups(ids: list[int]) -> list[int]:
-    return _require_ids(ids, get_db().get_instruction_group, "Instruction group")
-
-
-def _require_space(space_id: int) -> ChatSpace:
-    space = get_db().get_space(space_id)
-    if not space:
-        raise HTTPException(400, "Space not found")
-    return space
-
-
-def _require_characters(ids: list[int]) -> list[int]:
-    characters.require(ids, get_db())
-    return list(dict.fromkeys(ids))
-
-
-def _defaults_fields(data: DefaultsIn) -> dict[str, list[int]]:
-    """Validated default id-lists for a settings bucket (global or a space)."""
-    return {
-        "default_character_ids": _require_characters(data.default_character_ids),
-        "default_instruction_ids": _require_instructions(data.default_instruction_ids),
-        "default_instruction_group_ids": _require_instruction_groups(data.default_instruction_group_ids),
-    }
-
-
-@router.get("/settings")
-def api_get_settings() -> dict[str, JsonValue]:
-    """Return the current user's global chat defaults."""
-    return get_db().get_settings().to_dict()
-
-
-@router.put("/settings")
-def api_update_settings(data: DefaultsIn) -> dict[str, JsonValue]:
-    """Save validated global chat defaults."""
-    return get_db().save_settings(**_defaults_fields(data)).to_dict()
-
-
-@router.put("/settings/title-model")
-def api_set_title_model(data: TitleModelIn) -> dict[str, JsonValue]:
-    """The text model that names new chats (empty = the chat's own model)."""
-    return get_db().save_settings(title_model=(data.title_model or "").strip() or None).to_dict()
-
-
-@router.get("/instructions")
-def api_list_instructions() -> dict[str, JsonValue]:
-    """List instruction snippets and groups."""
-    return {
-        "instructions": [i.to_dict() for i in get_db().list_instructions()],
-        "groups": [g.to_dict() for g in get_db().list_instruction_groups()],
-    }
-
-
-@router.post("/instructions")
-def api_create_instruction(data: InstructionIn) -> dict[str, JsonValue]:
-    """Create an instruction snippet."""
-    item = get_db().save_instruction(name=data.name.strip(), content=data.content)
-    if not item:
-        raise HTTPException(500, "Could not create instruction")
-    return item.to_dict()
-
-
-@router.put("/instructions/{instruction_id}")
-def api_update_instruction(instruction_id: int, data: InstructionIn) -> dict[str, JsonValue]:
-    """Update an instruction snippet by ID."""
-    item = get_db().save_instruction(instruction_id, name=data.name.strip(), content=data.content)
-    if not item:
-        raise HTTPException(404, "Instruction not found")
-    return item.to_dict()
-
-
-@router.delete("/instructions/{instruction_id}")
-def api_delete_instruction(instruction_id: int) -> dict[str, int]:
-    """Delete an instruction snippet by ID."""
-    if not get_db().delete_instruction(instruction_id):
-        raise HTTPException(404, "Instruction not found")
-    return {"deleted": instruction_id}
-
-
-@router.post("/instruction-groups")
-def api_create_instruction_group(data: InstructionGroupIn) -> dict[str, JsonValue]:
-    """Create a group from validated instruction snippet IDs."""
-    group = get_db().save_instruction_group(name=data.name.strip(), snippet_ids=_require_instructions(data.snippet_ids))
-    if not group:
-        raise HTTPException(500, "Could not create instruction group")
-    return group.to_dict()
-
-
-@router.put("/instruction-groups/{group_id}")
-def api_update_instruction_group(group_id: int, data: InstructionGroupIn) -> dict[str, JsonValue]:
-    """Update an instruction group by ID."""
-    item = get_db().save_instruction_group(
-        group_id, name=data.name.strip(), snippet_ids=_require_instructions(data.snippet_ids)
-    )
-    if not item:
-        raise HTTPException(404, "Instruction group not found")
-    return item.to_dict()
-
-
-@router.delete("/instruction-groups/{group_id}")
-def api_delete_instruction_group(group_id: int) -> dict[str, int]:
-    """Delete an instruction group by ID."""
-    if not get_db().delete_instruction_group(group_id):
-        raise HTTPException(404, "Instruction group not found")
-    return {"deleted": group_id}
-
-
-@router.get("/spaces")
-def api_list_spaces() -> dict[str, JsonValue]:
-    """List the user's chat spaces."""
-    return {"spaces": [s.to_dict() for s in get_db().list_spaces()]}
-
-
-@router.post("/spaces")
-def api_create_space(data: SpaceIn) -> dict[str, JsonValue]:
-    """Create a chat space with validated defaults."""
-    space = get_db().save_space(None, name=data.name.strip(), **_defaults_fields(data))
-    if not space:
-        raise HTTPException(500, "Could not create space")
-    return space.to_dict()
-
-
-@router.put("/spaces/{space_id}")
-def api_update_space(space_id: int, data: SpaceIn) -> dict[str, JsonValue]:
-    """Update a chat space and its defaults."""
-    item = get_db().save_space(space_id, name=data.name.strip(), **_defaults_fields(data))
-    if not item:
-        raise HTTPException(404, "Space not found")
-    return item.to_dict()
-
-
-@router.delete("/spaces/{space_id}")
-def api_delete_space(space_id: int) -> dict[str, int]:
-    """Delete a chat space by ID."""
-    if not get_db().delete_space(space_id):
-        raise HTTPException(404, "Space not found")
-    return {"deleted": space_id}
 
 
 def _message_id(message: dict[str, JsonValue]) -> int:
@@ -606,11 +395,11 @@ class _Fork:
 def _validate_conv_references(data: ConversationUpdate, fields: dict[str, JsonValue]) -> None:
     """Check that the instructions, space and characters a chat update names exist."""
     if "instruction_ids" in fields:
-        fields["instruction_ids"] = _require_instructions(data.instruction_ids or [])
+        fields["instruction_ids"] = require_instructions(data.instruction_ids or [])
     if "instruction_group_ids" in fields:
-        fields["instruction_group_ids"] = _require_instruction_groups(data.instruction_group_ids or [])
+        fields["instruction_group_ids"] = require_instruction_groups(data.instruction_group_ids or [])
     if data.space_id is not None:
-        _require_space(data.space_id)
+        require_space(data.space_id)
     if "character_ids" in fields:
         characters.require(data.character_ids or [], get_db())
 
@@ -626,9 +415,9 @@ def _clean_conv_update(data: ConversationUpdate, fields: dict[str, JsonValue]) -
     if "kind" in fields:
         fields["kind"] = _clean_kind(data.kind)
     if "hidden_defaults" in fields:
-        fields["hidden_defaults"] = _require_hidden_defaults(data.hidden_defaults)
+        fields["hidden_defaults"] = require_hidden_defaults(data.hidden_defaults)
     if "paused_instructions" in fields:
-        fields["paused_instructions"] = _require_paused(data.paused_instructions)
+        fields["paused_instructions"] = require_paused(data.paused_instructions)
 
 
 @router.patch("/conversations/{conv_id}")
@@ -673,158 +462,6 @@ def _empty_trash() -> None:
     """Remove deleted chats' folders (any left by a restart mid-delete too)."""
     for trash in chat_root().glob(".deleting-*"):
         shutil.rmtree(trash, ignore_errors=True)
-
-
-@router.post("/conversations/{conv_id}/attachments")
-async def api_upload_attachment(conv_id: str, file: UploadFile = File(...)) -> dict[str, str]:
-    """Save an image attachment for a conversation."""
-    require_conv(conv_id)
-    content, ext = await read_image_upload(file)
-    return {"file": store_deduped(conversation_dir(conv_id), "up_", content, ext)}
-
-
-@router.post("/conversations/{conv_id}/attachments/video")
-async def api_upload_video_attachment(conv_id: str, file: UploadFile = File(...)) -> dict[str, str]:
-    """A source video upload (e.g.
-
-    Recast). Saved with a 'upv_' prefix so the
-    message endpoint records it as a video (not image) media item.
-    """
-    require_conv(conv_id)
-    content, ext = await read_video_upload(file)
-    return {"file": store_deduped(conversation_dir(conv_id), "upv_", content, ext)}
-
-
-@router.post("/conversations/{conv_id}/attachments/audio")
-async def api_upload_audio_attachment(conv_id: str, file: UploadFile = File(...)) -> dict[str, str]:
-    """A lip-sync audio upload.
-
-    Saved with a 'upa_' prefix so the message
-    endpoint records it as an audio (not image) media item.
-    """
-    require_conv(conv_id)
-    content, ext = await read_audio_upload(file)
-    return {"file": store_deduped(conversation_dir(conv_id), "upa_", content, ext)}
-
-
-@router.delete("/conversations/{conv_id}/attachments/{filename}")
-def api_discard_attachment(conv_id: str, filename: str) -> dict[str, bool]:
-    """Drop an attachment that was uploaded but never sent (removed from the composer).
-
-    Files any message or library entry still uses are kept.
-    """
-    require_conv(conv_id)
-    name = safe_filename(filename)
-    if not name.startswith(("up_", "upv_", "upa_")):
-        return {"deleted": False}
-    db = get_db()
-    in_use = any(name in media.referenced_files(i) for m in db.get_chat_messages(conv_id) for i in m.media) or any(
-        lib.conversation_id == conv_id and name in media.referenced_files(lib.item) for lib in db.list_chat_library()
-    )
-    path = conversation_dir(conv_id) / name
-    if in_use or not path.is_file():
-        return {"deleted": False}
-    path.unlink()
-    return {"deleted": True}
-
-
-@router.get("/media/{conv_id}/{filename}")
-def api_chat_media(conv_id: str, filename: str) -> FileResponse:
-    """Serve a conversation's original media file."""
-    path = chat_root() / safe_filename(conv_id) / safe_filename(filename)  # rejects traversal (400)
-    require_own_conversation(conv_id)
-    if not path.is_file():
-        raise HTTPException(404, "Not found")
-    return FileResponse(path, headers={"Cache-Control": "private, max-age=31536000, immutable"})
-
-
-@router.get("/media/{conv_id}/{filename}/preview")
-async def api_chat_media_preview(conv_id: str, filename: str) -> Response:
-    """A chat image (or a video's first frame) scaled down for showing in the.
-
-    chat, cached; the full file is for the lightbox and downloads.
-    """
-    path = chat_root() / safe_filename(conv_id) / safe_filename(filename)  # rejects traversal (400)
-    require_own_conversation(conv_id)
-    if not path.is_file():
-        raise HTTPException(404, "Not found")
-    try:
-        return await media.thumb_response(path, CHAT_PREVIEW_SIZE)
-    except HTTPException:
-        # No thumbnail could be made (odd format, half-written file): show the
-        # image itself rather than a broken tile. Videos have nothing to fall back to.
-        if path.suffix.lower() in VIDEO_SUFFIXES:
-            raise
-        return FileResponse(path, headers={"Cache-Control": "no-cache"})
-
-
-@router.get("/request-log")
-def api_request_log(limit: int = 100) -> dict[str, JsonValue]:
-    """The latest provider requests (Venice image/video calls): what was sent and what came back, newest first.
-
-    See web/request_log.py.
-    """
-    return {"entries": request_log.recent(max(1, min(limit, 1000)))}
-
-
-@router.get("/library")
-def api_chat_library() -> dict[str, JsonValue]:
-    """Every generated image/video across chats, newest first.
-
-    `attached`
-    items are still in their chat (on some branch); the rest were detached
-    by edits/retries made before chats had branches.
-    """
-    db = get_db()
-    titles = db.conversation_titles()
-    items: list[dict[str, JsonValue]] = []
-    for msg in db.get_chat_messages_with_media():
-        items.extend(
-            {
-                **item,
-                "conversation_id": msg.conversation_id,
-                "message_id": msg.id,
-                "attached": True,
-                "created_at": iso(msg.created_at),
-            }
-            for item in msg.media
-            if item.get("source") != "upload"
-        )
-    for lib in db.list_chat_library():
-        if lib.item.get("source") == "upload":
-            continue
-        items.append(
-            {
-                **lib.item,
-                "conversation_id": lib.conversation_id,
-                "message_id": None,
-                "attached": False,
-                "created_at": iso(lib.created_at),
-            }
-        )
-    items.sort(key=lambda i: str(i["created_at"]), reverse=True)
-    for i in items:
-        cid = i["conversation_id"]
-        i["conversation_title"] = titles.get(cid) if isinstance(cid, str) else None
-    return {"items": items}
-
-
-@router.delete("/library/{media_id}")
-def api_delete_library_item(media_id: str) -> dict[str, str]:
-    """Delete an unattached library item and its file.
-
-    Attached media goes
-    away with its message/chat instead.
-    """
-    db = get_db()
-    lib = db.get_chat_library_item(media_id)
-    if not lib:
-        raise HTTPException(404, "Not in the library (only unattached items can be deleted here)")
-    db.delete_chat_library_item(media_id)
-    file = lib.item.get("file")
-    if isinstance(file, str):
-        (chat_root() / lib.conversation_id / safe_filename(file)).unlink(missing_ok=True)
-    return {"deleted": media_id}
 
 
 @router.get("/messages/{message_id}")

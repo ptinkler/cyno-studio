@@ -13,14 +13,14 @@ Status as of 2026-11-15. Measured numbers are from running the tools, not estima
 
 ## 1. Land the type-debt burn-down
 
-- [x] The `chore/ruff` PR was merged to `main` on GitHub as a squash commit (`4b49875 Chore/ruff (#9)`). Its content is identical to the branch's committed content, so merging `origin/main` into `chore/ruff` is a no-op that only joins the histories.
-- [x] basedpyright step added to `.github/workflows/ci.yml` (installs `requirements-dev.txt`, runs `basedpyright`). Uncommitted until the maintainer commits.
+- [x] The `chore/ruff` PR (#9) and the complexity / lint sweep (#10) are merged to `main`. `chore/ruff` and `chore/code-quality` are dead and can be deleted.
+- [x] basedpyright step added to `.github/workflows/ci.yml` (installs `requirements-dev.txt`, runs `basedpyright`).
 
 ## 2. Complexity ratchet: DONE (backend)
 
 - [x] All 40 functions over 7 were split (helpers extracted, behaviour unchanged) and `max-complexity` is now 7 in `pyproject.toml`.
 - [ ] Frontend: ESLint `complexity` is still 12; tighten it once the big frontend files (section 5) are split.
-- Found and fixed on the way: `scripts/audit_pollo_models.py --write` pointed at `v1_video.py`, which no longer exists (now `video.py`).
+- Found and fixed on the way: `scripts/audit_pollo_models.py --write` pointed at `v1_video.py`, which no longer exists (now `video/models.py`).
 
 ## 3. Stricter lint rules
 
@@ -36,13 +36,14 @@ Not adopted yet. Each needs a decision, because the violations are mostly in tes
 ## 4. Split the oversized modules
 
 Backend line counts (functions at module level):
-- [ ] `web/providers/pollo_engine/video.py` (~1020): one file holds the generic family plus Kling, extend, edit, upscale, lipsync and motion builders. Make `video/` a package with one module per family, keeping `registry.py` as the single entry point.
-- [ ] `web/providers/venice.py` (~1000, 56 defs): text, image and video clients and the billing logic in one file. Make it a package like `pollo_engine`.
+- [x] `web/providers/pollo_engine/video.py` is now a `video/` package: `types.py`, `models.py` (the `VIDEO_MODELS` rows, `cfg`, endpoints), `payloads.py` (the body builders); `__init__.py` re-exports the public names.
+- [x] `web/providers/venice.py` (1106 -> 754 lines): catalogue shaping moved to `venice_catalogue.py`, video input / duration / size rules to `venice_video.py` (alongside the existing `venice_errors.py` / `venice_types.py`). The HTTP client, caches and public API stay in `venice.py`: tests patch them there, so a deeper split needs the shared state moved first.
 - [ ] `web/chat/turn.py` (~1000): essentially one huge `Turn` class. Extract streaming, tool dispatch, persistence and poller start-up into collaborators.
-- [ ] `web/chat/routes.py` (~870, 55 defs) and `routes_turns.py` (~800): split by resource (settings, conversations, media, turns/SSE) with one `APIRouter` each.
+- [x] `web/chat/routes.py` (870 -> 592 lines): settings / instructions / spaces moved to `routes_settings.py`, attachments / media files / library / request log to `routes_media.py` (all registered from `web/chat/__init__.py`).
+- [ ] `web/chat/routes_turns.py` (877): the turn + regenerate + reword routes. The regenerate machinery (`_Regen`, `_regen_*`, `_regenerate_media`, `_replace_item`, `_reroll_item`) could move to its own `routes_regenerate.py`.
 - [ ] `web/media.py` (~810, 47 defs): library index, thumbnails, durations and the blank-image cache are four concerns. Split into a `media/` package.
 - [ ] `web/chatgpt_import.py` (~760), `web/providers/pollo.py` (~750), `web/providers/openrouter.py` (~590): same treatment, lower priority.
-- [ ] `tests/test_chat.py` (4522 lines) is the biggest file in the repo. Split by feature (settings, conversations, turns, media, SSE, migrations) and share fixtures through `tests/chat_fixtures.py`.
+- [x] `tests/test_chat.py` (5245 lines) is now `test_chat_conversations.py`, `test_chat_turns.py`, `test_chat_media.py`, `test_chat_images.py` and `test_chat_pollo.py`, with the shared fakes in `tests/chat_support.py`. Largest is `test_chat_media.py` (1461 lines): split further by class if it grows.
 
 ## 5. Frontend
 

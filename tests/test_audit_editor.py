@@ -137,3 +137,10 @@ def test_unknown_model_warns_and_skips(tmp_path: Path) -> None:
     assert n == 0
     assert warns
     assert out == SAMPLE
+
+
+def test_write_targets_exist_and_hold_what_it_edits() -> None:
+    """Test that the files --write edits exist (a moved file once broke it silently) and hold those fields."""
+    assert audit.MODELS_FILE.is_file()
+    assert audit.ENGINE_FILE.is_file()
+    assert '"HAS_REFS"' in audit.ENGINE_FILE.read_text(encoding="utf-8")
