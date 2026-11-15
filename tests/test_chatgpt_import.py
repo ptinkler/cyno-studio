@@ -18,6 +18,8 @@ from tests.stubs import stub
 from web.chat import generation as chat_generation
 from web.core.metadata import MetadataDB
 from web.providers import openrouter
+from web.transfer.chatgpt import importer as imp_importer
+from web.transfer.chatgpt import routes as imp_routes
 from web.types import JsonValue
 
 pytest_plugins = ["tests.chat_fixtures"]
@@ -126,7 +128,7 @@ def _export(
 @pytest.fixture
 def imp(chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch) -> None:
     """Point the importer at the test database (use ``imp_mod`` for the module itself)."""
-    monkeypatch.setattr(imp_mod, "get_db", stub(lambda: db))
+    monkeypatch.setattr(imp_importer, "get_db", stub(lambda: db))
     imp_mod.reset_jobs()  # per-tenant import progress, reset between tests
 
 
@@ -403,7 +405,7 @@ class TestUpload:
     @pytest.fixture
     def small_chunks(self, imp: None, monkeypatch: pytest.MonkeyPatch) -> None:
         """Make uploads go in small chunks."""
-        monkeypatch.setattr(imp_mod, "UPLOAD_CHUNK", 1000)
+        monkeypatch.setattr(imp_routes, "UPLOAD_CHUNK", 1000)
 
     def _start(self, client: TestClient, raw: bytes, name: str = "export1.zip") -> str:
         """Start an upload; return its id."""

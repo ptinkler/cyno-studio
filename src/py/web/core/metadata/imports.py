@@ -1,6 +1,6 @@
 """Track imported chats and apply their message updates.
 
-The importer in ``web/transfer/chatgpt.py`` uses these methods to preserve source
+The importer in ``web/transfer/chatgpt/`` uses these methods to preserve source
 ids and apply each chat's changes in a single transaction.
 """
 

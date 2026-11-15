@@ -20,7 +20,7 @@ class Payload(TypedDict):
     input: dict[str, JsonValue]
 
 
-# Terminal task statuses from the Pollo API (used by the poller in pollo.py).
+# Terminal task statuses from the Pollo API (used by the poller in pollo/tasks.py).
 SUCCESS_STATUSES = ("succeed", "success", "succeeded", "complete", "completed")
 ERROR_STATUSES = ("error", "failed")
 

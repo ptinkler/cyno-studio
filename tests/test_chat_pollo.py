@@ -32,6 +32,9 @@ from web.core.get_task import TaskResult
 from web.core.metadata import MetadataDB
 from web.providers import openrouter
 from web.providers import pollo as pollo_provider
+from web.providers.pollo import submit as pollo_submit
+from web.providers.pollo import tasks as pollo_tasks
+from web.providers.pollo import uploads as pollo_uploads
 from web.providers.pollo_engine._shared import Payload
 from web.providers.pollo_engine.registry import ModelSpec, PolloGenerator
 from web.providers.specs import CostQuery
@@ -52,7 +55,7 @@ class TestPolloImageModels:
     def pollo(self, chat: None, monkeypatch: pytest.MonkeyPatch, provider_keys: dict[str, str | None]) -> PolloCalls:
         """Provide the pollo fixture."""
         provider_keys["pollo"] = "pollo-test"
-        monkeypatch.setattr(pollo_provider, "POLL_INTERVAL", 0)
+        monkeypatch.setattr(pollo_tasks, "POLL_INTERVAL", 0)
         calls = PolloCalls()
 
         def make_generator(key: str, **kwargs: JsonValue) -> FakeGenerator:
@@ -69,11 +72,11 @@ class TestPolloImageModels:
             calls.uploads.append(path.name)
             return f"https://tmp.example/{path.name}"
 
-        monkeypatch.setattr(pollo_provider, "get_image_generator", make_generator)
-        monkeypatch.setattr(pollo_provider, "get_video_generator", make_generator)
-        monkeypatch.setattr(pollo_provider, "get_task_status", next_statuses)
-        monkeypatch.setattr(pollo_provider.requests, "get", download)
-        monkeypatch.setattr(pollo_provider.image_hosts, "upload_file", upload)
+        monkeypatch.setattr(pollo_submit, "get_image_generator", make_generator)
+        monkeypatch.setattr(pollo_submit, "get_video_generator", make_generator)
+        monkeypatch.setattr(pollo_tasks, "get_task_status", next_statuses)
+        monkeypatch.setattr(pollo_tasks.requests, "get", download)
+        monkeypatch.setattr(pollo_uploads.image_hosts, "upload_file", upload)
         return calls
 
     def _draw(
@@ -404,7 +407,7 @@ class TestPolloImageModels:
         def make_generator(key: str, **kwargs: JsonValue) -> FakeAudioGenerator:
             return FakeAudioGenerator(pollo, key, attrs, **kwargs)
 
-        monkeypatch.setattr(pollo_provider, "get_audio_generator", make_generator)
+        monkeypatch.setattr(pollo_submit, "get_audio_generator", make_generator)
         monkeypatch.setattr(chat_polling, "start_video_poller", stub(lambda: None))
 
     def test_auto_mode_chat_model_can_call_generate_audio(
@@ -732,7 +735,7 @@ class TestPolloImageModels:
         pollo: PolloCalls,
     ) -> None:
         """Test that image only kling without an image fails on the card."""
-        monkeypatch.setattr(pollo_provider, "get_video_generator", registry.video_generator)  # the real one
+        monkeypatch.setattr(pollo_submit, "get_video_generator", registry.video_generator)  # the real one
         msg = jp.obj(
             sse_events(
                 client.post(
@@ -799,7 +802,7 @@ class TestPolloImageModels:
         not_served = FakeResponse(
             {"message": "Not found", "code": "NOT_FOUND", "errorCode": "REJECTED"}, status_code=404
         )
-        monkeypatch.setattr(pollo_provider, "get_image_generator", stub(lambda: RefusingGenerator(not_served)))
+        monkeypatch.setattr(pollo_submit, "get_image_generator", stub(lambda: RefusingGenerator(not_served)))
         monkeypatch.setattr(openrouter, "stream_chat", stub(lambda: pytest.fail("no LLM in image mode")))
         msg = jp.obj(
             sse_events(
@@ -824,7 +827,7 @@ class TestPolloImageModels:
         refused = FakeResponse(
             {"message": "This model is not enabled for API access.", "code": "FORBIDDEN"}, status_code=403
         )
-        monkeypatch.setattr(pollo_provider, "get_image_generator", stub(lambda: RefusingGenerator(refused)))
+        monkeypatch.setattr(pollo_submit, "get_image_generator", stub(lambda: RefusingGenerator(refused)))
         monkeypatch.setattr(openrouter, "stream_chat", stub(lambda: pytest.fail("no LLM in image mode")))
         msg = jp.obj(
             sse_events(
@@ -891,7 +894,7 @@ class TestPolloRequestLog:
             def send_request(self) -> requests.Response:
                 return Resp()
 
-        assert pollo_provider.submit_task(Gen()) == "t-9"
+        assert pollo_tasks.submit_task(Gen()) == "t-9"
         entry = request_log.recent()[0]
         assert entry["provider"] == "pollo"
         assert entry["model"] == "seedance-2-0"

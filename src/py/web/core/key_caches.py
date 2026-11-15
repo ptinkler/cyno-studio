@@ -2,7 +2,7 @@
 
 A provider key decides what that user's model catalogue contains and what
 their balance is, so changing one must invalidate both. The caches live in
-`web/chat/catalogue.py` and `web/providers/venice.py`; the code that saves a
+`web/chat/catalogue.py` and `web/providers/venice/`; the code that saves a
 key lives in `web/auth/user_keys.py`.
 
 Having user_keys import those directly would make a cycle (web.chat imports

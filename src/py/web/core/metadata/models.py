@@ -173,7 +173,7 @@ class ChatConversation(Base):
     # inherited) but temporarily not sent to the model, until resumed. JSON
     # object keyed by instruction or instruction_group, each a list of ids.
     paused_instructions_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Imported from another app (web/transfer/chatgpt.py): where from, its id
+    # Imported from another app (web/transfer/chatgpt/): where from, its id
     # there and when it was last changed there, so a later import of the
     # same export only adds what's new
     import_source: Mapped[str | None] = mapped_column(String(20), nullable=True)

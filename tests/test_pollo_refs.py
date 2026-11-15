@@ -18,6 +18,8 @@ from web.chat.turn import Turn
 from web.core.metadata.models import ChatMessage
 from web.jsonutil import as_object
 from web.providers import VideoRequest
+from web.providers.pollo import tasks as pollo_tasks
+from web.providers.pollo import uploads as pollo_uploads
 from web.providers.pollo_engine import PolloGenerator
 
 if TYPE_CHECKING:
@@ -84,14 +86,14 @@ class TestSubmitRefBranch:
         def fake_upload(path: Path, what: str = "image") -> str:
             return f"https://h/{'vid' if what == 'video' else 'img'}/{path.name}"
 
-        monkeypatch.setattr(pollo, "_upload", fake_upload)
+        monkeypatch.setattr(pollo_uploads, "upload", fake_upload)
         captured: dict[str, Payload] = {}
 
         def fake_submit(gen: PolloGenerator) -> str:
             captured["p"] = gen.get_payload()
             return "task1"
 
-        monkeypatch.setattr(pollo, "submit_task", fake_submit)
+        monkeypatch.setattr(pollo_tasks, "submit_task", fake_submit)
         job = pollo.submit_video(
             VideoRequest(
                 "pollo/klingv4",
@@ -121,7 +123,7 @@ class TestSubmitRefBranch:
             assert gen.get_payload()
             return "task2"
 
-        monkeypatch.setattr(pollo, "submit_task", fake_submit)
+        monkeypatch.setattr(pollo_tasks, "submit_task", fake_submit)
         job = pollo.submit_video(VideoRequest("pollo/klingv4", "a fox runs", duration=5, ref_items=[]))
         assert job["id"] == "pollo:task2"
 
@@ -129,7 +131,7 @@ class TestSubmitRefBranch:
 def test_list_video_models_surfaces_ref_mode(provider_keys: dict[str, str | None]) -> None:
     """Test that list video models surfaces ref mode."""
     provider_keys["pollo"] = "K"
-    by_id = {m["id"]: m for m in pollo.list_video_models()}
+    by_id = {m["id"]: m for m in pollo.list_models("video")}
     assert as_object(by_id["pollo/klingv4"]["ref_mode"])["limits"] == {"image": 10, "video": 5, "audio": 3}
     assert as_object(by_id["pollo/klingv4flash"]["ref_mode"])["types"] == ["image", "video"]
     # A non-refs model carries ref_mode: None.

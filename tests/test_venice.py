@@ -23,6 +23,8 @@ from web.core import request_log
 from web.core.metadata import MetadataDB
 from web.jsonutil import as_object
 from web.providers import StreamOptions, VideoRequest, openrouter
+from web.providers.venice import client as venice_client
+from web.providers.venice import jobs as venice_jobs
 from web.providers.venice_errors import VeniceError
 from web.types import JsonValue, ModelEntry
 
@@ -239,8 +241,8 @@ def venice(
     fake = FakeVenice()
     # Catalogue builds price each video model; tests that queue videos set their own quote
     fake.routes["/video/quote"] = _quote
-    monkeypatch.setattr(v, "_client", fake)
-    monkeypatch.setattr(v, "_VIDEO_DIR", tmp_path / "venice-videos")
+    monkeypatch.setattr(venice_client, "http", fake)
+    monkeypatch.setattr(venice_jobs, "_VIDEO_DIR", tmp_path / "venice-videos")
     v.clear_caches()
     return fake
 

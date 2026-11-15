@@ -35,11 +35,11 @@ Adopted and enforced: `A`, `PLW`, `PLR0911`, `PLR0912`, `PLR0915`, `PLR2004` (ma
 
 ## 4. Split the oversized modules
 
-Done: `pollo_engine/video/` package; `venice_catalogue.py` / `venice_video.py`; `chat/routes_*` (settings, media, media items, turns); the test files; `media/` (paths, video, durations, thumbs, blank, index, routes); `chat/turn*.py` as a layered chain (`turn_base` -> `turn_history` -> `turn_generation` -> `turn_tools` -> `turn`); and the loose modules of `web/` moved into packages (`auth/`, `media/`, `uploads/`, `transfer/`, `core/`).
+Done: `pollo_engine/video/` package; the Python provider and importer splits (`providers/pollo/`, `providers/venice/`, `transfer/chatgpt/`); `venice_catalogue.py` / `venice_video.py`; `chat/routes_*` (settings, media, media items, turns); the test files; `media/` (paths, video, durations, thumbs, blank, index, routes); `chat/turn*.py` as a layered chain (`turn_base` -> `turn_history` -> `turn_generation` -> `turn_tools` -> `turn`); and the loose modules of `web/` moved into packages (`auth/`, `media/`, `uploads/`, `transfer/`, `core/`).
 
-- [ ] `web/providers/pollo.py` (799): split into a `pollo/` package (catalogue, uploads, tasks and polling, submit, estimate) behind a facade `__init__`; tests patch `get_*_generator`, `submit_task`, `POLL_INTERVAL` and `_upload` on it, so they need retargeting.
-- [ ] `web/transfer/chatgpt.py` (769): the import parser vs the importer vs the upload routes.
-- [ ] `web/providers/venice.py` (754): the HTTP client and caches could move out once tests stop patching them there.
+- [x] `providers/pollo.py` (799) is now a `providers/pollo/` package behind a facade `__init__`: `catalogue` (models, voices, key lookup), `uploads`, `tasks` (submit, poll, download), `submit` (image/video/audio jobs) and `cost`. Tests patch the module that looks the name up (`tasks.POLL_INTERVAL`, `tasks.submit_task`, `uploads.upload`, `submit.get_*_generator`). The flat `pollo_engine/`, `pollo_errors`, `pollo_estimate` and `pollo_models` still sit beside it; folding them into the package is optional.
+- [x] `transfer/chatgpt.py` (769) is now a `transfer/chatgpt/` package: `parse` (the export zip and its turns), `media`, `importer` (merge and run), `routes` (folder listing, run job, chunked uploads) and `common` (names and stats). Tests patch `importer.get_db` and `routes.UPLOAD_CHUNK`.
+- [x] `providers/venice.py` (754) is now a `providers/venice/` package: `client` (HTTP, auth, errors, balance), `models` (per-user catalogue and quotes), `text`, `images`, `jobs` (video queue to MP4) behind a facade `__init__` that also owns `clear_caches`. Tests patch `client.http` and `jobs._VIDEO_DIR`.
 - [ ] `src/py/web/chat/routes_media_items.py` (506), `media/routes.py` (394) are fine; keep an eye on them.
 
 ## 5. Frontend
