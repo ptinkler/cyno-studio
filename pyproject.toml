@@ -3,7 +3,7 @@
 [tool.ruff]
 target-version = "py313"
 line-length = 120
-extend-exclude = ["data", "src/js", "src/py/web/static"]
+extend-exclude = ["data", "src/js"]
 src = [".", "src/py"]  # import roots: the repo root (tests, scripts) and the Python source root (web)
 
 [tool.ruff.lint]
@@ -53,6 +53,9 @@ select = [
     "PLR0911",  # at most 6 return statements per function
     "PLR0912",  # at most 12 branches per function
     "PLR0915",  # at most 50 statements per function
+    "PLR0913",  # at most 5 arguments per function: group related ones into a request object
+    "PLR2004",  # no bare numbers in comparisons: name them (HTTPStatus for status codes)
+    "FBT",      # flag arguments (bool) are keyword-only, so call sites read `fn(x, strict=True)`
 ]
 
 ignore = [
@@ -109,7 +112,10 @@ extend-immutable-calls = [
 # - S101: assert is how pytest tests express checks; the -O concern behind the rule never applies.
 # - ANN: basedpyright strict already requires annotations (enforced there); no double-reporting.
 # - ARG: fixtures requested for their side effects and stand-ins that must match a replaced signature.
-"tests/*" = ["S101", "ANN", "ARG"]
+# - PLR0913: a test's arguments are the pytest fixtures it requests; there is nothing to group.
+# - PLR2004: tests assert exact counts and values; naming each expected number would only obscure them.
+# - FBT: test helpers and parametrised cases take plain booleans (`flag: bool`) for readability.
+"tests/*" = ["S101", "ANN", "ARG", "PLR0913", "PLR2004", "FBT"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["web", "tests"]

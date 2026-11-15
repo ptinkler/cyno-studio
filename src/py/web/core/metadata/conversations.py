@@ -131,7 +131,7 @@ class ConversationMixin(DBBase):
                 session.expunge(c)
             return convs
 
-    def set_conversation_pinned(self, conv_id: str, pinned: bool) -> None:
+    def set_conversation_pinned(self, conv_id: str, *, pinned: bool) -> None:
         """Pin or unpin. Not an edit, so the chat keeps its place among the rest."""
         with self._session() as session:
             session.query(ChatConversation).filter(ChatConversation.id == conv_id).update(

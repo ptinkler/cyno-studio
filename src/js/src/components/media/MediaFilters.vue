@@ -1,9 +1,9 @@
 <script setup>
 // Filter bar for the media library: v-model:filters is useMediaFilters' state
-const filters = defineModel('filters', { type: Object, required: true })
 defineProps({
   showKind: { type: Boolean, default: true },
 })
+const filters = defineModel('filters', { type: Object, required: true })
 
 const KINDS = [
   ['all', 'All'],

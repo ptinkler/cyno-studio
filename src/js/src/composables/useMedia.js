@@ -13,10 +13,21 @@ export const fetchMedia = () => apiGet('/api/media').then(r => r.items)
  * page's infinite scroll). Returns { items, total } — total is how many match
  * before paging. `all`/'' filter values and null params are left off.
  */
-export function fetchMediaPage({ offset = 0, limit = 0, kind, source, origin, q } = {}) {
+export function fetchMediaPage(
+  /** @type {{ offset?: number, limit?: number, kind?: string, source?: string, origin?: string, q?: string }} */ {
+    offset = 0,
+    limit = 0,
+    kind,
+    source,
+    origin,
+    q,
+  } = {},
+) {
   const params = { offset, limit, kind, source, origin, q }
   const qs = new URLSearchParams(
-    Object.entries(params).filter(([, v]) => v != null && v !== '' && v !== 'all'),
+    Object.entries(params)
+      .filter(([, v]) => v != null && v !== '' && v !== 'all')
+      .map(([k, v]) => [k, String(v)]),
   ).toString()
   return apiGet(`/api/media${qs ? `?${qs}` : ''}`).then(r => ({ items: r.items, total: r.total ?? r.items.length }))
 }

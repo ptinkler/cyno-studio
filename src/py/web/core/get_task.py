@@ -4,6 +4,7 @@ API Docs: https://docs.pollo.ai/task/get-task-status?playground=open
 """
 
 import logging
+from http import HTTPStatus
 
 import requests
 
@@ -31,7 +32,7 @@ def get_task_status(task_id: str, api_key: str) -> list[TaskResult]:
     response = requests.request("GET", url, headers={"x-api-key": api_key}, timeout=POLLO_API_TIMEOUT)
     if is_cloudflare_block(response):
         return [("cloudflare_blocked", CLOUDFLARE_MESSAGE, None, None)]
-    if response.status_code != 200:
+    if response.status_code != HTTPStatus.OK:
         return [("error", _error_message(response), None, None)]
     try:
         data = as_object(as_object(body_of(response)).get("data"))
@@ -90,7 +91,7 @@ def get_credit_balance(api_key: str) -> dict[str, float] | None:
     url = f"{POLLO_PLATFORM_BASE}/credit/balance"
     try:
         response = requests.get(url, headers=headers, timeout=POLLO_API_TIMEOUT)
-        if response.status_code == 200:
+        if response.status_code == HTTPStatus.OK:
             resp_json = as_object(body_of(response))
             # API wraps response in {"code":"SUCCESS","data":{...}}
             data = as_object(resp_json.get("data", resp_json))

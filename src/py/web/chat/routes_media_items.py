@@ -17,6 +17,8 @@ from web.chat.constants import DEFAULT_IMAGE_LIMIT
 from web.chat.deps import router, start_lock
 from web.chat.errors import InvalidMediaItemError
 from web.chat.generation import (
+    HistoryShape,
+    ImageAsk,
     conversation_instructions,
     exchange_fields,
     failure_fields,
@@ -186,10 +188,17 @@ def _regenerable_item(message_id: int, media_id: str) -> dict[str, JsonValue]:
     return item
 
 
-def _regeneration_inputs(
-    message_id: int, media_id: str, data: RegenerateMedia
-) -> tuple[dict[str, JsonValue], str, str, dict[str, JsonValue]]:
-    """Validate a regenerate request; the item, model, prompt and params to run it with."""
+@dataclass(frozen=True)
+class _Rerun:
+    """What a regenerated item is run with."""
+
+    model: str
+    prompt: str
+    params: dict[str, JsonValue]
+
+
+def _regeneration_inputs(message_id: int, media_id: str, data: RegenerateMedia) -> tuple[dict[str, JsonValue], _Rerun]:
+    """Validate a regenerate request; the item, and the model, prompt and params to run it with."""
     item = _regenerable_item(message_id, media_id)
     prompt = (data.prompt or "").strip() or as_str(item.get("prompt"))
     if not prompt:
@@ -205,16 +214,17 @@ def _regeneration_inputs(
         # The picture being edited leads the reference list; the references it
         # was itself made from are dropped, so the model edits this one image.
         params["refs"] = [file, *(r for r in as_list(params.get("refs")) if str(r).startswith("char:"))]
-    return item, model, prompt, params
+    return item, _Rerun(model, prompt, params)
 
 
 def _regenerate_media(message_id: int, media_id: str, data: RegenerateMedia) -> dict[str, JsonValue]:
     db = get_db()
-    item, model, prompt, params = _regeneration_inputs(message_id, media_id, data)
+    item, rerun = _regeneration_inputs(message_id, media_id, data)
+    model, prompt, params = rerun.model, rerun.prompt, rerun.params
     if data.replace:
-        item, msg = _replace_item(message_id, media_id, item, model, prompt, params)
+        item, msg = _replace_item(message_id, media_id, item, rerun)
     elif item["status"] == "done":
-        item, msg = _reroll_item(message_id, item, model, prompt, params)
+        item, msg = _reroll_item(message_id, item, rerun)
         media_id = str(item["id"])
     else:
         item = {**item, "prompt": prompt, "params": params, "model": model}
@@ -241,12 +251,7 @@ def _regenerate_media(message_id: int, media_id: str, data: RegenerateMedia) -> 
 
 
 def _replace_item(
-    message_id: int,
-    media_id: str,
-    item: Mapping[str, JsonValue],
-    model: str,
-    prompt: str,
-    params: dict[str, JsonValue],
+    message_id: int, media_id: str, item: Mapping[str, JsonValue], rerun: _Rerun
 ) -> tuple[dict[str, JsonValue], ChatMessage | None]:
     """Keep what the card looked like before, then clear its result fields.
 
@@ -261,9 +266,9 @@ def _replace_item(
         **item,
         **blank,
         "status": "pending",
-        "model": model,
-        "prompt": prompt,
-        "params": params,
+        "model": rerun.model,
+        "prompt": rerun.prompt,
+        "params": rerun.params,
         "versions": versions,
         "version_shown": len(versions),
         "spent": spent,
@@ -281,7 +286,7 @@ def _replace_item(
 
 
 def _reroll_item(
-    message_id: int, item: Mapping[str, JsonValue], model: str, prompt: str, params: dict[str, JsonValue]
+    message_id: int, item: Mapping[str, JsonValue], rerun: _Rerun
 ) -> tuple[dict[str, JsonValue], ChatMessage | None]:
     """Re-roll just this image/video: the original stays, a new one joins the reply."""
     kept = {k: v for k, v in item.items() if k not in _NOT_REROLLED}
@@ -289,9 +294,9 @@ def _reroll_item(
         **kept,
         "id": uuid.uuid4().hex[:8],
         "status": "pending",
-        "model": model,
-        "prompt": prompt,
-        "params": params,
+        "model": rerun.model,
+        "prompt": rerun.prompt,
+        "params": rerun.params,
     }
     return fresh, get_db().append_chat_media_item(message_id, fresh)
 
@@ -418,17 +423,16 @@ def _regen_image_context(r: _Regen) -> list[dict[str, JsonValue]] | None:
     history = branch_to(get_db().get_chat_messages(r.conv_id), r.message_id)[:-1]
     refs = r.params.get("refs")
     image_limit = as_int(r.params.get("image_limit"))
-    return image_context(
-        r.conv_id,
-        history,
-        as_int(r.params.get("history_limit")),
+    shape = HistoryShape(
+        as_int(r.params.get("history_limit")), image_limit if image_limit is not None else DEFAULT_IMAGE_LIMIT
+    )
+    ask = ImageAsk(
         msg.content if msg else "",
         None if r.params.get("direct") is True else r.prompt,
         [ref for ref in refs if isinstance(ref, str)] if isinstance(refs, list) else [],
-        conversation_instructions(r.conv_id),
         param_characters(r.params),
-        image_limit if image_limit is not None else DEFAULT_IMAGE_LIMIT,
     )
+    return image_context(r.conv_id, history, shape, ask, conversation_instructions(r.conv_id))
 
 
 def _regen_image(r: _Regen) -> None:

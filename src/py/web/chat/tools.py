@@ -4,8 +4,8 @@ The tools are generate_* and create_*; this also has the helper that adds the `c
 """
 
 from collections.abc import Mapping
-from typing import cast
 
+from web.jsonutil import as_object
 from web.types import JsonValue
 
 TITLE_PROMPT = """Write a short title, 2 to 6 words, for a chat that starts with the message below. \
@@ -27,7 +27,7 @@ IMAGE_TOOL_RESULT = "Image generated; it is shown to the user."
 VIDEO_TOOL_RESULT = "Video job started; it is shown to the user once rendering finishes."
 AUDIO_TOOL_RESULT = "Audio job started; it is shown to the user once it is ready."
 
-TOOLS_IMAGE = {
+TOOLS_IMAGE: dict[str, JsonValue] = {
     "type": "function",
     "function": {
         "name": "generate_image",
@@ -56,7 +56,7 @@ TOOLS_IMAGE = {
     },
 }
 
-TOOLS_CREATE_CHARACTER = {
+TOOLS_CREATE_CHARACTER: dict[str, JsonValue] = {
     "type": "function",
     "function": {
         "name": "create_character",
@@ -86,7 +86,7 @@ TOOLS_CREATE_CHARACTER = {
     },
 }
 
-TOOLS_CREATE_INSTRUCTION = {
+TOOLS_CREATE_INSTRUCTION: dict[str, JsonValue] = {
     "type": "function",
     "function": {
         "name": "create_instruction",
@@ -114,7 +114,7 @@ TOOLS_CREATE_INSTRUCTION = {
     },
 }
 
-TOOLS_AUDIO = {
+TOOLS_AUDIO: dict[str, JsonValue] = {
     "type": "function",
     "function": {
         "name": "generate_audio",
@@ -133,7 +133,7 @@ TOOLS_AUDIO = {
     },
 }
 
-TOOLS_VIDEO = {
+TOOLS_VIDEO: dict[str, JsonValue] = {
     "type": "function",
     "function": {
         "name": "generate_video",
@@ -166,28 +166,17 @@ def with_character_arg(tool: Mapping[str, JsonValue], names: list[str]) -> dict[
     """A generate_* tool with a `characters` argument listing the usable characters."""
     if not names:
         return dict(tool)
-    fn = cast("Mapping[str, JsonValue]", tool["function"])
-    params = cast("Mapping[str, JsonValue]", fn["parameters"])
-    properties = cast("Mapping[str, JsonValue]", params["properties"])
-    return cast(
-        "dict[str, JsonValue]",
-        {
-            **tool,
-            "function": {
-                **fn,
-                "parameters": {
-                    **params,
-                    "properties": {
-                        **properties,
-                        "characters": {
-                            "type": "array",
-                            "items": {"type": "string", "enum": names},
-                            "description": "The user's characters who appear in it. Their descriptions and reference "
-                            "images are sent to the model automatically, so the prompt needn't "
-                            "describe their looks.",
-                        },
-                    },
-                },
-            },
-        },
-    )
+    fn = as_object(tool["function"])
+    params = as_object(fn["parameters"])
+    properties = as_object(params["properties"])
+    characters: dict[str, JsonValue] = {
+        "type": "array",
+        "items": {"type": "string", "enum": list(names)},
+        "description": "The user's characters who appear in it. Their descriptions and reference "
+        "images are sent to the model automatically, so the prompt needn't "
+        "describe their looks.",
+    }
+    return {
+        **tool,
+        "function": {**fn, "parameters": {**params, "properties": {**properties, "characters": characters}}},
+    }

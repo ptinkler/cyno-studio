@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 import web.api as api_mod
 from tests.jsonpath import flag, text
-from web import dev_login, user_keys
+from web.auth import dev_login, user_keys
 from web.core.metadata import MetadataDB
 
 # These exercise REAL session resolution (cookie -> user), so opt out of the
@@ -31,9 +31,9 @@ def db(tmp_path: Path):
 def client(db: MetadataDB, monkeypatch: pytest.MonkeyPatch):
     """Provide the client fixture."""
     monkeypatch.setattr(api_mod, "get_db", lambda: db)
-    monkeypatch.setattr("web.users.get_db", lambda: db)
-    monkeypatch.setattr("web.user_keys.get_db", lambda: db)
-    monkeypatch.setattr("web.dev_login.get_db", lambda: db)
+    monkeypatch.setattr("web.auth.users.get_db", lambda: db)
+    monkeypatch.setattr("web.auth.user_keys.get_db", lambda: db)
+    monkeypatch.setattr("web.auth.dev_login.get_db", lambda: db)
     # Dev serves over plain HTTP; without this the session cookie is marked
     # Secure for the non-localhost "testserver" host and the TestClient won't
     # resend it, so follow-up requests look unauthenticated. (Passes locally

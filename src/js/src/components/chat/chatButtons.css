@@ -1,0 +1,33 @@
+.edit-send {
+  padding: 4px 12px;
+  border-radius: var(--r);
+  border: none;
+  background: var(--saccent);
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.edit-send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.meta-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: var(--text2);
+  font-size: 0.8rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  min-width: 26px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.meta-btn:hover {
+  background: var(--surface2);
+  color: var(--text);
+}

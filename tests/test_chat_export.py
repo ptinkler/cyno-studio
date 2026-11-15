@@ -1,4 +1,4 @@
-"""Tests for web.chat_export — exporting chats as a zip the Import dialog reads back."""
+"""Tests for web.transfer.export — exporting chats as a zip the Import dialog reads back."""
 
 import io
 import json
@@ -10,12 +10,13 @@ from typing import cast
 import pytest
 from fastapi.testclient import TestClient
 
-import web.chatgpt_import as imp_mod
+import web.transfer.chatgpt as imp_mod
 from tests.chat_fixtures import ConversationOut, png_bytes
 from tests.jsonpath import dig, number, obj, rows, seq, text
 from tests.stubs import stub
 from web.chat import conversation_dir
 from web.core.metadata import MetadataDB
+from web.transfer.chatgpt import importer as imp_importer
 from web.types import JsonValue
 
 pytest_plugins = ["tests.chat_fixtures"]
@@ -24,7 +25,7 @@ pytest_plugins = ["tests.chat_fixtures"]
 @pytest.fixture
 def imp(chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch) -> None:
     """The importer (``imp_mod``), on the test database."""
-    monkeypatch.setattr(imp_mod, "get_db", stub(lambda: db))
+    monkeypatch.setattr(imp_importer, "get_db", stub(lambda: db))
     imp_mod.reset_jobs()
 
 

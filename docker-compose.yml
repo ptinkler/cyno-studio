@@ -14,7 +14,7 @@ services:
     pull_policy: always
     restart: unless-stopped
     volumes:
-      - ${CYNO_HOST_DATA_DIR:-${POLLO_HOST_DATA_DIR:-}}:/data
+      - ${CYNO_HOST_DATA_DIR:-}:/data
     env_file:
       - .env
 
@@ -64,7 +64,7 @@ services:
       gluetun:
         condition: service_healthy
     volumes:
-      - ${CYNO_HOST_DATA_DIR:-${POLLO_HOST_DATA_DIR:-}}:/data
+      - ${CYNO_HOST_DATA_DIR:-}:/data
     env_file:
       - .env
 

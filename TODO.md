@@ -23,51 +23,54 @@ Status as of 2026-11-15. Measured numbers are from running the tools, not estima
 ## 2. Complexity ratchet: DONE (backend)
 
 - [x] All 40 functions over 7 were split (helpers extracted, behaviour unchanged) and `max-complexity` is now 7 in `pyproject.toml`.
-- [ ] Frontend: ESLint `complexity` is still 12; tighten it once the big frontend files (section 5) are split.
+- [x] Frontend: ESLint `complexity` is now 10 (tests exempt) and `max-lines` is 600 for source files. Nine functions were split to get there. Going lower (the backend uses 7) is optional.
 - Found and fixed on the way: `scripts/audit_pollo_models.py --write` pointed at `v1_video.py`, which no longer exists (now `video/models.py`).
 
 ## 3. Stricter lint rules
 
-Adopted (now in `select`, code already clean): `A` (builtin shadowing: `credits` renamed `credit_cost`), `PLW` (the four `global` caches became small holder objects with public test seams `reset_blank_checks()` / `reset_sweep()`), `PLR0911`, `PLR0912`, `PLR0915`.
+Adopted and enforced: `A`, `PLW`, `PLR0911`, `PLR0912`, `PLR0915`, `PLR2004` (magic numbers: HTTP statuses are `http.HTTPStatus`, the rest are named constants) and `FBT` (flag arguments are keyword-only). `PLR0913` is enforced too. Test-only ignores for `PLR0913`, `PLR2004` and `FBT` are approved and documented in `pyproject.toml`.
 
-Not adopted yet. Each needs a decision, because the violations are mostly in tests and `tests/*` per-file-ignores are limited to S101/ANN/ARG without the maintainer's approval:
-- [ ] `PLR0913` too many arguments (max 5): 50 violations. 11 are test methods whose count is pytest fixtures; 4 are 10-14 argument provider facade functions (`src/py/web/providers/__init__.py` x2, `pollo.py` x2, `venice.py` `submit_video`, `request_log.py`) that mirror the HTTP request model. Fixing them means parameter objects and touching every call site.
-- [ ] `PLR2004` magic numbers: 246 violations, 214 of them in tests (asserts on counts). In `src/py/web/` there are 32, mostly HTTP statuses (`>= 400`, 429, 404 ...): replace with `http.HTTPStatus`.
-- [ ] `FBT` boolean positional arguments: 74 violations, 58 in `src/py/web/`. Make them keyword-only.
-- Decision needed: approve test-only ignores for `PLR2004` / `PLR0913` / `FBT` (as was done for S101/ANN/ARG), or fix the tests too.
+- [x] `PLR0913` (at most 5 arguments) is enforced for non-test code. The 31 violations were fixed with request objects, not keyword-only tricks: `providers/specs.py` holds `ImageRequest`, `VideoRequest`, `StreamOptions` and `CostQuery` (every provider takes the same object and uses the fields it knows); `chat/generation.py` has `HistoryShape`, `RefLimits` and `ImageAsk`; `turn_generation.py` has `ImageSpec` and `VideoSpec`; `turn_base.py` has `TurnLink` and `Reword`; `request_log.CallResult`; `imports.ImportStamp`; `add_chat_message` takes typed `**fields` (`NewMessage`); Venice's `_Call`; uploads' `_UploadRule`; `MediaFilter` for the media list query.
 - Not recommended: `EM` (128) and `CPY` (133) are noise for this repo.
 
 ## 4. Split the oversized modules
 
-Backend line counts (functions at module level):
-- [x] `src/py/web/providers/pollo_engine/video.py` is now a `video/` package: `types.py`, `models.py` (the `VIDEO_MODELS` rows, `cfg`, endpoints), `payloads.py` (the body builders); `__init__.py` re-exports the public names.
-- [x] `src/py/web/providers/venice.py` (1106 -> 754 lines): catalogue shaping moved to `venice_catalogue.py`, video input / duration / size rules to `venice_video.py` (alongside the existing `venice_errors.py` / `venice_types.py`). The HTTP client, caches and public API stay in `venice.py`: tests patch them there, so a deeper split needs the shared state moved first.
-- [ ] `src/py/web/chat/turn.py` (~1000): essentially one huge `Turn` class. Extract streaming, tool dispatch, persistence and poller start-up into collaborators.
-- [x] `src/py/web/chat/routes.py` (870 -> 592 lines): settings / instructions / spaces moved to `routes_settings.py`, attachments / media files / library / request log to `routes_media.py` (all registered from `src/py/web/chat/__init__.py`).
-- [x] `src/py/web/chat/routes_turns.py` (877 -> 392 lines): pin / favourite / regenerate / version / active-generation routes moved to `routes_media_items.py`; the shared start lock now lives in `chat/deps.py` as `start_lock`.
-- [ ] `src/py/web/media.py` (~810, 47 defs): library index, thumbnails, durations and the blank-image cache are four concerns. Split into a `media/` package.
-- [ ] `src/py/web/chatgpt_import.py` (~760), `src/py/web/providers/pollo.py` (~750), `src/py/web/providers/openrouter.py` (~590): same treatment, lower priority.
-- [x] `tests/test_chat.py` (5245 lines) is now `test_chat_conversations.py`, `test_chat_turns.py`, `test_chat_media.py`, `test_chat_images.py` and `test_chat_pollo.py`, with the shared fakes in `tests/chat_support.py`. Largest is `test_chat_media.py` (1461 lines): split further by class if it grows.
+Done: `providers/pollo/engine/video/` package; the Python provider and importer splits (`providers/pollo/`, `providers/venice/`, `transfer/chatgpt/`); `venice_catalogue.py` / `venice_video.py`; `chat/routes_*` (settings, media, media items, turns); the test files; `media/` (paths, video, durations, thumbs, blank, index, routes); `chat/turn*.py` as a layered chain (`turn_base` -> `turn_history` -> `turn_generation` -> `turn_tools` -> `turn`); and the loose modules of `web/` moved into packages (`auth/`, `media/`, `uploads/`, `transfer/`, `core/`).
+
+- [x] `providers/pollo.py` (799) is now a `providers/pollo/` package behind a facade `__init__`: `catalogue` (models, voices, key lookup), `uploads`, `tasks` (submit, poll, download), `submit` (image/video/audio jobs) and `cost`. Tests patch the module that looks the name up (`tasks.POLL_INTERVAL`, `tasks.submit_task`, `uploads.upload`, `submit.get_*_generator`). The flat `pollo_engine/`, `pollo_errors`, `pollo_estimate` and `pollo_models` now live inside it as `engine/`, `errors`, `estimate` and `models`.
+- [x] `transfer/chatgpt.py` (769) is now a `transfer/chatgpt/` package: `parse` (the export zip and its turns), `media`, `importer` (merge and run), `routes` (folder listing, run job, chunked uploads) and `common` (names and stats). Tests patch `importer.get_db` and `routes.UPLOAD_CHUNK`.
+- [x] `providers/venice.py` (754) is now a `providers/venice/` package: `client` (HTTP, auth, errors, balance), `models` (per-user catalogue and quotes), `text`, `images`, `jobs` (video queue to MP4) behind a facade `__init__` that also owns `clear_caches`. The flat `venice_catalogue`, `venice_errors`, `venice_types` and `venice_video` are now `catalogue`, `errors`, `types` and `video` in the package. Tests patch `client.http` and `jobs._VIDEO_DIR`.
+- [ ] `src/py/web/chat/routes_media_items.py` (506), `media/routes.py` (394) are fine; keep an eye on them.
 
 ## 5. Frontend
 
-- [ ] Split `composables/useStudio.js` (1054 lines) into focused composables (queue, models, uploads, presets, usage); it has no component-level seams today.
-- [ ] Split the 700+ line components: `ModelPicker.vue` (910), `StudioComposer.vue` (762), `StudioView.vue` (750), `ChatMessage.vue` (738), `StudioSidebar.vue` (657).
-- [ ] Add type safety. The Python side is strict-typed end to end but the frontend is plain JS with no type check. Cheapest step: JSDoc plus `checkJs` in a `tsconfig`; fuller step: migrate to TypeScript starting with `composables/` and `utils/`.
-- [ ] Stop hand-mirroring the model tags: `composables/modelTags.js` `TAG_LABELS` copies `src/py/web/providers/model_tags.py` `TAGS` "in the same order". Serve the labels from the backend catalogue instead, or add a test that fails when they drift.
-- [ ] ESLint is `js.configs.recommended` + Vue recommended only. Consider `vue/flat/strongly-recommended` rules and `eslint-plugin-vue` `no-undef-components`, plus a `max-lines` limit to stop the files above regrowing.
+- [x] `composables/useStudio.js` (was 1054) is a 340-line composition root over `useStudioAttachments`, `useStudioThreads`, `useStudioTurns`, `useStudioPrompt` (estimate + enhance), `useStudioReuse`, plus the existing media/sidebar/defaults ones and the pure `studioDelete.js`. `studio.test.js` pins its public surface and the send/open/delete/reuse flows.
+- [x] The 700+ line components are split: `ModelPicker` (910 -> 450: `ModelRow`, `ModelBadge`, `useModelList`, `usePopPlacement`, `utils/modelBadges`), `StudioComposer` (762 -> 350: `ComposerAttachments`, `useMentionEditor`, `utils/refItems`), `StudioView` (750 -> 500: `useStudioRoutes`, `useGalleryModal`, `useThreadView`, `useStudioTheme`, `useAttachmentPicker`), `ChatMessage` (738 -> 360: `ChatMediaCard`, `ChatAttachments`, `PromptBox`, `PinButton`), `StudioSidebar` (657 -> 560: `SidebarSpaceFolder`). Scoped CSS moved with the markup; not yet looked at in a browser (see below).
+- [x] The split components were checked in a browser (2026-11-15). That turned up a use-before-define in `StudioView` setup; `appMount.test.js` (the whole app mounted, every pane) now guards against that class of bug.
+- [x] `npm run typecheck` (`tsc` with `checkJs`, non-strict) checks `composables/` and `utils/` and runs in CI; it needed five JSDoc annotations. Note `.vue` files are not covered yet: `vue-tsc` reports about 250 errors, nearly all from untyped array/object props (need `PropType` JSDoc per component).
+- [ ] **TypeScript migration (planned, own session).** Today: `npm run typecheck` (`tsc`, `checkJs`, non-strict) covers `composables/` and `utils/` in CI; `.vue` files are not checked (`vue-tsc` reports ~250 errors, almost all untyped `{ type: Array }` / `{ type: Object }` props), and `noImplicitAny` shows ~690 errors in the JS. Giving every array prop `PropType<any[]>` would silence them without checking anything, so don't. Plan, in order:
+  1. Generate the API types from the backend: export FastAPI's OpenAPI schema (`app.openapi()`, no server needed) and run `openapi-typescript` into `src/js/src/api/schema.d.ts`; add a `make`/npm script and a CI check that the committed file is up to date (the same drift concern as `TAG_LABELS`). Check first how many routes declare response models; untyped routes (plain `dict[str, JsonValue]`) need models on the Python side for this to pay off.
+  2. Hand-written domain types where the API schema doesn't reach (composer settings, attachments, UI state) in `src/js/src/types.ts`.
+  3. Migrate `utils/` then `composables/` to `.ts` (start with `useApi`, `useChat`, `useComposerSettings`, `useStudio*`), turning on `strict` for those paths via a second tsconfig, then the rest.
+  4. Components: `<script setup lang="ts">` with `defineProps<{...}>()` / `defineEmits<{...}>()`, a directory at a time (small shared ones first, then `studio/`, `chat/`), adding `vue-tsc` to `npm run typecheck` once it is clean. Vitest, ESLint (`typescript-eslint`) and Prettier configs need the TS pieces added.
+  5. Finish with `strict: true` everywhere and drop `checkJs`.
+  Tests (`__tests__`) can stay JS until last. `studio.test.js` and `modelTags.test.js` are the safety net for the first steps.
+- [x] `modelTags.test.js` reads `model_tags.py` and fails when `TAG_LABELS` drifts (it caught an existing ordering mismatch for `audio`, now fixed). Serving the labels from the backend instead remains an option.
+- [x] ESLint also enforces `eqeqeq`, `no-var`, `prefer-const`, `no-shadow`, `no-console` (warn/error allowed), `vue/no-undef-components` and `vue/no-unused-refs`, plus the complexity and `max-lines` limits above.
+- [x] `vue/define-macros-order` is enforced (props, emits, model). `flat/recommended` already includes the strongly-recommended rules.
 
 ## 6. Maintenance
 
 - [ ] Keep the refs-to-video docs and the audit/probe scripts (`scripts/`) in sync with what Pollo actually accepts (frontend/backend `[@name]` naming contract).
 - [ ] Periodically re-diff `docs.pollo.ai/openapi.json` against `MODEL_INFO` for newly added models. The Pollo build-out itself is finished: tags and filters, video extend/edit, motion, lip-sync, upscale, image tools and TTS/music are all wired.
+- Audit run 2026-11-15 (docs only, no key, nothing billable): 53 video models in the registry, 199 documented endpoints. Docs show a reference branch we don't declare (`ref_mode`) for `geminiomniedit` (13), `hailuo03` (15), `happyhorse10` (9), `klingvideoo1` (3), `pollo26` / `pollo26fast` (15), `seedance25extend` (50), `veo31` (3), `viduq2proedit` (7), `wan26` (3), `wanedit27` (10), `wanedit30` / `wanedit30prime` (22). `klingv3omni` declares one the docs don't show (known; kept). Documented but not in the registry and worth a look: `gemini-omni-1-2-flash` (13 refs), `minimax-h3-fast`, `minimax-h3-max-turbo`, `hailuo-2-3-fast`, `happyhorse-1-1` / `1-5`, `pollo-dance-2-0` / `-fast`. Nothing was written: each `ref_mode` needs the free estimate probe with your key (`make audit-models ARGS="--key …"`) to confirm the model is enabled first.
 - [ ] Deferred Pollo gaps: Sora-2 extend (uses `generationId`, not a video URL), Runway extend (takes `images`), video-edit extras (images, seed, audio).
 
-## 7. Rename clean-up (after every deployment has moved to the new names)
+## 7. Rename clean-up: DONE
 
-- [ ] Drop the legacy `POLLO_DATA_DIR` fallback (`src/py/web/core/config.py`, its tests, `tests/conftest.py`) and the `${POLLO_HOST_DATA_DIR}` fallback in `docker-compose.yml`.
-- [ ] Drop the "Renamed from pollo-api" note in `README.md` (the old-project cleanup line in `synology-boot.sh` is already gone).
-- [ ] Delete the old GHCR packages `ghcr.io/ptinkler/pollo-api` and `pollo-nginx` (GitHub profile -> Packages) and the old images on the NAS.
+- [x] Dropped the legacy `POLLO_DATA_DIR` fallback (`config.py`, its tests, `tests/conftest.py`) and the `${POLLO_HOST_DATA_DIR}` fallback in `docker-compose.yml`. A deployment still using the old names now gets the repo root (local) or an unset mount (compose) instead of its data, so check `.env` first.
+- [x] Dropped the "Renamed from pollo-api" note in `README.md`, and the orphan root `package-lock.json` (empty, still named `pollo-api`).
+- [x] Deleted the old GHCR packages `pollo-api` and `pollo-nginx`; the NAS images, stale remote branches and stray scratch folder are gone too. The rename is fully cleaned up.
 
 ## 8. Code inspection (hacks, workarounds, suppressions)
 
@@ -87,4 +90,4 @@ Also done (second pass):
 - The two failed-image retries share `utils/imageRetry.js`.
 
 Open:
-- [ ] Remaining `cast(` calls in `request_log.py` / `chat/turn.py` / `chat/tools.py` could be tightened with TypedDicts for the tool schemas.
+- [x] Tightened the `cast(` calls in `request_log.py`, `chat/tools.py` (tool schemas are typed `dict[str, JsonValue]`), `chat/turn_tools.py` and `chat/generation.py`: 47 -> 34 in `src/py`. The log's `_last` was typed as one shape and assigned another (now one typed `Mapping`), and a streamed chat reply is a small dataclass with `as_json()` instead of a TypedDict cast to JSON. The 34 left are TypedDict construction, Protocol shims for untyped libraries (Authlib, ASGI scope) and ORM internals.

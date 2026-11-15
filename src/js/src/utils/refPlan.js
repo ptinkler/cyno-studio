@@ -16,18 +16,31 @@ function characterRefs(characters, off, perCharacter = Infinity) {
   return out
 }
 
+// The first `n` of a list (all of it when `n` is null)
+const take = (list, n) => (n == null ? list : list.slice(0, n))
+
+// Character image refs the user switched off
+const switchedOffCharacterRefs = (characters, off) =>
+  characters.flatMap(c => (c.images || []).map(f => charRef(c.id, f))).filter(r => off.has(r))
+
 /**
  * `lead`, `chat`: chat image refs (filenames), `characters`: { id, images },
  * `imageLimit`: cap on chat images (null = all), `maxRefs`: the model's
  * maximum (null = unknown), `choices`: { on, off } from the composer.
  * Returns { sent, dropped, off } lists of refs, `sent` in send order.
  */
-export function planRefs({ lead = [], chat = [], characters = [], imageLimit = null, maxRefs = null, choices = {} }) {
-  const on = choices.on || []
-  const off = new Set(choices.off || [])
+export function planRefs({
+  lead = [],
+  chat = [],
+  characters = [],
+  imageLimit = null,
+  maxRefs = null,
+  choices: { on = [], off: offList = [] } = {},
+}) {
+  const off = new Set(offList)
   const offChat = dedupe([...lead, ...chat]).filter(r => off.has(r))
   const kept = dedupe([...lead, ...chat]).filter(r => !off.has(r))
-  const chatRefs = imageLimit == null ? kept : kept.slice(0, imageLimit)
+  const chatRefs = take(kept, imageLimit)
   const split = Math.min(dedupe(lead).filter(r => !off.has(r)).length, chatRefs.length)
   const every = characterRefs(characters, off)
   const mains = characterRefs(characters, off, 1)
@@ -39,7 +52,7 @@ export function planRefs({ lead = [], chat = [], characters = [], imageLimit = n
     ...chatRefs.slice(split),
     ...every,
   ])
-  const offChars = characters.flatMap(c => (c.images || []).map(f => charRef(c.id, f))).filter(r => off.has(r))
-  const n = maxRefs == null ? ordered.length : maxRefs
-  return { sent: ordered.slice(0, n), dropped: ordered.slice(n), off: [...offChat, ...offChars] }
+  const offChars = switchedOffCharacterRefs(characters, off)
+  const sent = take(ordered, maxRefs)
+  return { sent, dropped: ordered.slice(sent.length), off: [...offChat, ...offChars] }
 }

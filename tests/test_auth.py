@@ -7,9 +7,9 @@ from fastapi.testclient import TestClient
 
 import web.api as api_mod
 from tests.jsonpath import obj
-from web import passwords
+from web.auth import passwords
+from web.auth.passwords import hash_password
 from web.core.metadata import MetadataDB
-from web.passwords import hash_password
 
 
 @pytest.fixture
@@ -60,7 +60,7 @@ class TestKeys:
     def test_put_keys(self, client: TestClient, db: MetadataDB, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that put keys."""
         monkeypatch.setenv("KEYS_SECRET", "test-secret")
-        monkeypatch.setattr("web.user_keys.get_db", lambda: db)
+        monkeypatch.setattr("web.auth.user_keys.get_db", lambda: db)
         r = client.put("/api/keys", json={"keys": {"pollo": "sk-test-key"}})
         assert r.status_code == 200
 

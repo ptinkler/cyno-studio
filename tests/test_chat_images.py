@@ -5,6 +5,7 @@ import json
 import socket
 import threading
 from collections.abc import Callable, Iterator
+from pathlib import Path
 from typing import ClassVar, Self
 
 import httpx
@@ -17,11 +18,11 @@ from tests.chat_fixtures import SETTINGS, ConversationOut, png_bytes, sse_events
 from tests.chat_support import ChatImageSpy, ImageApiSpy, StreamSpy
 from tests.errors import server_disconnected
 from tests.stubs import stub
-from web import request_log
 from web.chat import catalogue as chat_catalogue
 from web.chat import tools as chat_tools
+from web.core import request_log
 from web.core.metadata import MetadataDB
-from web.providers import openrouter
+from web.providers import ImageRequest, openrouter
 from web.types import Catalogue, JsonValue
 
 pytest_plugins = ["tests.chat_fixtures"]
@@ -650,7 +651,7 @@ class TestOpenRouterImageStream:
             return self._Stream(lines)
 
         monkeypatch.setattr(openrouter.http_client, "stream", fake_stream)
-        images, cost = openrouter.generate_image("x/img", "a fox")
+        images, cost = openrouter.generate_image(ImageRequest("x/img", "a fox"))
         assert sent["stream"] is True
         assert images == [(png_bytes(), "image/png")]
         assert cost == 0.03
@@ -678,12 +679,16 @@ class TestOpenRouterImageStream:
         assert item["request"] == entry["request"]
         assert jp.dig(item, "request", "prompt") == "a fox"
 
-    def test_reference_images_are_cut_short_in_the_log(self, chat: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_reference_images_are_cut_short_in_the_log(
+        self, chat: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         """Test that reference images are cut short in the log."""
         lines = ["event: image_generation.completed", "data: " + json.dumps({"b64_json": self._b64()}), ""]
         monkeypatch.setattr(openrouter.http_client, "stream", stub(lambda: self._Stream(lines)))
         request_log.forget_last()
-        openrouter.generate_image("x/img", "a fox", input_images=["data:image/png;base64," + "A" * 4096])
+        ref = tmp_path / "ref.png"
+        ref.write_bytes(b"A" * 3100)  # sent inline as a data URL, logged as its size
+        openrouter.generate_image(ImageRequest("x/img", "a fox", ref_paths=[ref]))
         last = request_log.take_last()
         assert last is not None
         assert last["response"] == {"images": ["image/png"], "cost": None}
@@ -695,7 +700,7 @@ class TestOpenRouterImageStream:
         """Test that event name alone identifies the final image."""
         lines = ["event: image_generation.completed", "data: " + json.dumps({"b64_json": self._b64()}), ""]
         monkeypatch.setattr(openrouter.http_client, "stream", stub(lambda: self._Stream(lines)))
-        images, _ = openrouter.generate_image("x/img", "a fox")
+        images, _ = openrouter.generate_image(ImageRequest("x/img", "a fox"))
         assert len(images) == 1
 
     def test_error_event_raises(self, chat: None, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -703,7 +708,7 @@ class TestOpenRouterImageStream:
         lines = ["event: error", "data: " + json.dumps({"error": {"message": "flagged by moderation"}}), ""]
         monkeypatch.setattr(openrouter.http_client, "stream", stub(lambda: self._Stream(lines)))
         with pytest.raises(openrouter.OpenRouterError, match="flagged"):
-            openrouter.generate_image("x/img", "a fox")
+            openrouter.generate_image(ImageRequest("x/img", "a fox"))
 
     def test_plain_json_answer_still_works(self, chat: None, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that plain json answer still works."""
@@ -713,7 +718,7 @@ class TestOpenRouterImageStream:
             "stream",
             stub(lambda: self._Stream([], content_type="application/json", body=body)),
         )
-        images, cost = openrouter.generate_image("x/img", "a fox")
+        images, cost = openrouter.generate_image(ImageRequest("x/img", "a fox"))
         assert len(images) == 1
         assert cost == 0.01
 
@@ -721,4 +726,4 @@ class TestOpenRouterImageStream:
         """Test that stream without an image raises."""
         monkeypatch.setattr(openrouter.http_client, "stream", stub(lambda: self._Stream(["data: [DONE]"])))
         with pytest.raises(openrouter.OpenRouterError, match="no images"):
-            openrouter.generate_image("x/img", "a fox")
+            openrouter.generate_image(ImageRequest("x/img", "a fox"))

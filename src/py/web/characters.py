@@ -26,11 +26,13 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from web.auth.users import require_user
 from web.core import config
 from web.core.metadata import Character, MetadataDB, get_db
 from web.types import JsonValue
-from web.uploads import image_media_type, read_image_upload, safe_filename
-from web.users import require_user
+from web.uploads.files import image_media_type, read_image_upload, safe_filename
+
+_MIN_WORDS_FOR_SHORT_NAME = 2  # a first name only stands in for a name with more than one word
 
 router = APIRouter(prefix="/api/characters", dependencies=[Depends(require_user)])
 
@@ -96,7 +98,7 @@ def _short_name(char: Character, chars: list[Character]) -> str | None:
     For example, return "Chloe" for "Chloe Muscle" if no other character shares that first name.
     """
     words = char.name.split()
-    if len(words) < 2:
+    if len(words) < _MIN_WORDS_FOR_SHORT_NAME:
         return None
     first = words[0].lower()
     if any(c.id != char.id and (c.name.strip().lower() == first or c.name.split()[0].lower() == first) for c in chars):
@@ -272,7 +274,7 @@ def _require_char(character_id: int) -> Character:
 
 @router.get("")
 def api_list_characters(
-    conversation_id: str | None = None, include_adhoc: bool = False
+    conversation_id: str | None = None, *, include_adhoc: bool = False
 ) -> dict[str, list[dict[str, JsonValue]]]:
     """List saved characters and relevant ad-hoc characters.
 

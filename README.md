@@ -4,8 +4,6 @@ A self-hosted studio for chat, image, video and audio generation across several 
 
 Originally built for rapid on-the-fly D&D resource creation — generating atmospheric video loops, character portraits, and scene backgrounds for tabletop use. Grew into a general-purpose personal generation studio with chats, galleries, characters, credit tracking, and VPN rotation.
 
-> **Renamed from `pollo-api`.** Existing deployments: rename `POLLO_DATA_DIR` / `POLLO_HOST_DATA_DIR` in your `.env` to `CYNO_DATA_DIR` / `CYNO_HOST_DATA_DIR` (the old names still work for now, with a warning), and stop the old stack once with `docker compose -p pollo-api down` before bringing up `cyno-studio`. The container images are now `ghcr.io/ptinkler/cyno-studio` and `cyno-studio-nginx`. `POLLO_API_KEY` is unchanged: it is the Pollo provider's key.
-
 ## Features
 
 - Generate videos from image + prompt via multiple Pollo models

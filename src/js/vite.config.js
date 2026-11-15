@@ -13,7 +13,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../py/web/static',
+    outDir: 'dist', // src/js/dist, served by the API (and by nginx in the image)
     emptyOutDir: true,
   },
   test: {

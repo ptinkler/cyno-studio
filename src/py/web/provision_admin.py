@@ -15,9 +15,9 @@ import argparse
 import getpass
 import sys
 
+from web.auth.passwords import hash_password
 from web.core import config
 from web.core.metadata import get_db
-from web.passwords import hash_password
 
 
 def _emit(text: str) -> None:

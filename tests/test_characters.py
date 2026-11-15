@@ -17,11 +17,12 @@ from tests.stubs import stub
 from web.chat import catalogue as chat_catalogue
 from web.chat import constants as chat_constants
 from web.chat import generation as chat_generation
-from web.chat import turn as chat_turn
+from web.chat import turn_base as chat_turn_base
 from web.core.metadata import MetadataDB
 from web.jsonutil import as_object
-from web.providers import openrouter
+from web.providers import ImageRequest, StreamOptions, VideoRequest, openrouter
 from web.types import ChatChunk, JsonValue, VideoJob
+from web.uploads.files import file_to_data_url
 
 pytest_plugins = ["tests.chat_fixtures"]
 
@@ -86,11 +87,9 @@ def _capture_images(monkeypatch: pytest.MonkeyPatch) -> ImageCapture:
     """Replace image generation with a stub that records the prompt and reference images."""
     got = ImageCapture()
 
-    def generate_image(
-        model: str, prompt: str, input_images: list[str] | None = None, **_kw: object
-    ) -> tuple[list[tuple[bytes, str]], float | None]:
-        got.sent_prompt = prompt
-        got.input_images = input_images
+    def generate_image(req: ImageRequest) -> tuple[list[tuple[bytes, str]], float | None]:
+        got.sent_prompt = req.prompt
+        got.input_images = [file_to_data_url(p) for p in req.ref_paths] or None
         return [(png_bytes(), "image/png")], None
 
     monkeypatch.setattr(openrouter, "generate_image", generate_image)
@@ -101,9 +100,9 @@ def _capture_chat(monkeypatch: pytest.MonkeyPatch) -> ChatCapture:
     """Replace the chat stream with a stub that records messages and tools and answers "Hi"."""
     seen = ChatCapture()
 
-    def stream_chat(model: str, messages: Messages, tools: Tools = None, **_kw: object) -> Iterator[ChatChunk]:
+    def stream_chat(model: str, messages: Messages, options: StreamOptions | None = None) -> Iterator[ChatChunk]:
         seen.messages = messages
-        seen.tools = tools
+        seen.tools = options.tools if options else None
         return text_chunks("Hi")
 
     monkeypatch.setattr(openrouter, "stream_chat", stream_chat)
@@ -382,8 +381,8 @@ class TestInChat:
         self._attach(client, conv, linh)
         sent: list[str] = []
 
-        def submit_video(model: str, prompt: str, **_kw: object) -> VideoJob:
-            sent.append(prompt)
+        def submit_video(req: VideoRequest) -> VideoJob:
+            sent.append(req.prompt)
             return {"id": "job1"}
 
         monkeypatch.setattr(openrouter, "submit_video", submit_video)
@@ -515,8 +514,8 @@ class TestUseByName:
             ]
         )
 
-        def stream(model: str, messages: Messages, tools: Tools = None, **_kw: object) -> Iterator[ChatChunk]:
-            tools_seen.append(tools)
+        def stream(model: str, messages: Messages, options: StreamOptions | None = None) -> Iterator[ChatChunk]:
+            tools_seen.append(options.tools if options else None)
             return next(replies)
 
         monkeypatch.setattr(openrouter, "stream_chat", stream)
@@ -547,7 +546,7 @@ class TestUseByName:
         replies = iter([*calls, text_chunks("Done.")])
         results: list[dict[str, JsonValue]] = []
 
-        def stream(model: str, messages: Messages, tools: Tools = None, **_kw: object) -> Iterator[ChatChunk]:
+        def stream(model: str, messages: Messages, options: StreamOptions | None = None) -> Iterator[ChatChunk]:
             results.extend(
                 as_object(cast("object", json.loads(text(m, "content")))) for m in messages if dig(m, "role") == "tool"
             )
@@ -670,7 +669,7 @@ class TestReferenceCaps:
             return real(kind, mid)
 
         # model_info is read in both the turn (ref caps) and generation (modality) modules
-        monkeypatch.setattr(chat_turn, "model_info", fake_info)
+        monkeypatch.setattr(chat_turn_base, "model_info", fake_info)
         monkeypatch.setattr(chat_generation, "model_info", fake_info)
         monkeypatch.setattr(openrouter, "generate_image", stub(lambda: ([(png_bytes(), "image/png")], None)))
         return _params(sse_events(_post(client, conv, "go", mode="image", **settings)))

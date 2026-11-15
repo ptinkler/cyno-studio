@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 import web.characters as characters_mod
 import web.chat as chat_pkg
 import web.core.config as config
-import web.media as media_mod
+import web.media.index as index_mod
 from tests import jsonpath as jp
 from tests.chat_fixtures import SETTINGS, ConversationOut, png_bytes, sse_events, text_chunks, tool_chunks
 from tests.chat_support import FakeImages, FakeStream, FakeVideoSubmit, PollerStarts
@@ -24,8 +24,9 @@ from web.chat import catalogue as chat_catalogue
 from web.chat import generation as chat_generation
 from web.chat import polling as chat_polling
 from web.core.metadata import ChatMessage, MetadataDB
-from web.providers import openrouter
+from web.providers import ImageRequest, VideoRequest, openrouter
 from web.types import ChatChunk, JsonValue, VideoJob
+from web.uploads.files import file_to_data_url
 
 pytest_plugins = ["tests.chat_fixtures"]
 
@@ -565,8 +566,8 @@ class TestModerationAndRegenerate:
         monkeypatch.setattr(chat_polling, "start_video_poller", started)
         got: dict[str, JsonValue] = {}
 
-        def fake_submit(model: str, _prompt: str, **kw: JsonValue) -> VideoJob:
-            got.update(model=model, **kw)
+        def fake_submit(req: VideoRequest) -> VideoJob:
+            got.update(model=req.model, duration=req.duration)
             return {"id": "gen-vid-9"}
 
         monkeypatch.setattr(openrouter, "submit_video", fake_submit)
@@ -1047,8 +1048,8 @@ class TestEditAndRewordInPlace:
         monkeypatch.setattr(threading, "Thread", Inline)
 
     def _capture(self, monkeypatch: pytest.MonkeyPatch, got: dict[str, JsonValue]) -> None:
-        def fake_image(model: str, prompt: str, **kw: JsonValue) -> tuple[list[tuple[bytes, str]], float | None]:
-            got.update(model=model, prompt=prompt, **kw)
+        def fake_image(req: ImageRequest) -> tuple[list[tuple[bytes, str]], float | None]:
+            got.update(model=req.model, prompt=req.prompt, input_images=[file_to_data_url(p) for p in req.ref_paths])
             return [(png_bytes(), "image/png")], 0.03
 
         monkeypatch.setattr(openrouter, "generate_image", fake_image)
@@ -1104,7 +1105,7 @@ class TestEditAndRewordInPlace:
             json={"prompt": "give it a hat", "edit": True, "replace": True},
         )
         item = self._media(db, msg.id)[0]
-        assert "img_old.png" in media_mod.referenced_files(item)
+        assert "img_old.png" in index_mod.referenced_files(item)
 
     def test_redo_re_rolls_the_prompt_without_the_picture(
         self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
@@ -1395,8 +1396,8 @@ class TestRetryAFailedPicture:
         self._inline(monkeypatch)
         got: dict[str, str] = {}
 
-        def fake_image(model: str, prompt: str, **kw: object) -> tuple[list[tuple[bytes, str]], float | None]:
-            got.update(prompt=prompt)
+        def fake_image(req: ImageRequest) -> tuple[list[tuple[bytes, str]], float | None]:
+            got.update(prompt=req.prompt)
             return [(png_bytes(), "image/png")], 0.01
 
         monkeypatch.setattr(openrouter, "generate_image", fake_image)
@@ -1435,7 +1436,7 @@ class TestRetryAFailedPicture:
 def test_a_webm_attachment_is_recorded_as_a_video(
     client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB
 ) -> None:
-    """Attachment kind comes from web.media_types now.
+    """Attachment kind comes from web.media.kinds now.
 
     Only ".mp4" counted before, so a .webm or .mov clip was recorded as an image.
     """

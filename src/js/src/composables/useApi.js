@@ -8,6 +8,20 @@ const RETRY_CONFIG = {
   maxDelay: 2000,
 }
 
+const API_KEY_REQUIRED = 'API key required'
+
+// One request: the response when it's final (success, a client error, or the last try), else the error to retry on
+async function fetchOnce(url, opts, isLast) {
+  const response = await fetch(url, opts)
+  if (response.status === 401) {
+    const { promptLogin } = useAuth()
+    promptLogin()
+    throw new Error(API_KEY_REQUIRED)
+  }
+  if (response.ok || response.status < 500 || isLast) return { response }
+  return { error: new Error(`API error: ${response.status}`) }
+}
+
 async function fetchWithRetry(url, options = {}, retries = RETRY_CONFIG.maxRetries) {
   let lastError
   let delay = RETRY_CONFIG.initialDelay
@@ -16,19 +30,12 @@ async function fetchWithRetry(url, options = {}, retries = RETRY_CONFIG.maxRetri
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const response = await fetch(url, opts)
-      if (response.status === 401) {
-        const { promptLogin } = useAuth()
-        promptLogin()
-        throw new Error('API key required')
-      }
-      if (response.ok || response.status < 500 || attempt === retries) {
-        return response
-      }
-      lastError = new Error(`API error: ${response.status}`)
+      const result = await fetchOnce(url, opts, attempt === retries)
+      if (result.response) return result.response
+      lastError = result.error
     } catch (err) {
       lastError = err
-      if (err.message === 'API key required') throw err
+      if (err.message === API_KEY_REQUIRED) throw err
     }
 
     if (attempt < retries) {

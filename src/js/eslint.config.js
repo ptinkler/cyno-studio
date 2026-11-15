@@ -4,7 +4,7 @@ import pluginVue from 'eslint-plugin-vue'
 import globals from 'globals'
 
 export default [
-  { ignores: ['coverage/**'] },
+  { ignores: ['coverage/**', 'dist/**'] }, // dist is the build output
   js.configs.recommended,
   ...pluginVue.configs['flat/recommended'],
   {
@@ -15,8 +15,23 @@ export default [
     },
     rules: {
       'no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrors: 'none' }],
-      complexity: ['error', 12],
+      complexity: ['error', 10],
+      eqeqeq: ['error', 'always', { null: 'ignore' }],
+      'no-var': 'error',
+      'prefer-const': 'error',
+      'no-shadow': 'error',
+      'no-console': ['error', { allow: ['warn', 'error'] }],
+      'vue/no-undef-components': ['error', { ignorePatterns: ['^router-', '^RouterView$', '^RouterLink$'] }],
+      'vue/no-unused-refs': 'error',
+      'vue/define-macros-order': ['error', { order: ['defineProps', 'defineEmits', 'defineModel'] }],
+      // Stop the big components and composables regrowing: split before they pass this
+      'max-lines': ['error', { max: 600, skipBlankLines: true, skipComments: true }],
     },
+  },
+  {
+    // Tests read top to bottom: long files and long cases are fine
+    files: ['src/__tests__/**'],
+    rules: { complexity: 'off', 'max-lines': 'off' },
   },
   {
     files: ['src/__tests__/**', 'vite.config.js', 'eslint.config.js'],

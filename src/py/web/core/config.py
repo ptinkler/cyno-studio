@@ -4,13 +4,10 @@ All modules that need ROOT_DIR, ASSETS_DIR, DB_PATH, or API constants should
 import from here instead of computing them independently.
 """
 
-import logging
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-
-log = logging.getLogger(__name__)
 
 # Project root (the repo directory)
 _PROJECT_ROOT = Path(__file__).resolve().parents[4]  # src/py/web/core/config.py
@@ -23,12 +20,9 @@ load_dotenv(_PROJECT_ROOT / ".env")
 
 
 def data_dir() -> Path:
-    """The data directory: CYNO_DATA_DIR, else the legacy POLLO_DATA_DIR (with a warning), else the repo root."""
+    """The data directory: CYNO_DATA_DIR, else the repo root."""
     if configured := os.environ.get("CYNO_DATA_DIR"):
         return Path(configured)
-    if legacy := os.environ.get("POLLO_DATA_DIR"):
-        log.warning("POLLO_DATA_DIR is deprecated: rename it to CYNO_DATA_DIR (the project was renamed)")
-        return Path(legacy)
     return _PROJECT_ROOT
 
 

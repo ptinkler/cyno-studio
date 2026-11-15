@@ -7,13 +7,12 @@ special-casing one by name. `provider_for()` is the first step of that: it maps
 a model id to the module that owns it (OpenRouter is the fallback).
 """
 
-from collections.abc import Callable, Iterator
-from pathlib import Path
+from collections.abc import Iterator
 from typing import Protocol, cast
 
-from web.providers import openrouter, pollo, pollo_models, venice
+from web.providers import openrouter, pollo, venice
+from web.providers.specs import ImageRequest, StreamOptions, VideoRequest
 from web.types import ChatChunk, JsonValue, ModelEntry, VideoJob
-from web.uploads import file_to_data_url
 
 
 # Dispatch order for the model catalogue (Pollo first, OpenRouter last). Each
@@ -25,7 +24,7 @@ class Provider(Protocol):
 
     def is_configured(self) -> bool: ...
 
-    def list_models(self, kind: str, refresh: bool = False, /) -> list[ModelEntry]: ...
+    def list_models(self, kind: str, *, refresh: bool = False) -> list[ModelEntry]: ...
 
 
 PROVIDERS: tuple[Provider, ...] = (pollo, venice, openrouter)
@@ -33,63 +32,19 @@ PROVIDERS: tuple[Provider, ...] = (pollo, venice, openrouter)
 
 class _TextProvider(Protocol):
     def stream_chat(
-        self,
-        model: str,
-        messages: list[dict[str, JsonValue]],
-        tools: list[dict[str, JsonValue]] | None = None,
-        session_id: str | None = None,
-        max_seconds: float | None = None,
-        should_stop: Callable[[], bool] | None = None,
+        self, model: str, messages: list[dict[str, JsonValue]], options: StreamOptions | None = None
     ) -> Iterator[ChatChunk]: ...
 
 
 class _VideoProvider(Protocol):
-    def submit_video(
-        self,
-        model: str,
-        prompt: str,
-        *,
-        duration: int | None = None,
-        aspect_ratio: str | None = None,
-        resolution: str | None = None,
-        generate_audio: bool | None = None,
-        first_frame: Path | str | None = None,
-        last_frame: Path | None = None,
-        source_video: Path | None = None,
-        source_audio: Path | None = None,
-        mode: str | None = None,
-        refs: list[Path] | None = None,
-        ref_items: list[dict[str, object]] | None = None,
-        session_id: str | None = None,
-    ) -> VideoJob: ...
+    def submit_video(self, req: VideoRequest) -> VideoJob: ...
 
 
 def stream_chat(
-    model: str,
-    messages: list[dict[str, JsonValue]],
-    tools: list[dict[str, JsonValue]] | None = None,
-    session_id: str | None = None,
-    max_seconds: float | None = None,
-    should_stop: Callable[[], bool] | None = None,
+    model: str, messages: list[dict[str, JsonValue]], options: StreamOptions | None = None
 ) -> Iterator[ChatChunk]:
     """Stream chat chunks from the provider that owns `model`."""
-    provider = cast("_TextProvider", provider_for(model))
-    if tools is None:
-        return provider.stream_chat(
-            model,
-            messages,
-            session_id=session_id,
-            max_seconds=max_seconds,
-            should_stop=should_stop,
-        )
-    return provider.stream_chat(
-        model,
-        messages,
-        tools=tools,
-        session_id=session_id,
-        max_seconds=max_seconds,
-        should_stop=should_stop,
-    )
+    return cast("_TextProvider", provider_for(model)).stream_chat(model, messages, options)
 
 
 def provider_for(model_id: str | None) -> Provider:
@@ -115,16 +70,9 @@ def provider_for_job(job_id: str | None) -> Provider:
 
 
 def generate_image(
-    model: str,
-    prompt: str,
-    *,
-    aspect_ratio: str | None = None,
-    resolution: str | None = None,
-    ref_paths: list[Path] | None = None,
-    context: list[dict[str, JsonValue]] | None = None,
-    session_id: str | None = None,
+    req: ImageRequest,
 ) -> tuple[list[tuple[bytes, str]], float | None, int | None, dict[str, JsonValue]]:
-    """Generate images on whichever provider owns `model`, and wait for them.
+    """Generate images on whichever provider owns `req.model`, and wait for them.
 
     Returns ([(bytes, media type)], cost in USD, Pollo credits, the settings
     actually sent). Providers bill differently — Pollo in credits, the rest in
@@ -134,100 +82,38 @@ def generate_image(
     for OpenRouter's conversational image models) and `session_id` only mean
     something to OpenRouter.
     """
-    owner = provider_for(model)
-    refs = list(ref_paths or [])
+    owner = provider_for(req.model)
     if owner is pollo:
         images, credit_cost, sent = pollo.generate_image(
-            model, prompt, aspect_ratio=aspect_ratio, resolution=resolution, ref_paths=refs
+            req.model, req.prompt, aspect_ratio=req.aspect_ratio, resolution=req.resolution, ref_paths=req.ref_paths
         )
         return images, None, credit_cost, sent
     if owner is venice:
         images, cost, sent = venice.generate_image(
-            model, prompt, aspect_ratio=aspect_ratio, resolution=resolution, ref_paths=refs
+            req.model, req.prompt, aspect_ratio=req.aspect_ratio, resolution=req.resolution, ref_paths=req.ref_paths
         )
         return images, cost, None, cast("dict[str, JsonValue]", sent)
-    if context is not None:
-        images, cost = openrouter.generate_image_chat(model, context, aspect_ratio=aspect_ratio, session_id=session_id)
+    if req.context is not None:
+        images, cost = openrouter.generate_image_chat(
+            req.model, req.context, aspect_ratio=req.aspect_ratio, session_id=req.session_id
+        )
         return images, cost, None, {}
-    images, cost = openrouter.generate_image(
-        model,
-        prompt,
-        aspect_ratio=aspect_ratio,
-        resolution=resolution,
-        # OpenRouter's Images API takes references inline, not as URLs
-        input_images=[file_to_data_url(p) for p in refs] or None,
-        session_id=session_id,
-    )
+    images, cost = openrouter.generate_image(req)
     return images, cost, None, {}
 
 
-def submit_video(
-    model: str,
-    prompt: str,
-    *,
-    duration: int | None = None,
-    aspect_ratio: str | None = None,
-    resolution: str | None = None,
-    generate_audio: bool | None = None,
-    first_frame: Path | None = None,
-    last_frame: Path | None = None,
-    source_video: Path | None = None,
-    source_audio: Path | None = None,
-    mode: str | None = None,
-    refs: list[Path] | None = None,
-    ref_items: list[dict[str, object]] | None = None,
-    session_id: str | None = None,
-) -> VideoJob:
-    """Start a video job on whichever provider owns `model`.
+def submit_video(req: VideoRequest) -> VideoJob:
+    """Start a video job on whichever provider owns `req.model`.
 
     Returns the job (``{"id", "params"}``), which the chat poller follows by id.
 
-    Every provider takes the first four inputs; the rest describe sources only
+    Every provider takes the first six fields of the request; the rest describe sources only
     some models accept (a last frame, a source video or audio track, an
     enhancement mode, named references) and a provider ignores what it can't
     use.
     """
-    owner = provider_for(model)
-    video_provider = cast("_VideoProvider", owner)
-    if owner is pollo:
-        return video_provider.submit_video(
-            model,
-            prompt,
-            duration=duration,
-            aspect_ratio=aspect_ratio,
-            resolution=resolution,
-            generate_audio=generate_audio,
-            first_frame=first_frame,
-            source_video=source_video,
-            source_audio=source_audio,
-            mode=mode,
-            ref_items=list(ref_items or []),
-        )
-    if owner is venice:
-        return video_provider.submit_video(
-            model,
-            prompt,
-            duration=duration,
-            aspect_ratio=aspect_ratio,
-            resolution=resolution,
-            generate_audio=generate_audio,
-            first_frame=first_frame,
-            last_frame=last_frame,
-            refs=list(refs or []),
-            source_video=source_video,
-        )
-    return video_provider.submit_video(
-        model,
-        prompt,
-        duration=duration,
-        aspect_ratio=aspect_ratio,
-        resolution=resolution,
-        generate_audio=generate_audio,
-        # OpenRouter takes the first frame inline, not as a path
-        first_frame=file_to_data_url(first_frame) if first_frame else None,
-        session_id=session_id,
-    )
+    return cast("_VideoProvider", provider_for(req.model)).submit_video(req)
 
 
 # Re-exported: importing the package registers these submodules' routes/providers.
-__all__ = ["openrouter", "pollo", "pollo_models", "venice"]
+__all__ = ["ImageRequest", "StreamOptions", "VideoRequest", "openrouter", "pollo", "venice"]

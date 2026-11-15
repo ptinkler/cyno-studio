@@ -1,14 +1,13 @@
 <script setup>
-import { computed, ref, nextTick, inject, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, nextTick } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { chatMediaPreviewUrl, chatMediaUrl } from '../../composables/useChat'
-import { characterImageUrl } from '../../composables/useCharacters'
 import { useCopy } from '../../composables/useClipboard'
 import { shortModel, fmtCost } from '../../utils/format'
-import ModelPicker from './ModelPicker.vue'
+import ChatAttachments from './ChatAttachments.vue'
+import ChatMediaCard from './ChatMediaCard.vue'
 import ForkList from './ForkList.vue'
-import RequestDialog from './RequestDialog.vue'
+import PromptBox from './PromptBox.vue'
 
 const props = defineProps({
   message: { type: Object, required: true },
@@ -37,11 +36,6 @@ const emit = defineEmits([
   'open-chat',
 ])
 
-// Model catalogues, provided by ChatView, for "Try another model"
-const KIND_LABEL = { image: 'Image', video: 'Video', audio: 'Audio' }
-const KIND_ICON = { image: '🖼', video: '🎬', audio: '🔊' }
-const chatModels = inject('chatModels', { image: [], video: [], audio: [] })
-
 marked.setOptions({ gfm: true, breaks: true })
 
 const isUser = computed(() => props.message.role === 'user')
@@ -69,136 +63,11 @@ const modelShort = computed(() => shortModel(props.message.model))
 // Media-only replies (Image/Video mode) have no text model to name
 const showTextModel = computed(() => !!props.message.content || !props.message.media?.length)
 
-// Ticking clock for "rendering 1:23" on pending videos
-const now = ref(Date.now())
-let timer = null
-onMounted(() => {
-  timer = setInterval(() => {
-    now.value = Date.now()
-  }, 1000)
-})
-onBeforeUnmount(() => clearInterval(timer))
-
-function elapsed() {
-  const start = Date.parse(props.message.created_at) || now.value
-  const s = Math.max(0, Math.floor((now.value - start) / 1000))
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
-}
-
-// The settings a generated item was made with. For Pollo these are what was
-// actually sent (defaults included); for OpenRouter only what we asked for —
-// the provider fills in the rest without saying.
-function specs(item) {
-  const p = item.params || {}
-  const isVideo = item.kind === 'video'
-  return [
-    ...(isVideo ? videoSource(p) : []),
-    isVideo && p.duration && `${p.duration}s`,
-    p.resolution,
-    p.aspect_ratio,
-    isVideo && p.generate_audio != null && (p.generate_audio ? 'audio' : 'no audio'),
-    p.character_names?.length && `👤 ${p.character_names.join(', ')}`,
-  ].filter(Boolean)
-}
-
-// What a video was made from, besides its prompt
-function videoSource(p) {
-  const frames = p.last_frame ? 'first+last frame' : p.first_frame && !p.refs?.length && 'from image'
-  return [p.source_video && 'from video', frames]
-}
-
-// "4 refs", or "2 of 4 refs" when the model took fewer than were picked
-// (Venice edit models cap the count; the first ones win)
-function refsLabel(p) {
-  const n = p.refs.length
-  const used = p.refs_used
-  return used != null && used < n ? `${used} of ${n} refs` : `${n} ref${n === 1 ? '' : 's'}`
-}
-function refsTitle(p) {
-  const used = p.refs_used
-  return used != null && used < p.refs.length
-    ? `The model takes ${used} image${used === 1 ? '' : 's'}, so only the first ${used} of these were sent:`
-    : 'Based on these images:'
-}
-// A ref is a chat file or a character image ("char:<id>/<file>")
-function refUrl(r) {
-  const m = /^char:(\d+)\/(.+)$/.exec(r)
-  return m ? characterImageUrl(m[1], m[2]) : chatMediaUrl(props.convId, r)
-}
-
-// Hovering "🔗 4 refs" shows the reference images. Teleported and fixed so
-// the caption's overflow clipping doesn't cut it off.
-const refsPeek = ref(null) // { params, x, y }
-function showRefs(e, params) {
-  const r = e.currentTarget.getBoundingClientRect()
-  refsPeek.value = { params, x: r.left, y: r.top }
-}
-
-function url(item) {
-  return chatMediaUrl(props.convId, item.file)
-}
-
-// What's shown in the chat: a scaled-down copy (a big chat's full images add up)
-function preview(item) {
-  return chatMediaPreviewUrl(props.convId, item.file)
-}
-
 // Prompts sent outside Auto mode say so — an edit or retry reruns them in that mode
 const MODE_TAGS = { image: '🖼 Image', video: '🎬 Video', text: '💬 Text only' }
 const modeTag = computed(() => MODE_TAGS[props.message.mode] || '')
 
 const replyEl = ref(null)
-// Only saved images (not a reply still streaming) can be pinned as references
-const canPin = item => item.kind === 'image' && !!item.file && typeof props.message.id === 'number'
-const pinTitle = item =>
-  item.pinned
-    ? 'Pinned: sent as a reference with every new image. Click to unpin'
-    : 'Pin as a reference: send it with every new image in this chat'
-
-const vFocusSelect = { mounted: el => (el.focus(), el.select()) }
-
-// Can this picture/clip be made again? (ours, finished, and the reply is idle)
-// What the big view (GenerationModal) needs: everything the card knows, plus
-// where it lives, so its actions can act on the right message.
-const bigView = item => ({
-  ...shownItem(item),
-  url: url(shownItem(item)),
-  message_id: props.message.id,
-  conversation_id: props.convId,
-})
-
-const canRemake = item =>
-  item.status === 'done' && item.source === 'generated' && !!item.prompt && props.message.status !== 'streaming'
-
-// A card's pictures, oldest first. The one showing is the real one — what
-// the chat sends as context and references from then on — so the arrows ask
-// the server to swap it in (`version_shown` is its place among them all; a
-// failed redo has no picture, so it isn't one of them).
-const versionsOf = item => item.versions || []
-const versionCount = item => versionsOf(item).length + (item.file ? 1 : 0)
-const versionAt = item => item.version_shown ?? versionsOf(item).length
-const shownItem = item => item
-const stepVersion = (item, by) => {
-  const next = versionAt(item) + by
-  if (next >= 0 && next < versionCount(item)) emit('media-version', { mediaId: item.id, index: next })
-}
-
-// The box the pencil and Redo open: one prompt, applied to this picture alone.
-// `edit` sends the picture back as the reference; Redo just re-runs the words.
-const promptBox = ref(null)
-const openPrompt = (item, edit) => (promptBox.value = { mediaId: item.id, edit, text: edit ? '' : item.prompt || '' })
-function submitPrompt(item) {
-  const box = promptBox.value
-  if (!box?.text.trim()) return
-  promptBox.value = null
-  emit('regenerate', {
-    mediaId: item.id,
-    model: item.model || null,
-    prompt: box.text.trim(),
-    edit: box.edit,
-    replace: true,
-  })
-}
 
 // The reply's text on its own: Edit (say how to change it) or Redo (write it
 // again) replaces just the words; the pictures stay. Each wording is kept and
@@ -267,8 +136,6 @@ function onEditKeydown(e) {
 }
 
 const { copiedKey, copy } = useCopy()
-// The media item whose provider request and response are open (RequestDialog)
-const requestItem = ref(null)
 </script>
 
 <template>
@@ -277,43 +144,14 @@ const requestItem = ref(null)
 
     <div class="msg-body">
       <!-- User attachments sit above their text, like Gemini -->
-      <div v-if="isUser && message.media?.length" class="attachments">
-        <div v-for="item in message.media" :key="item.id" class="attachment">
-          <button
-            v-if="canPin(item)"
-            :class="['pin-btn', { on: item.pinned }]"
-            :title="pinTitle(item)"
-            :aria-pressed="!!item.pinned"
-            @click.stop="emit('pin', { mediaId: item.id, pinned: !item.pinned })"
-          >
-            <svg class="ic sm"><use href="#s-pin" /></svg>
-          </button>
-          <audio v-if="item.kind === 'audio'" :src="url(item)" class="attachment-audio" controls></audio>
-          <img
-            v-else
-            :src="preview(item)"
-            class="attachment-thumb"
-            alt="attachment"
-            loading="lazy"
-            decoding="async"
-            @click="emit('open-media', bigView(item))"
-          />
-          <span v-if="item.kind !== 'audio'" class="use-btns">
-            <button
-              title="Attach this picture and switch to Image mode"
-              @click="emit('use-image', { file: item.file, mode: 'image' })"
-            >
-              <svg class="ic sm"><use href="#s-image" /></svg>
-            </button>
-            <button
-              title="Attach this picture and switch to Video mode"
-              @click="emit('use-image', { file: item.file, mode: 'video' })"
-            >
-              <svg class="ic sm"><use href="#s-film" /></svg>
-            </button>
-          </span>
-        </div>
-      </div>
+      <ChatAttachments
+        v-if="isUser && message.media?.length"
+        :message="message"
+        :conv-id="convId"
+        @open-media="emit('open-media', $event)"
+        @use-image="emit('use-image', $event)"
+        @pin="emit('pin', $event)"
+      />
 
       <div v-if="isUser && editing" class="edit-box">
         <textarea ref="editBox" v-model="editText" rows="1" @input="fitEditBox" @keydown="onEditKeydown"></textarea>
@@ -416,224 +254,31 @@ const requestItem = ref(null)
             ›
           </button>
         </div>
-        <div v-if="textBox" class="prompt-box text-box">
-          <textarea
-            v-model="textBox.text"
-            v-focus-select
-            rows="2"
-            placeholder="How should the text change? e.g. shorter, funnier, in French…"
-            @keydown.enter.exact.prevent="submitTextEdit"
-            @keydown.esc="textBox = null"
-          ></textarea>
-          <div class="prompt-box-actions">
-            <span class="prompt-box-hint">Rewrites the text only — the pictures stay</span>
-            <button class="meta-btn" @click="textBox = null">Cancel</button>
-            <button class="edit-send" :disabled="!textBox.text.trim()" @click="submitTextEdit">Edit</button>
-          </div>
-        </div>
+        <PromptBox
+          v-if="textBox"
+          v-model="textBox.text"
+          class="text-box"
+          placeholder="How should the text change? e.g. shorter, funnier, in French…"
+          hint="Rewrites the text only — the pictures stay"
+          submit-label="Edit"
+          @submit="submitTextEdit"
+          @cancel="textBox = null"
+        />
 
         <div v-if="message.media?.length" class="media-grid" :class="{ single: message.media.length === 1 }">
-          <div
+          <ChatMediaCard
             v-for="item in message.media"
             :key="item.id"
-            class="media-item"
-            :class="[item.kind, { failed: item.status === 'error' }]"
-          >
-            <template v-if="item.status === 'done' && item.file">
-              <img
-                v-if="item.kind === 'image'"
-                :src="preview(shownItem(item))"
-                :alt="item.prompt || 'generated image'"
-                loading="lazy"
-                decoding="async"
-                @click="emit('open-media', bigView(item))"
-              />
-              <audio v-else-if="item.kind === 'audio'" :src="url(item)" class="media-audio" controls></audio>
-              <video v-else :src="url(item)" controls loop playsinline preload="metadata"></video>
-              <div v-if="versionsOf(item).length" class="ver-nav" @click.stop>
-                <button
-                  :disabled="!canSwitch || versionAt(item) === 0"
-                  title="Earlier version — it becomes the picture the chat uses"
-                  @click="stepVersion(item, -1)"
-                >
-                  ‹
-                </button>
-                <span :title="`Version ${versionAt(item) + 1}: ${item.prompt || ''}`">
-                  {{ versionAt(item) + 1 }}/{{ versionCount(item) }}
-                </span>
-                <button
-                  :disabled="!canSwitch || versionAt(item) >= versionCount(item) - 1"
-                  title="Later version — it becomes the picture the chat uses"
-                  @click="stepVersion(item, 1)"
-                >
-                  ›
-                </button>
-              </div>
-              <button
-                v-if="canPin(item)"
-                :class="['pin-btn', { on: item.pinned }]"
-                :title="pinTitle(item)"
-                :aria-pressed="!!item.pinned"
-                @click.stop="emit('pin', { mediaId: item.id, pinned: !item.pinned })"
-              >
-                <svg class="ic sm"><use href="#s-pin" /></svg>
-              </button>
-              <div class="media-overlay">
-                <template v-if="item.kind === 'image'">
-                  <button
-                    class="media-btn"
-                    title="Attach this picture and switch to Image mode"
-                    @click.stop="emit('use-image', { file: item.file, mode: 'image' })"
-                  >
-                    <svg class="ic"><use href="#s-image" /></svg>
-                  </button>
-                  <button
-                    class="media-btn"
-                    title="Attach this picture and switch to Video mode"
-                    @click.stop="emit('use-image', { file: item.file, mode: 'video' })"
-                  >
-                    <svg class="ic"><use href="#s-film" /></svg>
-                  </button>
-                </template>
-                <a :href="url(item)" :download="item.file" class="media-btn" title="Download" @click.stop>
-                  <svg class="ic"><use href="#s-download" /></svg>
-                </a>
-              </div>
-            </template>
-
-            <div v-else-if="item.status === 'pending'" class="media-pending">
-              <div class="shimmer"></div>
-              <div class="pending-label">
-                <div class="spinner"></div>
-                <span v-if="item.kind === 'image'">Creating image…</span>
-                <span v-else-if="item.kind === 'audio'">Composing audio… {{ elapsed() }}</span>
-                <span v-else>Rendering video… {{ elapsed() }}</span>
-              </div>
-              <div v-if="specs(item).length" class="pending-specs">{{ specs(item).join(' · ') }}</div>
-              <div v-if="item.prompt" class="pending-prompt" :title="item.prompt">{{ item.prompt }}</div>
-            </div>
-
-            <div v-else class="media-error">
-              <strong>
-                {{ KIND_LABEL[item.kind] || 'Video' }}
-                {{ item.moderated ? 'blocked by moderation' : 'failed' }}
-              </strong>
-              <span>{{ item.error || 'Unknown error' }}</span>
-              <!-- Nothing retries automatically — the user picks -->
-              <div
-                v-if="item.source === 'generated' && item.prompt && message.status !== 'streaming'"
-                class="error-actions"
-              >
-                <button
-                  v-if="versionsOf(item).length && canSwitch"
-                  class="retry-btn"
-                  title="Keep the picture this card had before the attempt that failed"
-                  @click="emit('media-version', { mediaId: item.id, index: versionsOf(item).length - 1 })"
-                >
-                  ‹ Back to the previous picture
-                </button>
-                <button
-                  class="retry-btn primary"
-                  title="Run the same prompt again, on the model selected now"
-                  @click="emit('regenerate', { mediaId: item.id, model: null })"
-                >
-                  Try again
-                </button>
-                <button class="retry-btn" title="Edit the prompt, then run it again" @click="openPrompt(item, false)">
-                  Try a new prompt…
-                </button>
-                <ModelPicker
-                  :model-value="''"
-                  :models="chatModels[item.kind] || []"
-                  :kind="item.kind"
-                  :label="KIND_LABEL[item.kind] || 'Video'"
-                  :allow-none="false"
-                  trigger-text="Try another model…"
-                  @update:model-value="model => model && emit('regenerate', { mediaId: item.id, model })"
-                />
-              </div>
-            </div>
-
-            <!-- Which model made this — the footer only names the chat model -->
-            <div v-if="item.model || item.prompt" class="media-caption">
-              <span class="caption-text" :title="[item.model, ...specs(item)].join(' · ')">
-                {{ KIND_ICON[item.kind] || '🎬' }} {{ shortModel(item.model)
-                }}<template v-if="specs(item).length">
-                  · <span class="caption-specs">{{ specs(item).join(' · ') }}</span></template
-                ><template v-if="item.cost"> · {{ fmtCost(item.cost) }}</template
-                ><template v-if="item.credits">
-                  ·
-                  <span title="Billed to your Pollo account"
-                    >{{ item.credits }} credit{{ item.credits === 1 ? '' : 's' }}</span
-                  ></template
-                ><template v-if="item.params?.context">
-                  · <span title="The image model was given the conversation">💬 context</span></template
-                ><template v-if="item.params?.refs?.length">
-                  ·
-                  <span
-                    class="caption-refs"
-                    title=""
-                    @mouseenter="showRefs($event, item.params)"
-                    @mouseleave="refsPeek = null"
-                    >🔗 {{ refsLabel(item.params) }}</span
-                  ></template
-                ><template v-if="item.params?.upload_notice">
-                  · <span class="caption-warn" :title="item.params.upload_notice">⚠ backup upload host</span></template
-                >
-              </span>
-              <button
-                v-if="canRemake(item) && item.kind === 'image' && item.file"
-                class="caption-btn"
-                title="Edit this picture: describe the change and it is replaced here"
-                @click="openPrompt(item, true)"
-              >
-                ✎ Edit
-              </button>
-              <button
-                v-if="canRemake(item)"
-                class="caption-btn"
-                title="Make it again: tweak the prompt and it is replaced here"
-                @click="openPrompt(item, false)"
-              >
-                ↻ Redo
-              </button>
-              <button
-                v-if="item.prompt"
-                class="caption-btn"
-                :title="`Copy the prompt sent to the ${item.kind} model:\n${item.prompt}`"
-                @click="copy(item.prompt, item.id)"
-              >
-                {{ copiedKey === item.id ? '✓ Copied' : '⧉ Prompt' }}
-              </button>
-              <button
-                v-if="item.request"
-                class="caption-btn"
-                title="Show exactly what was sent to the provider"
-                @click="requestItem = item"
-              >
-                { } Request
-              </button>
-            </div>
-            <div v-if="promptBox?.mediaId === item.id" class="prompt-box">
-              <textarea
-                v-model="promptBox.text"
-                v-focus-select
-                rows="2"
-                :placeholder="promptBox.edit ? 'Describe the change…' : 'Prompt for the new version…'"
-                @keydown.enter.exact.prevent="submitPrompt(item)"
-                @keydown.esc="promptBox = null"
-              ></textarea>
-              <div class="prompt-box-actions">
-                <span class="prompt-box-hint">
-                  {{ promptBox.edit ? 'Edits this picture' : 'Makes a new one from the prompt alone' }}
-                </span>
-                <button class="meta-btn" @click="promptBox = null">Cancel</button>
-                <button class="edit-send" :disabled="!promptBox.text.trim()" @click="submitPrompt(item)">
-                  {{ promptBox.edit ? 'Edit' : 'Redo' }}
-                </button>
-              </div>
-            </div>
-          </div>
+            :item="item"
+            :message="message"
+            :conv-id="convId"
+            :can-switch="canSwitch"
+            @open-media="emit('open-media', $event)"
+            @media-version="emit('media-version', $event)"
+            @pin="emit('pin', $event)"
+            @use-image="emit('use-image', $event)"
+            @regenerate="emit('regenerate', $event)"
+          />
         </div>
 
         <div v-if="message.status === 'error' && message.error && !errorShownOnMedia" class="msg-error">
@@ -711,28 +356,8 @@ const requestItem = ref(null)
         </div>
       </template>
     </div>
-    <RequestDialog
-      v-if="requestItem"
-      :request="requestItem.request"
-      :response="requestItem.response"
-      :error="requestItem.status === 'error' ? requestItem.error : ''"
-      @close="requestItem = null"
-    />
-    <Teleport to="body">
-      <div v-if="refsPeek" class="refs-peek" :style="{ left: `${refsPeek.x}px`, top: `${refsPeek.y}px` }">
-        <div class="refs-peek-title">{{ refsTitle(refsPeek.params) }}</div>
-        <div class="refs-peek-grid">
-          <img
-            v-for="(r, i) in refsPeek.params.refs"
-            :key="r"
-            :src="refUrl(r)"
-            :alt="r"
-            :class="{ unused: refsPeek.params.refs_used != null && i >= refsPeek.params.refs_used }"
-          />
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>
 
+<style scoped src="./chatButtons.css"></style>
 <style scoped src="./ChatMessage.css"></style>

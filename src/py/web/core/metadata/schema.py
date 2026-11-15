@@ -43,7 +43,7 @@ class MigrationFailedError(RuntimeError):
         super().__init__(f"could not bring the database at {db_path} up to date (see the error above)")
 
 
-def ensure_schema(engine: sa.Engine, db_path: Path, fresh: bool) -> None:
+def ensure_schema(engine: sa.Engine, db_path: Path, *, fresh: bool) -> None:
     """Bring an unversioned database up to the current Alembic revision.
 
     A failure raises ``MigrationFailedError``: the server must not start on a half-migrated database, where it

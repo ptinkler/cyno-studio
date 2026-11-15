@@ -69,6 +69,7 @@ function dropUnsupported(opts, ratios, resolutions, durations = null) {
 // Audio option -> [the model option that offers it, how to clean the raw value]
 const num = v => (v === null || v === '' ? null : Number(v))
 const text = v => (v || '').trim() || null
+/** @type {Record<string, [string, (value: any, options: any) => any]>} field -> [the option that enables it, how to clean its value] */
 const AUDIO_FIELDS = {
   voice: ['voice', v => v || null],
   speed: ['tuning', num],
@@ -324,6 +325,19 @@ export function useComposerSettings(models) {
     return out
   }
 
+  function videoSettings() {
+    return {
+      aspect_ratio: videoOpts.aspect_ratio || null,
+      resolution: videoOpts.resolution || null,
+      // '' = Auto: the attached clip's length (reference-to-video), else the
+      // model's default. The flag rides along so reusing this generation's
+      // settings later lands back on Auto, not on the number Auto resolved to.
+      duration: videoOpts.duration ? Number(videoOpts.duration) : clipDuration.value,
+      duration_auto: !videoOpts.duration,
+      generate_audio: videoInfo.value?.generate_audio ? videoOpts.generate_audio : null,
+    }
+  }
+
   // The settings a turn is sent with (retries and edits too: they run in the mode selected now)
   function turnSettings() {
     return {
@@ -335,16 +349,7 @@ export function useComposerSettings(models) {
       video_model: selected.video || null,
       audio_model: selected.audio || null,
       image_options: { aspect_ratio: imageOpts.aspect_ratio || null, resolution: imageOpts.resolution || null },
-      video_options: {
-        aspect_ratio: videoOpts.aspect_ratio || null,
-        resolution: videoOpts.resolution || null,
-        // '' = Auto: the attached clip's length (reference-to-video), else the
-        // model's default. The flag rides along so reusing this generation's
-        // settings later lands back on Auto, not on the number Auto resolved to.
-        duration: videoOpts.duration ? Number(videoOpts.duration) : clipDuration.value,
-        duration_auto: !videoOpts.duration,
-        generate_audio: videoInfo.value?.generate_audio ? videoOpts.generate_audio : null,
-      },
+      video_options: videoSettings(),
       audio_options: audioSettings(),
       ref_choices: { on: [...refChoices.on], off: [...refChoices.off] },
     }

@@ -14,13 +14,13 @@ from pathlib import Path
 from typing import Protocol, cast
 from urllib.parse import urlsplit
 
-from web import media
 from web.chat.constants import CHAT_PREVIEW_SIZE, VIDEO_MAX_POLL_ERRORS, VIDEO_POLL_INTERVAL, VIDEO_POLL_TIMEOUT
 from web.chat.generation import MODERATION
 from web.chat.helpers import add_message_cost, chat_root, conversation_dir
 from web.chat.workers import with_owner_keys
 from web.core.metadata import MetadataDB, get_db
-from web.media_types import AUDIO_SUFFIXES, IMAGE_SUFFIXES, VIDEO_SUFFIXES
+from web.media.kinds import AUDIO_SUFFIXES, IMAGE_SUFFIXES, VIDEO_SUFFIXES
+from web.media.thumbs import THUMB_SIZE, make_thumb
 from web.providers import provider_for_job
 from web.types import JsonValue
 
@@ -216,5 +216,5 @@ def warm_missing_thumbnails() -> None:
             continue
         for path in folder.iterdir():
             if path.suffix.lower() in IMAGE_SUFFIXES - {".svg"}:
-                for size in (media.THUMB_SIZE, CHAT_PREVIEW_SIZE):
-                    media.make_thumb(path, size)
+                for size in (THUMB_SIZE, CHAT_PREVIEW_SIZE):
+                    make_thumb(path, size)
