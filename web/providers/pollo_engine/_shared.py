@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, TypedDict
 
 from PIL import Image
 
+from web.providers.pollo_engine.errors import NotANumberError, NotAWholeNumberError
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -87,14 +89,14 @@ def as_float(value: JsonValue) -> float:
     """A request value as a number; raises ValueError when it is not numeric."""
     if isinstance(value, (int, float, str)):
         return float(value)
-    raise ValueError("Expected a number")
+    raise NotANumberError
 
 
 def as_int(value: JsonValue) -> int:
     """A request value as a whole number; raises ValueError when it is not numeric."""
     if isinstance(value, (int, float, str)):
         return int(value)
-    raise ValueError("Expected a whole number")
+    raise NotAWholeNumberError
 
 
 def as_str_list(value: JsonValue) -> list[str]:

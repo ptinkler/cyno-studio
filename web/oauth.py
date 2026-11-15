@@ -66,7 +66,9 @@ def register_providers() -> None:
             client_id=_env("x", "CLIENT_ID"),
             client_secret=_env("x", "CLIENT_SECRET"),
             authorize_url="https://twitter.com/i/oauth2/authorize",
-            access_token_url="https://api.twitter.com/2/oauth2/token",
+            # S106 false positive: this is X's public token-endpoint URL, not a credential, and
+            # `access_token_url` is Authlib's own keyword so it can't be renamed. Approved by the maintainer.
+            access_token_url="https://api.twitter.com/2/oauth2/token",  # noqa: S106
             api_base_url="https://api.twitter.com/2/",
             client_kwargs={
                 "scope": "users.read tweet.read offline.access",
@@ -131,6 +133,14 @@ def _object(value: JsonValue) -> dict[str, JsonValue]:
     return dict(value) if isinstance(value, Mapping) else {}
 
 
+class UnknownProviderError(ValueError):
+    """The sign-in provider is not one we support."""
+
+    def __init__(self, provider: str) -> None:
+        """Name the provider."""
+        super().__init__(f"Unknown provider: {provider}")
+
+
 async def normalize_profile(provider: str, client: OAuthClient, token: dict[str, JsonValue]) -> dict[str, str | None]:
     """Normalize a provider's user-info response.
 
@@ -164,4 +174,4 @@ async def normalize_profile(provider: str, client: OAuthClient, token: dict[str,
             "name": _text(data.get("name")),
             "avatar": _text(data.get("profile_image_url")),
         }
-    raise ValueError(f"Unknown provider: {provider}")  # noqa: TRY003
+    raise UnknownProviderError(provider)

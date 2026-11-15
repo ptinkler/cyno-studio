@@ -167,7 +167,7 @@ def api_create_conversation(data: ConversationCreate) -> dict[str, JsonValue]:
     db = get_db()
     space = _require_space(data.space_id) if data.space_id is not None else None
     # Only what's attached to this chat itself: the global and space defaults
-    # apply live on top (see _inherited), so they aren't copied in
+    # apply live on top (see inherited_ids), so they aren't copied in
     instruction_ids = _require_instructions(data.instruction_ids)
     instruction_group_ids = _require_instruction_groups(data.instruction_group_ids)
     characters.require(data.character_ids, db)

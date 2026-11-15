@@ -47,6 +47,12 @@ if TYPE_CHECKING:
     from web.providers.pollo_engine.registry import PolloGenerator
     from web.types import JsonValue
 
+
+def write(text: str, *, err: bool = False) -> None:
+    """Write one line of this command's output (stdout, or stderr for progress notes)."""
+    (sys.stderr if err else sys.stdout).write(text + "\n")
+
+
 TIMEOUT = 20
 
 
@@ -100,11 +106,12 @@ def _classify(status: int, text: str) -> tuple[str, str]:
     return "UNKNOWN", f"can't confirm without real media (HTTP {status}): {text[:70]}"
 
 
-def _probe_estimate(key: str, api_key: str) -> tuple[str, str]:
+def probe_estimate(key: str, api_key: str) -> tuple[str, str]:
+    """Ask the model's free estimate endpoint whether it answers; returns (verdict, note)."""
     try:
         gen = _build(key, api_key)
         payload = gen.get_payload()
-    except Exception as e:  # noqa: BLE001 — probe reports model-specific body construction errors
+    except (ValueError, TypeError, KeyError) as e:  # model-specific body construction errors
         return "N/A", f"can't build a probe request: {e}"
     url = gen.estimate_url
     if not url:
@@ -130,7 +137,7 @@ def _probe_live(key: str, api_key: str) -> tuple[str, str]:
     gen = _build(key, api_key)
     try:
         resp = gen.send_request()
-    except Exception as e:  # noqa: BLE001 — display provider-specific probe failure
+    except (ConnectionError, ValueError, requests.RequestException) as e:
         return "ERR", str(e)[:140]
     try:
         body = cast("JsonValue", resp.json())
@@ -186,29 +193,29 @@ def main() -> int:
 
     keys = _models(None if args.all_video else args.family, args.all_video)
     if not keys:
-        print(f"No models match family={args.family!r}.")
+        write(f"No models match family={args.family!r}.")
         return 1
 
     mode = "free estimate probe"
     if args.live:
         mode = "LIVE submit"
-        print(f"⚠  LIVE: creating real non-refundable jobs for up to {len(keys)} models — every enabled one is BILLED.")
+        write(f"⚠  LIVE: creating real non-refundable jobs for up to {len(keys)} models — every enabled one is BILLED.")
     scope = "all video models" if args.all_video else f"family={args.family!r}"
-    print(f"Probing {len(keys)} models ({scope}) via {mode}\n")
-    probe = _probe_live if args.live else _probe_estimate
+    write(f"Probing {len(keys)} models ({scope}) via {mode}\n")
+    probe = _probe_live if args.live else probe_estimate
 
     results: list[tuple[str, str, str, str]] = []
     for key in keys:
         label = MODEL_INFO.get(key, {}).get("label") or key
         verdict, note = probe(key, args.key)
         results.append((verdict, key, label, note))
-        print(f"  {verdict:8}  {key:24}  {label:24}  {note}")
+        write(f"  {verdict:8}  {key:24}  {label:24}  {note}")
 
     tally = {v: sum(1 for r in results if r[0] == v) for v in {r[0] for r in results}}
     summary = ", ".join(f"{n} {v.lower()}" for v, n in sorted(tally.items()))
-    print(f"\n{summary}.")
+    write(f"\n{summary}.")
     if tally.get("UNKNOWN"):
-        print("UNKNOWN = media-input model; a placeholder can't confirm enablement — test it in-app with real media.")
+        write("UNKNOWN = media-input model; a placeholder can't confirm enablement — test it in-app with real media.")
     return 0
 
 

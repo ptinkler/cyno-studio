@@ -6,6 +6,13 @@ from typing import TYPE_CHECKING, TypedDict, cast
 
 from web.core.config import POLLO_GENERATION_BASE
 from web.providers.pollo_engine._shared import Payload, as_float, as_int, as_str
+from web.providers.pollo_engine.errors import (
+    AudioPromptRequiredError,
+    AudioPromptTooLongError,
+    StyleTitleMismatchError,
+    VoiceReferenceRequiredError,
+    VoiceRequiredError,
+)
 
 if TYPE_CHECKING:
     from web.types import JsonValue
@@ -125,11 +132,11 @@ def _speech_payload(c: AudioCfg, prompt: str, **kw: JsonValue) -> Payload:
     attrs: dict[str, JsonValue] = {"prompt": prompt}
     if c["NEEDS_VOICE"]:
         if not kw.get("voice"):
-            raise ValueError("This speech model needs a voice")
+            raise VoiceRequiredError
         attrs["voiceId"] = kw["voice"]
     if c["NEEDS_REF"]:
         if not kw.get("voice_ref_url"):
-            raise ValueError("This model needs a reference voice clip")
+            raise VoiceReferenceRequiredError
         # the shape of the spec's own voiceRefs example
         attrs["voiceRefs"] = [{"type": "audio", "name": "voice", "audioUrl": kw["voice_ref_url"]}]
     if c["HAS_TUNING"]:
@@ -146,7 +153,7 @@ def _music_payload(c: AudioCfg, prompt: str, **kw: JsonValue) -> Payload:
     """Suno: a song description, or (with style + title together) lyrics."""
     style, title = (as_str(kw.get("style")) or "").strip(), (as_str(kw.get("title")) or "").strip()
     if bool(style) != bool(title):
-        raise ValueError("Style and title go together (lyrics mode) — give both or neither")
+        raise StyleTitleMismatchError
     attrs: dict[str, JsonValue] = {"prompt": prompt}
     if style:
         attrs.update(style=style, title=title)
@@ -166,9 +173,9 @@ def audio_payload(model_id: str, *, prompt: str, **kw: JsonValue) -> Payload:
     c = cfg(model_id)
     prompt = (prompt or "").strip()
     if not prompt:
-        raise ValueError("Audio needs a prompt")
+        raise AudioPromptRequiredError
     if len(prompt) > c["MAX_PROMPT"]:
-        raise ValueError(f"The prompt is too long for this model (max {c['MAX_PROMPT']} characters)")
+        raise AudioPromptTooLongError(c["MAX_PROMPT"])
     if c["builder"] == "speech":
         return _speech_payload(c, prompt, **kw)
     return _music_payload(c, prompt, **kw)

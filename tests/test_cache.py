@@ -5,33 +5,33 @@ import time
 from web.core.cache import MISS, TTLCache
 
 
-def test_returns_what_was_put():
+def test_returns_what_was_put() -> None:
     """Test that returns what was put."""
-    c = TTLCache(ttl=60)
+    c: TTLCache[str, int | None] = TTLCache(ttl=60)
     c.put("k", 1)
     assert c.get("k") == 1
     assert c.get("missing") is None
     assert c.get("missing", MISS) is MISS
 
 
-def test_a_cached_none_is_not_a_miss():
+def test_a_cached_none_is_not_a_miss() -> None:
     """Callers cache 'no answer' (a refused estimate, an unpriced model)."""
-    c = TTLCache(ttl=60)
+    c: TTLCache[str, int | None] = TTLCache(ttl=60)
     c.put("k", None)
     assert c.get("k", MISS) is None
 
 
-def test_entries_expire():
+def test_entries_expire() -> None:
     """Test that entries expire."""
-    c = TTLCache(ttl=0.01)
+    c: TTLCache[str, int | None] = TTLCache(ttl=0.01)
     c.put("k", 1)
     time.sleep(0.02)
     assert c.get("k", MISS) is MISS
 
 
-def test_maxsize_is_a_hard_cap_evicting_oldest_first():
+def test_maxsize_is_a_hard_cap_evicting_oldest_first() -> None:
     """Test that maxsize is a hard cap evicting oldest first."""
-    c = TTLCache(ttl=60, maxsize=3)
+    c: TTLCache[int, int] = TTLCache(ttl=60, maxsize=3)
     for i in range(10):
         c.put(i, i)
     assert len(c) == 3
@@ -39,9 +39,9 @@ def test_maxsize_is_a_hard_cap_evicting_oldest_first():
     assert c.get(9) == 9  # the newest stayed
 
 
-def test_put_refreshes_an_existing_key():
+def test_put_refreshes_an_existing_key() -> None:
     """Test that put refreshes an existing key."""
-    c = TTLCache(ttl=60, maxsize=2)
+    c: TTLCache[str, int | None] = TTLCache(ttl=60, maxsize=2)
     c.put("a", 1)
     c.put("b", 2)
     c.put("a", 3)  # now the newest, so "b" is evicted next
@@ -50,18 +50,18 @@ def test_put_refreshes_an_existing_key():
     assert c.get("b", MISS) is MISS
 
 
-def test_lapsed_entries_are_dropped_on_write():
+def test_lapsed_entries_are_dropped_on_write() -> None:
     """Test that lapsed entries are dropped on write."""
-    c = TTLCache(ttl=0.01, maxsize=100)
+    c: TTLCache[str, int | None] = TTLCache(ttl=0.01, maxsize=100)
     c.put("old", 1)
     time.sleep(0.02)
     c.put("new", 2)
     assert len(c) == 1  # the lapsed entry didn't just sit there
 
 
-def test_clear():
+def test_clear() -> None:
     """Test that clear."""
-    c = TTLCache(ttl=60)
+    c: TTLCache[str, int | None] = TTLCache(ttl=60)
     c.put("k", 1)
     c.clear()
     assert len(c) == 0

@@ -75,7 +75,7 @@ def _gluetun_json(
     """A Gluetun GET's JSON, or a stand-in when it fails or can't be reached."""
     try:
         r = _gluetun_get(path, timeout=timeout)
-    except Exception:  # noqa: BLE001 — any connection failure means unreachable
+    except requests.RequestException:  # any connection failure means unreachable
         return if_unreachable
     data = cast("object", r.json())
     return cast("dict[str, JsonValue]", data) if r.ok and isinstance(data, dict) else if_not_ok

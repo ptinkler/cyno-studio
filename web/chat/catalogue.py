@@ -3,6 +3,7 @@
 and the per-model lookups used to validate and auto-fit media params.
 """
 
+import logging
 import threading
 import time
 from typing import TypedDict, cast
@@ -12,6 +13,7 @@ from web.chat.constants import MODELS_CACHE_TTL
 from web.core.metadata import current_tenant
 from web.providers import PROVIDERS, venice
 from web.providers.model_tags import tags_for
+from web.providers.openrouter import OpenRouterError
 from web.types import Catalogue, ModelEntry
 
 
@@ -19,6 +21,8 @@ class _CacheEntry(TypedDict):
     at: float
     data: Catalogue
 
+
+log = logging.getLogger(__name__)
 
 # Each provider lists the models the REQUESTING user's key can see (an
 # unconfigured provider returns [], and "enabled for this key" differs per
@@ -111,7 +115,8 @@ def get_models(refresh: bool = False) -> Catalogue:
             for prov in PROVIDERS:
                 try:
                     models += prov.list_models(kind, refresh)
-                except Exception as e:  # noqa: BLE001 — capture provider errors independently
+                except Exception as e:  # each provider fails on its own; the rest still list
+                    log.warning("listing %s %s models failed", prov.NAME, kind, exc_info=True)
                     errors[f"{prov.NAME}_{kind}"] = str(e)
             # Capability tags, derived uniformly so every provider is consistent;
             # the picker filters on these. Set once here rather than in each
@@ -149,7 +154,7 @@ def model_info(kind: str, model_id: str | None) -> ModelInfo | None:
     if info is None and venice.is_venice(model_id) and venice.is_configured():
         try:
             return cast("ModelInfo", venice.model_info(kind, model_id))
-        except Exception:  # noqa: BLE001 — unknown model or unreachable Venice is unknown
+        except OpenRouterError:  # unknown model or unreachable Venice is unknown
             return None
     return cast("ModelInfo", info) if info is not None else None
 

@@ -13,6 +13,9 @@ from pathlib import Path
 from fastapi import HTTPException, UploadFile
 from PIL import Image
 
+# What Pillow raises for corrupt or non-image bytes
+_NOT_AN_IMAGE = (OSError, ValueError, SyntaxError, Image.DecompressionBombError)
+
 # Image uploads both pages accept (content type → saved extension)
 IMAGE_UPLOAD_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif"}
 MAX_IMAGE_UPLOAD_BYTES = 20 * 1024 * 1024
@@ -63,7 +66,7 @@ def is_blank_image(data: bytes) -> bool:
             im.thumbnail((64, 64))
             _, brightest = im.getextrema()
             return isinstance(brightest, int) and brightest <= 4
-    except Exception:  # noqa: BLE001 — Pillow rejects corrupt or non-image bytes this way
+    except _NOT_AN_IMAGE:  # Pillow rejects corrupt or non-image bytes this way
         return False  # not an image Pillow reads; leave it to the caller
 
 
@@ -71,7 +74,7 @@ def _is_real_image(content: bytes) -> bool:
     """The bytes really are an image, whatever content type the client claimed."""
     try:
         Image.open(io.BytesIO(content)).verify()
-    except Exception:  # noqa: BLE001 — anything Pillow rejects is not an image
+    except _NOT_AN_IMAGE:  # anything Pillow rejects is not an image
         return False
     return True
 

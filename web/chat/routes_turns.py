@@ -5,6 +5,7 @@ in `turn.py` and generation helpers live in `generation.py`.
 """
 
 import json
+import logging
 import queue
 import threading
 import uuid
@@ -20,6 +21,7 @@ from web.chat.audio import audio_params, submit_audio_generation
 from web.chat.catalogue import fit_video_params, model_info
 from web.chat.constants import DEFAULT_IMAGE_LIMIT
 from web.chat.deps import router
+from web.chat.errors import InvalidMediaItemError
 from web.chat.generation import (
     conversation_instructions,
     enhance_prompt,
@@ -54,6 +56,8 @@ from web.media_types import kind_of
 from web.providers import openrouter, pollo
 from web.types import JsonValue
 from web.uploads import safe_filename
+
+log = logging.getLogger(__name__)
 
 # Live turns' cancel flags, keyed by the assistant message id (set by the
 # cancel route, checked by the running Turn).
@@ -750,7 +754,7 @@ def _regenerate_worker(conv_id: str, message_id: int, item: Mapping[str, JsonVal
     prompt = item.get("prompt")
     kind = item.get("kind")
     if not isinstance(media_id, str) or not isinstance(prompt, str) or not isinstance(kind, str):
-        raise TypeError("Invalid media item for regeneration")  # noqa: TRY003
+        raise InvalidMediaItemError
     raw_params = item.get("params")
     params: dict[str, JsonValue] = dict(raw_params) if isinstance(raw_params, Mapping) else {}
     try:
@@ -826,7 +830,8 @@ def _regenerate_worker(conv_id: str, message_id: int, item: Mapping[str, JsonVal
             polling.start_video_poller(conv_id, message_id, media_id, job["id"])
     except openrouter.OpenRouterError as e:
         db.update_chat_media_item(message_id, media_id, **failure_fields(e))
-    except Exception as e:  # noqa: BLE001 — never leave the card stuck on "pending"
+    except Exception as e:  # never leave the card stuck on "pending"
+        log.exception("regeneration of media %s on message %s failed", media_id, message_id)
         db.update_chat_media_item(
             message_id, media_id, status="error", error=f"{type(e).__name__}: {e}", moderated=False
         )

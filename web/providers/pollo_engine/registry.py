@@ -19,6 +19,15 @@ from web.core.config import POLLO_API_TIMEOUT
 from web.providers.pollo_engine._shared import Payload, as_str
 from web.providers.pollo_engine.audio import AUDIO_MODELS, audio_model_url, audio_payload
 from web.providers.pollo_engine.audio import cfg as audio_cfg
+from web.providers.pollo_engine.errors import (
+    ApiTimeoutError,
+    ApiUnreachableError,
+    CloudflareBlockedError,
+    NoEndpointError,
+    UnsupportedAudioModelError,
+    UnsupportedImageModelError,
+    UnsupportedVideoModelError,
+)
 from web.providers.pollo_engine.image import IMAGE_MODELS, image_model_url, image_payload, img_cfg
 from web.providers.pollo_engine.video import VIDEO_MODELS, cfg, video_model_url, video_payload
 
@@ -100,7 +109,7 @@ class PolloGenerator:
     def send_request(self) -> requests.Response:
         """Submit the built request to Pollo and return its HTTP response."""
         if not self.model_url:
-            raise ValueError(f"No endpoint configured for {self.spec.model_id}")
+            raise NoEndpointError(self.spec.model_id)
         payload = self.get_payload()
         headers = {"Content-Type": "application/json"}
         if self.api_key:
@@ -110,14 +119,11 @@ class PolloGenerator:
                 "POST", self.model_url, data=json.dumps(payload), headers=headers, timeout=POLLO_API_TIMEOUT
             )
         except requests.exceptions.ConnectionError as e:
-            raise ConnectionError(f"Cannot reach API ({self.model_url}) — VPN/network may be down: {e}") from e
+            raise ApiUnreachableError(self.model_url, e) from e
         except requests.exceptions.Timeout as e:
-            raise ConnectionError(f"API request timed out ({self.model_url}) — VPN/network may be slow: {e}") from e
+            raise ApiTimeoutError(self.model_url, e) from e
         if is_cloudflare_block(resp):
-            raise ConnectionError(
-                f"Cloudflare blocked the request (HTTP {resp.status_code}). "
-                "Check your VPN — you may need to enable it, switch regions, or your IP is flagged."
-            )
+            raise CloudflareBlockedError(resp.status_code)
         return resp
 
 
@@ -161,7 +167,7 @@ def audio_generator(model_id: str, **kwargs: JsonValue) -> PolloGenerator:
     try:
         return AUDIO_GENERATORS[model_id](**kwargs)
     except KeyError:
-        raise ValueError(f"Unsupported audio model: {model_id}. Available: {', '.join(AUDIO_GENERATORS)}") from None
+        raise UnsupportedAudioModelError(model_id, AUDIO_GENERATORS) from None
 
 
 def video_generator(model_id: str, **kwargs: JsonValue) -> PolloGenerator:
@@ -169,7 +175,7 @@ def video_generator(model_id: str, **kwargs: JsonValue) -> PolloGenerator:
     try:
         return VIDEO_GENERATORS[model_id](**kwargs)
     except KeyError:
-        raise ValueError(f"Unsupported model: {model_id}. Available: {', '.join(VIDEO_GENERATORS)}") from None
+        raise UnsupportedVideoModelError(model_id, VIDEO_GENERATORS) from None
 
 
 def image_generator(model_id: str, **kwargs: JsonValue) -> PolloGenerator:
@@ -177,4 +183,4 @@ def image_generator(model_id: str, **kwargs: JsonValue) -> PolloGenerator:
     try:
         return IMAGE_GENERATORS[model_id](**kwargs)
     except KeyError:
-        raise ValueError(f"Unsupported image model: {model_id}. Available: {', '.join(IMAGE_GENERATORS)}") from None
+        raise UnsupportedImageModelError(model_id, IMAGE_GENERATORS) from None

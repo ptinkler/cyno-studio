@@ -29,7 +29,8 @@ KEY_PROVIDERS = ("pollo", "venice", "openrouter")
 router = APIRouter(prefix="/api/keys")
 
 
-def _fernet() -> Fernet:
+def fernet() -> Fernet:
+    """The cipher that protects stored provider keys, keyed off KEYS_SECRET or the session secret."""
     secret = os.getenv("KEYS_SECRET", "").strip().encode() or user_secret()
     material = hashlib.sha256(b"pollo-keys-v1\x00" + secret).digest()
     return Fernet(base64.urlsafe_b64encode(material))
@@ -41,7 +42,7 @@ def _encrypt(keys: dict[str, str]) -> str:
     # two apart. See web/dev_login.py.
     if store_keys_plaintext():
         return json.dumps(keys)
-    return _fernet().encrypt(json.dumps(keys).encode()).decode()
+    return fernet().encrypt(json.dumps(keys).encode()).decode()
 
 
 def _as_keys(data: object) -> dict[str, str] | None:
@@ -61,7 +62,7 @@ def _decrypt(blob: str | None) -> dict[str, str]:
     if keys is not None:
         return keys
     try:
-        return _as_keys(cast("object", json.loads(_fernet().decrypt(blob.encode()).decode()))) or {}
+        return _as_keys(cast("object", json.loads(fernet().decrypt(blob.encode()).decode()))) or {}
     except (InvalidToken, ValueError):
         return {}  # secret rotated or corrupt: treat as unset
 

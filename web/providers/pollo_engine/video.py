@@ -7,6 +7,18 @@ from typing import TYPE_CHECKING, NotRequired, Protocol, TypedDict, cast
 
 from web.core.config import POLLO_GENERATION_BASE
 from web.providers.pollo_engine._shared import Payload, as_str, parse_aspect_ratio, valid_length
+from web.providers.pollo_engine.errors import (
+    EditPromptRequiredError,
+    FaceImageRequiredError,
+    LipsyncAudioRequiredError,
+    LipsyncImageRequiredError,
+    LipsyncPromptRequiredError,
+    ReferenceImageRequiredError,
+    SourceVideoRequiredError,
+    TextToVideoUnsupportedError,
+    UnknownBuilderError,
+    VideoAction,
+)
 
 if TYPE_CHECKING:
     from web.types import JsonValue
@@ -112,7 +124,7 @@ class _Inputs(TypedDict):
 class _Builder(Protocol):
     """A family's body builder."""
 
-    def __call__(self, c: VideoCfg, prompt: str, image_url: str | None, s: _Inputs, **kw: JsonValue) -> Payload: ...
+    def __call__(self, c: VideoCfg, prompt: str, image_url: str | None, s: _Inputs, /, **kw: JsonValue) -> Payload: ...
 
 
 # Config rows (introspected from the generator classes). Fields omitted here
@@ -934,7 +946,7 @@ def _generic_payload(c: VideoCfg, prompt: str, image_url: str | None, s: _Inputs
 
 def _kling_payload(c: VideoCfg, prompt: str, image_url: str | None, s: _Inputs, **_: JsonValue) -> Payload:
     if s["is_text_only"] and not c["TEXT_TO_VIDEO"]:
-        raise ValueError(f"{c.get('MODEL', '')} needs a source image (it has no text-to-video mode)")
+        raise TextToVideoUnsupportedError(c.get("MODEL", ""))
     payload = _generic_payload(c, prompt, image_url, s)
     attrs = payload["input"]
     tier = attrs.pop("resolution", None)
@@ -951,10 +963,10 @@ def _kling_payload(c: VideoCfg, prompt: str, image_url: str | None, s: _Inputs, 
     return payload
 
 
-def _extend_payload(c: VideoCfg, prompt: str, image_url: str | None, s: _Inputs, **kw: JsonValue) -> Payload:
+def _extend_payload(_c: VideoCfg, prompt: str, _image_url: str | None, s: _Inputs, **kw: JsonValue) -> Payload:
     video_url = kw.get("video_url")
     if not video_url:
-        raise ValueError("Extending needs the source video's URL")
+        raise SourceVideoRequiredError(VideoAction.EXTEND)
     attrs: dict[str, JsonValue] = {"video": video_url}
     if prompt:
         attrs["prompt"] = prompt
@@ -967,53 +979,53 @@ def _extend_payload(c: VideoCfg, prompt: str, image_url: str | None, s: _Inputs,
     return {"input": attrs}
 
 
-def _edit_payload(c: VideoCfg, prompt: str, image_url: str | None, s: _Inputs, **kw: JsonValue) -> Payload:
+def _edit_payload(c: VideoCfg, prompt: str, _image_url: str | None, s: _Inputs, **kw: JsonValue) -> Payload:
     video_url = kw.get("video_url")
     if not video_url:
-        raise ValueError("Editing needs the source video's URL")
+        raise SourceVideoRequiredError(VideoAction.EDIT)
     if not prompt:
-        raise ValueError("Editing needs an instruction prompt")
+        raise EditPromptRequiredError
     attrs: dict[str, JsonValue] = {"video": video_url, "prompt": prompt}
     if c["VALID_RESOLUTIONS"] and s["resolution"]:
         attrs["resolution"] = s["resolution"]
     return {"input": attrs}
 
 
-def _upscale_payload(c: VideoCfg, prompt: str, image_url: str | None, s: _Inputs, **kw: JsonValue) -> Payload:
+def _upscale_payload(c: VideoCfg, _prompt: str, _image_url: str | None, s: _Inputs, **kw: JsonValue) -> Payload:
     """Build a video-upscale body containing the source, scale, and mode.
 
     Unknown scale or mode values fall back to the model defaults.
     """
     video_url = kw.get("video_url")
     if not video_url:
-        raise ValueError("Upscaling needs the source video's URL")
+        raise SourceVideoRequiredError(VideoAction.UPSCALE)
     scales = {v.lower(): v for v in c["VALID_RESOLUTIONS"]}
     scale = scales.get(s["resolution"].lower(), c["DEFAULT_RESOLUTION"])
     return {"input": {"video": video_url, "scale": scale, "mode": _pick_mode(c, **kw)}}
 
 
-def _bgremove_payload(c: VideoCfg, prompt: str, image_url: str | None, s: _Inputs, **kw: JsonValue) -> Payload:
+def _bgremove_payload(c: VideoCfg, _prompt: str, _image_url: str | None, s: _Inputs, **kw: JsonValue) -> Payload:
     """Video background removal: {video, outputFormat} (webm / mov, both transparent)."""
     if not kw.get("video_url"):
-        raise ValueError("Background removal needs the source video's URL")
+        raise SourceVideoRequiredError(VideoAction.BGREMOVE)
     fmt = s["resolution"] if s["resolution"] in c["VALID_RESOLUTIONS"] else c["DEFAULT_RESOLUTION"]
     return {"input": {"video": kw["video_url"], "outputFormat": fmt}}
 
 
-def _subtitle_payload(c: VideoCfg, prompt: str, image_url: str | None, s: _Inputs, **kw: JsonValue) -> Payload:
+def _subtitle_payload(c: VideoCfg, _prompt: str, _image_url: str | None, s: _Inputs, **kw: JsonValue) -> Payload:
     """Subtitle removal: {video, language, tier}; unknown values fall back to the defaults."""
     if not kw.get("video_url"):
-        raise ValueError("Subtitle removal needs the source video's URL")
+        raise SourceVideoRequiredError(VideoAction.SUBTITLE)
     lang = s["resolution"] if s["resolution"] in c["VALID_RESOLUTIONS"] else c["DEFAULT_RESOLUTION"]
     return {"input": {"video": kw["video_url"], "language": lang, "tier": _pick_mode(c, **kw)}}
 
 
-def _faceswap_payload(c: VideoCfg, prompt: str, image_url: str | None, s: _Inputs, **kw: JsonValue) -> Payload:
+def _faceswap_payload(_c: VideoCfg, _prompt: str, image_url: str | None, _s: _Inputs, **kw: JsonValue) -> Payload:
     """Face swap: the source video plus a face image."""
     if not kw.get("video_url"):
-        raise ValueError("Face swap needs the source video's URL")
+        raise SourceVideoRequiredError(VideoAction.FACESWAP)
     if not image_url:
-        raise ValueError("Face swap needs a face image URL")
+        raise FaceImageRequiredError
     return {"input": {"video": kw["video_url"], "faceImage": image_url}}
 
 
@@ -1024,11 +1036,11 @@ def _lipsync_payload(c: VideoCfg, prompt: str, image_url: str | None, s: _Inputs
     """
     audio_url = kw.get("audio_url")
     if not image_url:
-        raise ValueError("Lip sync needs a reference image URL")
+        raise LipsyncImageRequiredError
     if not audio_url:
-        raise ValueError("Lip sync needs an audio URL")
+        raise LipsyncAudioRequiredError
     if c.get("NEEDS_PROMPT") and not prompt:
-        raise ValueError("Lip sync needs a prompt")
+        raise LipsyncPromptRequiredError
     attrs: dict[str, JsonValue] = {"image": image_url, "audio": audio_url}
     if prompt:
         attrs["prompt"] = prompt
@@ -1037,16 +1049,16 @@ def _lipsync_payload(c: VideoCfg, prompt: str, image_url: str | None, s: _Inputs
     return {"input": attrs}
 
 
-def _motion_payload(c: VideoCfg, prompt: str, image_url: str | None, s: _Inputs, **kw: JsonValue) -> Payload:
+def _motion_payload(c: VideoCfg, _prompt: str, image_url: str | None, s: _Inputs, **kw: JsonValue) -> Payload:
     """Build a motion-transfer body from a reference image and source video.
 
     ``mode`` is sent only when the model supports it.
     """
     video_url = kw.get("video_url")
     if not video_url:
-        raise ValueError("This model needs the source video's URL")
+        raise SourceVideoRequiredError(VideoAction.MOTION)
     if not image_url:
-        raise ValueError("This model needs a reference image URL")
+        raise ReferenceImageRequiredError
     attrs: dict[str, JsonValue] = {"image": image_url, "video": video_url}
     if c["HAS_MODE"]:
         attrs["mode"] = s["mode"] or c.get("DEFAULT_MODE")
@@ -1072,5 +1084,5 @@ def video_payload(model_id: str, *, prompt: str, image_url: str | None, **kw: Js
     c = cfg(model_id)
     build = _BUILDERS.get(c["builder"])
     if build is None:
-        raise ValueError(f"unknown builder {c['builder']!r} for {model_id}")
+        raise UnknownBuilderError(c["builder"], model_id)
     return build(c, prompt, image_url, _process_inputs(c, image_url, **kw), **kw)

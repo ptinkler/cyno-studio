@@ -4,11 +4,13 @@ stores keys unencrypted, and is refused on an already-encrypted (prod) DB.
 """
 
 import json
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 import web.api as api_mod
+from tests.jsonpath import flag, text
 from web import dev_login, user_keys
 from web.core.metadata import MetadataDB
 
@@ -18,14 +20,14 @@ pytestmark = pytest.mark.no_tenant
 
 
 @pytest.fixture
-def db(tmp_path):
+def db(tmp_path: Path):
     """Provide the db fixture."""
     (tmp_path / "data").mkdir(parents=True, exist_ok=True)
     return MetadataDB(db_path=tmp_path / "data" / "metadata.db")
 
 
 @pytest.fixture
-def client(db, monkeypatch):
+def client(db: MetadataDB, monkeypatch: pytest.MonkeyPatch):
     """Provide the client fixture."""
     monkeypatch.setattr(api_mod, "get_db", lambda: db)
     monkeypatch.setattr("web.users.get_db", lambda: db)
@@ -39,25 +41,25 @@ def client(db, monkeypatch):
     return TestClient(api_mod.app, raise_server_exceptions=False)
 
 
-def test_disabled_is_404(client, monkeypatch):
+def test_disabled_is_404(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that disabled is 404."""
     monkeypatch.delenv("DEV_LOGIN", raising=False)
     assert client.post("/api/auth/dev-login").status_code == 404
 
 
-def test_signs_in_an_admin(client, monkeypatch):
+def test_signs_in_an_admin(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that signs in an admin."""
     monkeypatch.setenv("DEV_LOGIN", "true")
     r = client.post("/api/auth/dev-login")
     assert r.status_code == 200
-    assert r.json()["email"] == "dev@local"
+    assert text(r, "email") == "dev@local"
     assert client.cookies.get("user_session")
-    status = client.get("/api/auth/status").json()
-    assert status["authenticated"]
-    assert status["user"]["is_admin"]
+    status = client.get("/api/auth/status")
+    assert flag(status, "authenticated")
+    assert flag(status, "user", "is_admin")
 
 
-def test_keys_stored_plaintext_in_dev(client, db, monkeypatch):
+def test_keys_stored_plaintext_in_dev(client: TestClient, db: MetadataDB, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that keys stored plaintext in dev."""
     monkeypatch.setenv("DEV_LOGIN", "true")
     client.post("/api/auth/dev-login")
@@ -69,15 +71,15 @@ def test_keys_stored_plaintext_in_dev(client, db, monkeypatch):
     assert dev_login.db_has_encrypted_keys() is False
 
 
-def test_refused_on_encrypted_db(client, db, monkeypatch):
+def test_refused_on_encrypted_db(client: TestClient, db: MetadataDB, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that refused on encrypted db."""
     monkeypatch.setenv("DEV_LOGIN", "true")
 
     # A pre-existing user with an ENCRYPTED key blob makes this look like prod.
     user = db.upsert_oauth_user({"provider": "local", "sub": "admin", "email": "a@b", "name": "A"}, is_admin=True)
-    db.set_user_api_keys(user.id, user_keys._fernet().encrypt(json.dumps({"pollo": "secret"}).encode()).decode())
+    db.set_user_api_keys(user.id, user_keys.fernet().encrypt(json.dumps({"pollo": "secret"}).encode()).decode())
     assert dev_login.db_has_encrypted_keys() is True
 
     r = client.post("/api/auth/dev-login")
     assert r.status_code == 403
-    assert "encrypted" in r.json()["detail"].lower()
+    assert "encrypted" in text(r, "detail").lower()

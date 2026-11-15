@@ -101,7 +101,7 @@ def require_text_provider(mode: str | None = None) -> None:
         raise HTTPException(503, "No chat provider key set — add an OpenRouter or Venice key in Settings → Keys")
 
 
-def _inherited(conv: ChatConversation | None) -> dict[str, list[int]]:
+def inherited_ids(conv: ChatConversation | None) -> dict[str, list[int]]:
     """Resolve the live defaults inherited by a chat.
 
     Global and space defaults are deduplicated by kind, excluding defaults
@@ -140,7 +140,7 @@ def _own_ids(conv: ChatConversation, kind: str) -> list[int]:
 def effective_ids(conv: ChatConversation | None, kind: str) -> list[int]:
     """A chat's `kind` ids in use: inherited from the defaults, then its own."""
     own = _own_ids(conv, kind) if conv else []
-    return list(dict.fromkeys([*_inherited(conv)[kind], *own]))
+    return list(dict.fromkeys([*inherited_ids(conv)[kind], *own]))
 
 
 def spend(conv: ChatConversation) -> dict[str, float | int]:

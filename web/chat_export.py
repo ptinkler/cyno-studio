@@ -22,6 +22,7 @@ skipped, and chats deleted here stay deleted.
 """
 
 import json
+import logging
 import tempfile
 import zipfile
 from collections.abc import Mapping
@@ -40,6 +41,8 @@ from web.core.metadata.models import ChatConversation
 from web.types import JsonValue
 from web.uploads import safe_filename
 from web.users import require_user
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from web.core.metadata.imports import NativeLibraryItem, NativeMessage
@@ -374,14 +377,30 @@ class _Importer:
         return "updated" if added or changed else "unchanged"
 
 
+class NotAChatExportError(ValueError):
+    """The zip's manifest is not this app's chat-export format."""
+
+    def __init__(self) -> None:
+        """Name the manifest file that failed the check."""
+        super().__init__(f"{MANIFEST} isn't a chat export")
+
+
+class ExportTooNewError(ValueError):
+    """The export was written by a newer version of the app than this server."""
+
+    def __init__(self) -> None:
+        """Build the fixed message."""
+        super().__init__("This export is from a newer version of the app — update this server first")
+
+
 def import_native(zf: zipfile.ZipFile, stats: dict[str, JsonValue]) -> list[Path]:
     """Import this app's own export into the stats the ChatGPT import reports; returns the files written."""
     manifest = _MANIFEST.validate_json(zf.read(MANIFEST))
     if manifest.get("format") != FORMAT:
-        raise ValueError(f"{MANIFEST} isn't a chat export")  # noqa: TRY003
+        raise NotAChatExportError
     version = manifest.get("version")
     if not isinstance(version, int) or version > VERSION:
-        raise ValueError("This export is from a newer version of the app — update this server first")  # noqa: TRY003
+        raise ExportTooNewError
     raw = manifest.get("conversations")
     chats = [_obj(c) for c in (raw if isinstance(raw, list) else [])]
     stats["total"] = len(chats)
@@ -389,7 +408,8 @@ def import_native(zf: zipfile.ZipFile, stats: dict[str, JsonValue]) -> list[Path
     for data in chats:
         try:
             outcome: str | None = importer.chat(data)
-        except Exception as e:  # noqa: BLE001 — one bad chat shouldn't stop the rest
+        except Exception as e:  # one bad chat shouldn't stop the rest
+            log.exception("importing one chat from the export failed")
             outcome = None
             failed = stats.setdefault("failed", [])
             if isinstance(failed, list):

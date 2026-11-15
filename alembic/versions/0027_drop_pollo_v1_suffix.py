@@ -88,6 +88,11 @@ def _walk(data: _JsonValue, to_v1: bool) -> bool:
     return changed
 
 
+def _table(table: str, column: str) -> sa.TableClause:
+    """A lightweight handle on one text column of a table, plus SQLite's rowid."""
+    return sa.table(table, sa.column("rowid", sa.Integer), sa.column(column, sa.Text()))
+
+
 def rewrite(bind: Connection, to_v1: bool = False) -> int:
     """Rewrite every stored Pollo model id; returns how many rows changed.
 
@@ -99,24 +104,26 @@ def rewrite(bind: Connection, to_v1: bool = False) -> int:
     for table, column in _COLUMNS:
         if table not in tables:
             continue
+        target = _table(table, column)
         rows = cast(
             "list[tuple[int, str]]",
-            bind.execute(sa.text(f"SELECT rowid, {column} FROM {table} WHERE {column} LIKE :p"), {"p": f"{PREFIX}%"})
+            bind.execute(sa.select(target.c.rowid, target.c[column]).where(target.c[column].like(f"{PREFIX}%")))
             .tuples()
             .all(),
         )
         for rowid, value in rows:
             new = _renamed(value, to_v1)
             if new != value:
-                bind.execute(sa.text(f"UPDATE {table} SET {column} = :v WHERE rowid = :r"), {"v": new, "r": rowid})
+                bind.execute(sa.update(target).where(target.c.rowid == rowid).values({column: new}))
                 changed_rows += 1
 
     for table, column, _is_list in _JSON_COLUMNS:
         if table not in tables:
             continue
+        target = _table(table, column)
         json_rows = cast(
             "list[tuple[int, str | None]]",
-            bind.execute(sa.text(f"SELECT rowid, {column} FROM {table} WHERE {column} LIKE :p"), {"p": f"%{PREFIX}%"})
+            bind.execute(sa.select(target.c.rowid, target.c[column]).where(target.c[column].like(f"%{PREFIX}%")))
             .tuples()
             .all(),
         )
@@ -126,10 +133,7 @@ def rewrite(bind: Connection, to_v1: bool = False) -> int:
             except (TypeError, ValueError):
                 continue  # not readable JSON: leave it exactly as it is
             if _walk(data, to_v1):
-                bind.execute(
-                    sa.text(f"UPDATE {table} SET {column} = :v WHERE rowid = :r"),
-                    {"v": json.dumps(data), "r": rowid},
-                )
+                bind.execute(sa.update(target).where(target.c.rowid == rowid).values({column: json.dumps(data)}))
                 changed_rows += 1
     return changed_rows
 

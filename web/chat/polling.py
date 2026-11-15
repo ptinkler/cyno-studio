@@ -51,12 +51,13 @@ def _result_name(kind: str | None, job: Mapping[str, JsonValue]) -> str:
 def start_video_poller(conv_id: str, message_id: int, media_id: str, job_id: str) -> None:
     """Start a background poller for a submitted media job."""
     threading.Thread(
-        target=_poll_video, args=(conv_id, message_id, media_id, job_id), daemon=True, name=f"chat-video-{media_id}"
+        target=poll_video, args=(conv_id, message_id, media_id, job_id), daemon=True, name=f"chat-video-{media_id}"
     ).start()
 
 
 @with_owner_keys
-def _poll_video(conv_id: str, message_id: int, media_id: str, job_id: str) -> None:
+def poll_video(conv_id: str, message_id: int, media_id: str, job_id: str) -> None:
+    """Follow a video job until it finishes, then record the result (or the error) on its card."""
     db = get_db()
     source = cast("_VideoProvider", provider_for_job(job_id))
     deadline = time.time() + VIDEO_POLL_TIMEOUT
@@ -69,9 +70,9 @@ def _poll_video(conv_id: str, message_id: int, media_id: str, job_id: str) -> No
         try:
             job = source.get_video(job_id)
             errors = 0
-        except Exception as e:  # noqa: BLE001 — provider adapters may raise transport-specific errors
+        except Exception as e:  # provider adapters may raise transport-specific errors
             errors += 1
-            log.warning("video %s: poll error %d/%d: %s", job_id, errors, VIDEO_MAX_POLL_ERRORS, e)
+            log.warning("video %s: poll error %d/%d", job_id, errors, VIDEO_MAX_POLL_ERRORS, exc_info=True)
             if errors >= VIDEO_MAX_POLL_ERRORS:
                 db.update_chat_media_item(message_id, media_id, status="error", error=f"Polling failed: {e}")
                 return
@@ -83,7 +84,8 @@ def _poll_video(conv_id: str, message_id: int, media_id: str, job_id: str) -> No
             name = _result_name(kind if isinstance(kind, str) else None, job)
             try:
                 source.download_video(job_id, conversation_dir(conv_id) / name)
-            except Exception as e:  # noqa: BLE001 — convert download failures into a terminal media state
+            except Exception as e:  # convert download failures into a terminal media state
+                log.exception("video %s: download failed", job_id)
                 db.update_chat_media_item(message_id, media_id, status="error", error=f"Download failed: {e}")
                 return
             usage = job.get("usage")
@@ -144,10 +146,10 @@ def startup_resume_chat() -> None:
         db.update_chat_message(msg.id, status="error", error="Interrupted by server restart")
     if resumed:
         log.info("resumed polling for %d unfinished generation(s)", resumed)
-    threading.Thread(target=_warm_missing_thumbnails, daemon=True).start()
+    threading.Thread(target=warm_missing_thumbnails, daemon=True).start()
 
 
-def _warm_missing_thumbnails() -> None:
+def warm_missing_thumbnails() -> None:
     """Create missing grid thumbnails and chat previews for stored images.
 
     Existing thumbnails are skipped; images are processed in the background.

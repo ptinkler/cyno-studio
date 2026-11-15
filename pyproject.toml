@@ -100,21 +100,11 @@ extend-immutable-calls = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Asserts are the point of a test; annotations add noise to fixtures and cases.
-# SLF: a unit test of a private helper has to name it.
-"tests/*" = ["S101", "ANN", "SLF", "D", "ARG"]
-# These are command-line tools: their printed output IS the product, and the
-# one subprocess call runs a fixed `ruff format` argv, not anything user-supplied.
-"scripts/*" = ["T20", "S603"]
-"web/provision_admin.py" = ["T20"]
-# Migrations build DDL/DML from their own hard-coded table and column names.
-"alembic/versions/*" = ["S608"]
-# Authlib's `access_token_url` is an endpoint URL; S106 only matches the name.
-"web/oauth.py" = ["S106"]
-# Provider-facing errors include the actionable context returned to chat users.
-"web/providers/pollo.py" = ["TRY003", "ARG001"]
-"web/providers/venice.py" = ["TRY003", "ARG001"]
-"web/providers/pollo_engine/*.py" = ["TRY003", "ARG001"]
+# Tests only, approved by the maintainer:
+# - S101: assert is how pytest tests express checks; the -O concern behind the rule never applies.
+# - ANN: basedpyright strict already requires annotations (tracked in pyright-baseline.json); no double-reporting.
+# - ARG: fixtures requested for their side effects and stand-ins that must match a replaced signature.
+"tests/*" = ["S101", "ANN", "ARG"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["web", "tests"]

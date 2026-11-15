@@ -27,7 +27,6 @@ from web import image_hosts, keyctx, request_log
 from web.core.config import POLLO_API_TIMEOUT, POLLO_PLATFORM_BASE
 from web.core.get_task import TaskResult, get_task_status
 from web.providers import pollo_estimate
-from web.providers.openrouter import OpenRouterError
 from web.providers.pollo_engine import (
     AUDIO_GENERATORS,
     ERROR_STATUSES,
@@ -40,18 +39,30 @@ from web.providers.pollo_engine import audio_generator as get_audio_generator
 from web.providers.pollo_engine import image_generator as get_image_generator
 from web.providers.pollo_engine import video_generator as get_video_generator
 from web.providers.pollo_engine.registry import ModelSpec, PolloGenerator
+from web.providers.pollo_errors import (
+    ApiKeyMissingError,
+    DownloadFailedError,
+    EditInstructionRequiredError,
+    ImageTimeoutError,
+    LipsyncAudioFileRequiredError,
+    LipsyncPortraitRequiredError,
+    ModelNotEnabledError,
+    NonJsonReplyError,
+    PollingGaveUpError,
+    PolloError,
+    ReferenceFileRequiredError,
+    ReferenceImageRequiredError,
+    RequestFailedError,
+    SourceVideoRequiredError,
+    SubmitRefusedError,
+    UnknownModelError,
+    UploadFailedError,
+    VideoNotReadyError,
+    VoiceCloneReferenceRequiredError,
+    VoiceListError,
+)
 from web.providers.pollo_models import MODEL_INFO, ModelInfo
 from web.types import JsonValue, ModelEntry
-
-
-class PolloError(OpenRouterError):
-    """A Pollo request or generation failure.
-
-    It subclasses OpenRouterError so chat handles it the same way, except
-    moderation detection: Pollo answers 403 for "This model
-    is not enabled for API access", which isn't a content block.
-    """
-
 
 PREFIX = "pollo/"
 JOB_PREFIX = "pollo:"
@@ -70,7 +81,7 @@ def is_configured() -> bool:
 NAME: str = "pollo"
 
 
-def list_models(kind: str, refresh: bool = False) -> list[ModelEntry]:
+def list_models(kind: str, _refresh: bool = False) -> list[ModelEntry]:
     """List Pollo models for the uniform provider interface.
 
     Pollo has no text models; image, video and audio lists
@@ -201,7 +212,7 @@ def list_voices(page: int = 1, page_size: int = 50, **filters: str) -> dict[str,
         resp.raise_for_status()
         body = _json_object(cast("object", resp.json()))
     except (requests.RequestException, ValueError) as e:
-        raise PolloError(f"Couldn't load Pollo's voice list: {e}") from e
+        raise VoiceListError(e) from e
     keep = ("voiceId", "voiceName", "sampleAudio", "language", "gender", "age", "voiceStyle", "accent", "engineCode")
     voices: list[JsonValue] = [{k: v.get(k) for k in keep} for v in _json_objects(body.get("data"))]
     return {"voices": voices, "total": body.get("total", len(voices))}
@@ -230,7 +241,7 @@ def submit_audio(
     image_hosts.take_upload_notes()  # start clean: notes describe this submit only
     if MODEL_INFO.get(key, {}).get("audio_input"):
         if not source_audio:
-            raise PolloError("Voice cloning needs a reference clip — upload an audio file")
+            raise VoiceCloneReferenceRequiredError
         opts["voice_ref_url"] = _upload(source_audio, "audio")
     try:
         generator = get_audio_generator(key, api_key=keyctx.provider_key("pollo"), prompt=prompt, **opts)
@@ -242,10 +253,10 @@ def submit_audio(
 
 def _generator_key(model_id: str, generators: Mapping[str, ModelSpec]) -> str:
     if not is_configured():
-        raise PolloError("No Pollo API key set — add one in Settings → Keys")
+        raise ApiKeyMissingError
     key = model_id[len(PREFIX) :]
     if key not in generators:
-        raise PolloError(f"Unknown Pollo model: {key}")
+        raise UnknownModelError(key)
     return key
 
 
@@ -257,7 +268,7 @@ def _upload(path: Path, what: str = "image") -> str:
     try:
         return image_hosts.upload_file(path)
     except ValueError as e:
-        raise PolloError(f"Couldn't upload the {what} for Pollo: {e}") from e
+        raise UploadFailedError(what, e) from e
 
 
 def _upload_ref_item(item: Mapping[str, object]) -> dict[str, JsonValue]:
@@ -269,7 +280,7 @@ def _upload_ref_item(item: Mapping[str, object]) -> dict[str, JsonValue]:
     typ = str(item.get("type") or "image")
     path = item["path"]
     if not isinstance(path, Path):
-        raise PolloError("A reference needs a file")
+        raise ReferenceFileRequiredError
     url = _upload(path, "video") if typ == "video" else _upload(path, "audio") if typ == "audio" else _upload(path)
     ref: dict[str, JsonValue] = {"url": url, "type": typ}
     if name := item.get("name"):
@@ -340,7 +351,7 @@ def generate_image(
         resolution=resolution,
         images=images or None,
     )
-    task = _wait(_submit(generator))
+    task = _wait(submit_task(generator))
     sent = _sent_params(generator)
     return (
         [_download(u) for u in _task_urls(task)],
@@ -389,11 +400,11 @@ def _submit_source_video_job(
     if typ not in (*_IMAGE_AND_VIDEO, *_VIDEO_ONLY):
         return None
     if not source_video:
-        raise PolloError(f"{_SRC_VIDEO_NEEDS[typ]} needs a source video")
+        raise SourceVideoRequiredError(_SRC_VIDEO_NEEDS[typ])
     if typ in _IMAGE_AND_VIDEO and not first_frame:
-        raise PolloError(f"{_SRC_VIDEO_NEEDS[typ]} needs a reference image")
+        raise ReferenceImageRequiredError(_SRC_VIDEO_NEEDS[typ])
     if typ == "video_edit" and not (prompt or "").strip():
-        raise PolloError("Editing needs an instruction prompt")
+        raise EditInstructionRequiredError
     # The source video goes to the host that takes larger files; both are URLs.
     kw: dict[str, JsonValue] = {
         "api_key": keyctx.provider_key("pollo"),
@@ -447,9 +458,9 @@ def submit_video(
         # Lip sync: a reference image (first frame) driven by an uploaded audio
         # track. Both are uploaded to public URLs.
         if not first_frame:
-            raise PolloError("Lip sync needs a reference image")
+            raise LipsyncPortraitRequiredError
         if not source_audio:
-            raise PolloError("Lip sync needs an audio file")
+            raise LipsyncAudioFileRequiredError
         generator = get_video_generator(
             key,
             api_key=keyctx.provider_key("pollo"),
@@ -546,7 +557,7 @@ def estimate_cost(
                 generate_audio=generate_audio,
             )
         return pollo_estimate.estimate(generator)
-    except Exception:  # noqa: BLE001 — estimates must not block the composer
+    except (PolloError, ValueError, TypeError, requests.RequestException):  # estimates must not block the composer
         return None
 
 
@@ -556,7 +567,7 @@ def _job(generator: PolloGenerator, params: dict[str, JsonValue] | None = None) 
     ``params`` overrides the video/image view of them (audio reports its own).
     """
     return {
-        "id": JOB_PREFIX + _submit(generator),
+        "id": JOB_PREFIX + submit_task(generator),
         "params": {**(params or _sent_params(generator)), **_upload_notice()},
     }
 
@@ -612,7 +623,7 @@ def download_video(job_id: str, dest: Path, index: int = 0) -> None:
     """Download a completed Pollo video job to ``dest``."""
     task = get_video(job_id)
     if task["status"] != "completed":
-        raise PolloError(f"Pollo video isn't ready ({task['status']})")
+        raise VideoNotReadyError(task["status"])
     tmp = dest.with_suffix(dest.suffix + ".part")
     try:
         with requests.get(_task_urls(task)[index], stream=True, timeout=DOWNLOAD_TIMEOUT) as resp:
@@ -620,11 +631,12 @@ def download_video(job_id: str, dest: Path, index: int = 0) -> None:
             with tmp.open("wb") as f:
                 f.writelines(resp.iter_content(chunk_size=1 << 16))
     except requests.RequestException as e:
-        raise PolloError(f"Couldn't download the Pollo video: {e}") from e
+        raise DownloadFailedError("video", e) from e
     tmp.replace(dest)
 
 
-def _submit(generator: PolloGenerator) -> str:
+def submit_task(generator: PolloGenerator) -> str:
+    """Send a built generation request to Pollo (logged) and return its task id."""
     path = urlsplit(getattr(generator, "model_url", None) or "").path
     model = path.rstrip("/").rsplit("/", 1)[-1] or None
     with request_log.logged("pollo", "POST", path, _payload(generator), model=model) as outcome:
@@ -635,7 +647,7 @@ def _payload(generator: PolloGenerator) -> dict[str, JsonValue] | None:
     """What the generator will send (None if it refuses to build one)."""
     try:
         return {"input": generator.get_payload()["input"]}
-    except Exception:  # noqa: BLE001 — send_request reports the real problem
+    except ValueError:  # send_request reports the real problem
         return None
 
 
@@ -645,29 +657,23 @@ def _submit_logged(generator: PolloGenerator, outcome: request_log.LogOutcome) -
     except (ConnectionError, ValueError) as e:
         # ValueError: the generator refused the request (e.g. an
         # image-to-video-only model with no image) — nothing was sent
-        raise PolloError(f"Pollo: {e}") from e
+        raise SubmitRefusedError(e) from e
     outcome["status"] = resp.status_code
     outcome["response"] = request_log.response_of(resp)
     try:
         body = _json_object(cast("object", resp.json()))
     except ValueError:
-        raise PolloError(
-            f"Pollo returned non-JSON (HTTP {resp.status_code}): {resp.text[:200]}", resp.status_code
-        ) from None
+        raise NonJsonReplyError(resp.status_code, resp.text) from None
     data = body.get("data")
     data = dict(data) if isinstance(data, Mapping) else {}
     task_id = data.get("taskId")
     if not isinstance(task_id, str):
         task_id = None
     if not task_id and resp.status_code == 404 and body.get("message") == "Not found":
-        raise PolloError(
-            "Pollo: this model isn't available to your API key (404 Not found) — "
-            "it may not be enabled for API access yet",
-            404,
-        )
+        raise ModelNotEnabledError
     if not task_id:
         detail = "; ".join(str(i.get("message", "")) for i in _json_objects(data.get("issues"))) or body.get("message")
-        raise PolloError(f"Pollo: {detail or f'request failed (HTTP {resp.status_code})'}", resp.status_code)
+        raise RequestFailedError(None if detail is None else str(detail), resp.status_code)
     return task_id
 
 
@@ -679,7 +685,7 @@ def _task_state(task_id: str) -> dict[str, JsonValue]:
     """
     try:
         results = get_task_status(task_id, keyctx.provider_key("pollo") or "")
-    except Exception as e:  # noqa: BLE001 — retry network/VPN hiccups
+    except (requests.RequestException, ValueError) as e:  # retry network/VPN hiccups
         return {"status": "transient", "error": f"Pollo: {e}"}
     status, fail_msg = results[0][0], results[0][1]
     if status == "cloudflare_blocked" or (status == "error" and (fail_msg or "").startswith("HTTP ")):
@@ -734,14 +740,14 @@ def _wait(task_id: str) -> dict[str, JsonValue]:
         if task["status"] == "transient":
             errors += 1
             if errors >= MAX_POLL_ERRORS:
-                raise PolloError(f"{task['error']} (polling gave up)")
+                raise PollingGaveUpError(task["error"])
             continue
         errors = 0
         if task["status"] == "failed":
             raise PolloError(str(task["error"]))
         if task["status"] == "completed":
             return task
-    raise PolloError("Pollo: timed out waiting for the image")
+    raise ImageTimeoutError
 
 
 def _download(url: str) -> tuple[bytes, str]:
@@ -749,6 +755,6 @@ def _download(url: str) -> tuple[bytes, str]:
         resp = requests.get(url, timeout=DOWNLOAD_TIMEOUT)
         resp.raise_for_status()
     except requests.RequestException as e:
-        raise PolloError(f"Couldn't download the Pollo image: {e}") from e
+        raise DownloadFailedError("image", e) from e
     media_type = (resp.headers.get("Content-Type") or "image/png").split(";")[0].strip()
     return resp.content, media_type

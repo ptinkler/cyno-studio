@@ -7,24 +7,55 @@ provider's ids (and unreadable JSON) untouched.
 
 import importlib.util
 import json
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Protocol, cast
 
 import pytest
 import sqlalchemy as sa
+from pydantic import TypeAdapter
+
+from tests.jsonpath import dig, must, text
+from web.types import JsonValue
 
 pytestmark = pytest.mark.no_tenant
 
+_JSON = TypeAdapter[JsonValue](JsonValue)
 
-def _migration():
+
+class _Migration(Protocol):
+    """The part of migration 0027 these tests call."""
+
+    def rewrite(self, bind: sa.Connection, to_v1: bool = False) -> int:
+        """Rewrite every stored Pollo model id; returns how many rows changed."""
+        raise NotImplementedError
+
+
+def _migration() -> _Migration:
     path = Path(__file__).parent.parent / "alembic" / "versions" / "0027_drop_pollo_v1_suffix.py"
-    spec = importlib.util.spec_from_file_location("m0027", path)
+    spec = must(importlib.util.spec_from_file_location("m0027", path))
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    must(spec.loader).exec_module(mod)
+    return cast("_Migration", mod)
+
+
+def _scalar(bind: sa.Connection, sql: str) -> str | None:
+    """The first column of the first row of ``sql``."""
+    return cast("str | None", bind.execute(sa.text(sql)).scalar())
+
+
+def _row(bind: sa.Connection, sql: str) -> dict[str, JsonValue]:
+    """The single row ``sql`` returns, by column name."""
+    return cast("dict[str, JsonValue]", dict(bind.execute(sa.text(sql)).mappings().one()))
+
+
+def _loads(raw: str | None) -> JsonValue:
+    """Decode a JSON column."""
+    return _JSON.validate_json(must(raw))
 
 
 @pytest.fixture
-def bind():
+def bind() -> Iterator[sa.Connection]:
     """Provide the bind fixture."""
     eng = sa.create_engine("sqlite://")
     with eng.begin() as c:
@@ -40,7 +71,7 @@ def bind():
         yield c
 
 
-def test_rewrites_every_stored_id(bind):
+def test_rewrites_every_stored_id(bind: sa.Connection) -> None:
     """Test that rewrites every stored id."""
     mod = _migration()
     bind.execute(
@@ -71,47 +102,47 @@ def test_rewrites_every_stored_id(bind):
     # chat_messages.model, media_json, item_json, title_model
     assert mod.rewrite(bind) == 7
 
-    conv = bind.execute(sa.text("SELECT * FROM chat_conversations")).mappings().one()
+    conv = _row(bind, "SELECT * FROM chat_conversations")
     assert conv["image_model"] == "pollo/seedream"
     assert conv["video_model"] == "pollo/seedance20fast"
     assert conv["text_model"] == "anthropic/claude"  # another provider's id is left alone
-    assert json.loads(conv["settings_json"]) == {
+    assert _loads(text(conv, "settings_json")) == {
         "audio_model": "pollo/elevenv3",
         "image_options": {"resolution": "1K"},
     }
 
-    msg = bind.execute(sa.text("SELECT * FROM chat_messages")).mappings().one()
+    msg = _row(bind, "SELECT * FROM chat_messages")
     assert msg["model"] == "pollo/pollo30"
-    media = json.loads(msg["media_json"])
-    assert media[0]["model"] == "pollo/seedreampro"
-    assert media[1]["model"] == "venice/wan-2-5"
-    assert media[1]["params"] == {"duration": 5}  # nothing else in the item is touched
+    media = _loads(text(msg, "media_json"))
+    assert dig(media, 0, "model") == "pollo/seedreampro"
+    assert dig(media, 1, "model") == "venice/wan-2-5"
+    assert dig(media, 1, "params") == {"duration": 5}  # nothing else in the item is touched
 
-    lib = bind.execute(sa.text("SELECT item_json FROM chat_library_items")).scalar()
-    assert json.loads(lib)["model"] == "pollo/klingv3image"
-    assert bind.execute(sa.text("SELECT title_model FROM chat_settings")).scalar() == "pollo/pollo30"
+    lib = _scalar(bind, "SELECT item_json FROM chat_library_items")
+    assert dig(_loads(lib), "model") == "pollo/klingv3image"
+    assert _scalar(bind, "SELECT title_model FROM chat_settings") == "pollo/pollo30"
 
 
-def test_is_idempotent_and_reversible(bind):
+def test_is_idempotent_and_reversible(bind: sa.Connection) -> None:
     """Test that is idempotent and reversible."""
     mod = _migration()
     bind.execute(sa.text("INSERT INTO chat_conversations VALUES ('c', NULL, 'pollo/seedreamv1', NULL, NULL)"))
     assert mod.rewrite(bind) == 1
     assert mod.rewrite(bind) == 0  # a second run has nothing left to do
-    assert bind.execute(sa.text("SELECT image_model FROM chat_conversations")).scalar() == "pollo/seedream"
+    assert _scalar(bind, "SELECT image_model FROM chat_conversations") == "pollo/seedream"
     mod.rewrite(bind, to_v1=True)  # downgrade
-    assert bind.execute(sa.text("SELECT image_model FROM chat_conversations")).scalar() == "pollo/seedreamv1"
+    assert _scalar(bind, "SELECT image_model FROM chat_conversations") == "pollo/seedreamv1"
 
 
-def test_leaves_unreadable_json_alone(bind):
+def test_leaves_unreadable_json_alone(bind: sa.Connection) -> None:
     """Test that leaves unreadable json alone."""
     mod = _migration()
     bind.execute(sa.text("INSERT INTO chat_messages VALUES (1, NULL, 'pollo/ not json {')"))
     assert mod.rewrite(bind) == 0
-    assert bind.execute(sa.text("SELECT media_json FROM chat_messages")).scalar() == "pollo/ not json {"
+    assert _scalar(bind, "SELECT media_json FROM chat_messages") == "pollo/ not json {"
 
 
-def test_skips_tables_that_do_not_exist_yet():
+def test_skips_tables_that_do_not_exist_yet() -> None:
     """An older database may predate some of these tables."""
     mod = _migration()
     eng = sa.create_engine("sqlite://")

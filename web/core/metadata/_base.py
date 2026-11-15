@@ -70,7 +70,7 @@ class DBBase:
         # create_all only has to make the tables of a brand-new file.
         fresh = not sa.inspect(self.engine).has_table("chat_conversations")
         Base.metadata.create_all(self.engine)
-        self._fresh = fresh
+        self.is_fresh = fresh
 
     @contextmanager
     def _session(self) -> Generator[Session]:

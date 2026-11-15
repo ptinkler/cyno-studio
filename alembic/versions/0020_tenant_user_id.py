@@ -73,7 +73,8 @@ def upgrade() -> None:
                 batch_op.add_column(sa.Column("user_id", sa.String(length=50), nullable=True))
                 batch_op.create_index(f"ix_{table}_user_id", ["user_id"])
         # Backfill existing rows to the admin
-        bind.execute(sa.text(f"UPDATE {table} SET user_id = :uid WHERE user_id IS NULL"), {"uid": admin_id})
+        owned = sa.table(table, sa.column("user_id", sa.String()))
+        bind.execute(sa.update(owned).where(owned.c.user_id.is_(None)).values(user_id=admin_id))
 
 
 def downgrade() -> None:

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, NotRequired, TypedDict, cast
 
 from web.core.config import POLLO_GENERATION_BASE
 from web.providers.pollo_engine._shared import Payload, as_str, as_str_list, parse_aspect_ratio
+from web.providers.pollo_engine.errors import SourceImageRequiredError
 
 if TYPE_CHECKING:
     from web.types import JsonValue
@@ -256,7 +257,7 @@ def _tool_payload(c: ImageCfg, image_url: str | None, **kw: JsonValue) -> Payloa
     """An image tool: {image} (+ upscale's integer scale from "2x"-style values)."""
     image = image_url or next(iter(as_str_list(kw.get("images"))), None)
     if not image:
-        raise ValueError("This tool needs a source image")
+        raise SourceImageRequiredError
     attrs: dict[str, JsonValue] = {"image": image}
     if c.get("TOOL") == "upscale":
         scale = str(kw.get("resolution") or "2x")

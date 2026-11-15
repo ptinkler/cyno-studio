@@ -28,12 +28,12 @@ from web.media_types import AUDIO_SUFFIXES, IMAGE_SUFFIXES, VIDEO_SUFFIXES, kind
         ("noextension", None),
     ],
 )
-def test_kind_of(name, kind):
+def test_kind_of(name: str, kind: str | None) -> None:
     """Test that kind of."""
     assert kind_of(name) == kind
 
 
-def test_the_three_sets_do_not_overlap():
+def test_the_three_sets_do_not_overlap() -> None:
     """Test that the three sets do not overlap."""
     assert not IMAGE_SUFFIXES & VIDEO_SUFFIXES
     assert not IMAGE_SUFFIXES & AUDIO_SUFFIXES

@@ -34,6 +34,14 @@ _db_instance: MetadataDB | None = None
 _db_init_lock = threading.Lock()
 
 
+def swap_db_instance(new: MetadataDB | None) -> MetadataDB | None:
+    """Replace the global database instance (None builds a fresh one on next use); returns the old one."""
+    global _db_instance
+    with _db_init_lock:
+        old, _db_instance = _db_instance, new
+    return old
+
+
 def get_db() -> MetadataDB:
     """Get the global metadata database instance."""
     global _db_instance

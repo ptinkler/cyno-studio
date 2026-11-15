@@ -2,6 +2,7 @@
 
 import time
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -10,7 +11,7 @@ from web.core.metadata import MetadataDB, _base, get_db, manager
 
 
 @pytest.fixture
-def db(tmp_path):
+def db(tmp_path: Path):
     """Return a MetadataDB backed by a fresh temp file."""
     return MetadataDB(db_path=tmp_path / "test.db")
 
@@ -18,20 +19,20 @@ def db(tmp_path):
 class TestGlobalDB:
     """Tests for global db."""
 
-    def test_get_db_returns_singleton(self, tmp_path, monkeypatch):
+    def test_get_db_returns_singleton(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that get db returns singleton."""
-        old = manager._db_instance
+        old = None
         monkeypatch.setattr(config_mod, "DB_PATH", tmp_path / "data" / "singleton.db")
         monkeypatch.setattr(_base, "DB_PATH", tmp_path / "data" / "singleton.db")
         try:
-            manager._db_instance = None
+            old = manager.swap_db_instance(None)
             assert get_db() is get_db()
         finally:
-            manager._db_instance = old
+            manager.swap_db_instance(old)
 
 
 @pytest.mark.parametrize("tz", ["UTC", "Europe/London", "America/New_York"])
-def test_timestamps_carry_the_servers_utc_offset(tmp_path, monkeypatch, tz):
+def test_timestamps_carry_the_servers_utc_offset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tz: str) -> None:
     """Stored timestamps are naive server-local time. Serialised without an.
 
     offset, a browser in another timezone misreads them (a UTC server and a

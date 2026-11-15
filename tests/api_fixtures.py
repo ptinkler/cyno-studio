@@ -6,6 +6,7 @@ F811 to excuse one).
 """
 
 import sys
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,20 +16,20 @@ from web.core.metadata import MetadataDB
 
 
 @pytest.fixture(autouse=True)
-def _setup_env(tmp_path, monkeypatch, provider_keys):
+def _setup_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, provider_keys: dict[str, str | None]) -> None:
     monkeypatch.setenv("POLLO_DATA_DIR", str(tmp_path))
     provider_keys["pollo"] = "test-key"
     (tmp_path / "data").mkdir()
 
 
 @pytest.fixture
-def db(tmp_path):
+def db(tmp_path: Path) -> MetadataDB:
     """Provide the db fixture."""
     return MetadataDB(db_path=tmp_path / "data" / "metadata.db")
 
 
 @pytest.fixture
-def client(db, monkeypatch):
+def client(db: MetadataDB, monkeypatch: pytest.MonkeyPatch):
     """Provide a test client whose API modules all resolve the temporary database."""
     for name, mod in list(sys.modules.items()):
         if name.startswith("web.") and getattr(mod, "get_db", None) is not None:

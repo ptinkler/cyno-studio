@@ -14,6 +14,7 @@ from typing import cast
 from web import characters, providers, request_log
 from web.chat.catalogue import auto_ratio, model_info
 from web.chat.constants import DEFAULT_IMAGE_LIMIT, IMAGE_EXTS, TITLE_SECONDS
+from web.chat.errors import EmptyPromptError
 from web.chat.helpers import conversation_dir, effective_ids
 from web.chat.models import RefChoices
 from web.chat.tools import AUDIO_TOOL_RESULT, IMAGE_TOOL_RESULT, TITLE_PROMPT, VIDEO_TOOL_RESULT
@@ -57,7 +58,7 @@ def _ask(model: str, prompt: str, max_seconds: float) -> tuple[str, float]:
 def generate_title(model: str, prompt: str) -> tuple[str | None, float]:
     """(a short title for a chat starting with `prompt`, its cost in USD)."""
     text, cost = _ask(model, TITLE_PROMPT.format(prompt=prompt[:2000]), TITLE_SECONDS)
-    return _clean_title(text), cost
+    return clean_title(text), cost
 
 
 ENHANCE_SECONDS = 45
@@ -81,11 +82,11 @@ def enhance_prompt(model: str, prompt: str, kind: str) -> tuple[str, float]:
     text, cost = _ask(model, ENHANCE_PROMPT.format(kind=kind, prompt=prompt[:4000]), ENHANCE_SECONDS)
     text = _THINK.sub("", text).strip().strip("\"'`").strip()
     if not text:
-        raise ValueError("The model returned no prompt")  # noqa: TRY003
+        raise EmptyPromptError
     return text, cost
 
 
-def _clean_title(text: str) -> str | None:
+def clean_title(text: str) -> str | None:
     """Normalize a model reply into a short chat title.
 
     Return None if no usable title remains after cleanup.
@@ -94,7 +95,7 @@ def _clean_title(text: str) -> str | None:
     line = next((ln.strip() for ln in text.splitlines() if ln.strip()), "")
     line = re.sub(r"^(?:\*\*)?title(?:\*\*)?\s*:\s*", "", line, flags=re.IGNORECASE)
     # Model-generated titles may wrap text in curly quotes; remove them too.
-    line = line.strip(" \t\"'`*#_“”‘’").rstrip(".").strip()  # noqa: RUF001 - accepted title punctuation
+    line = line.strip(" \t\"'`*#_\u201c\u201d\u2018\u2019").rstrip(".").strip()
     if not line or len(line) > 80:
         return None
     return line

@@ -58,7 +58,7 @@ def _with_db[T, D](work: Callable[[sqlite3.Connection], T], default: D) -> T | D
         conn.execute(_SCHEMA)
         result = work(conn)
         conn.commit()
-    except Exception as e:  # noqa: BLE001 — cache failures must not break the request
+    except (OSError, sqlite3.Error) as e:  # cache failures must not break the request
         log.warning("media cache unusable (%s) — lengths will be read from the files", e)
         return default
     else:

@@ -99,6 +99,6 @@ def get_credit_balance(api_key: str) -> dict[str, float] | None:
                 "totalCredits": as_int(data.get("totalCredits")) or 0,
             }
         log.warning("credit balance fetch returned HTTP %s from %s: %s", response.status_code, url, response.text[:300])
-    except Exception as e:  # noqa: BLE001 — task failures must be recorded for every provider
+    except (requests.RequestException, ValueError) as e:
         log.warning("could not fetch the credit balance: %s", e)
     return None

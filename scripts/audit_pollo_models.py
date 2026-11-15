@@ -31,107 +31,182 @@ Output per model: docs? | enabled? | refs(cap/types) | mismatches vs our config.
 from __future__ import annotations
 
 import argparse
-import contextlib
 import json
 import os
 import re
-import shutil
-import subprocess
 import sys
-import urllib.request
+from collections.abc import Mapping
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final, Literal, TypedDict, cast
 
-from scripts.probe_pollo_models import _probe_estimate
+import requests
+
+from scripts.probe_pollo_models import probe_estimate
+from web.jsonutil import as_int, as_list, as_object, as_objects, as_str, body_of
 from web.providers.pollo_engine.video import VIDEO_MODELS
 from web.providers.pollo_models import MODEL_INFO
 
 if TYPE_CHECKING:
+    from web.providers.pollo_engine.video import VideoRow
+    from web.providers.pollo_models import ModelInfo, RefMode
     from web.types import JsonValue
+
+
+def write(text: str, *, err: bool = False) -> None:
+    """Write one line of this command's output (stdout, or stderr for progress notes)."""
+    (sys.stderr if err else sys.stdout).write(text + "\n")
+
+
+type LimitKind = Literal["image", "video", "audio"]
+type Spec = dict[str, JsonValue]
+
+
+class DocRefs(TypedDict):
+    """The Reference-To-Video branch the docs describe for one model."""
+
+    max: int | None
+    types: list[str]
+    limits: dict[LimitKind, int]
+
+
+class DocFeature(TypedDict):
+    """One documented model's generation path and feature set."""
+
+    path: str
+    refs: DocRefs | None
+    resolutions: list[str] | None
+    ratios: list[str] | None
+
+
+class OurModel(TypedDict):
+    """One model in our registry: its key, presentation info and endpoint row."""
+
+    key: str
+    info: ModelInfo
+    cfg: VideoRow
+
+
+class _Remove(Enum):
+    """Marker for an edit that deletes a field instead of setting it."""
+
+    REMOVE = "remove"
+
+
+type EditValue = str | _Remove
+type Edits = dict[str, dict[str, EditValue]]
+
+
+class _Args(argparse.Namespace):
+    """Typed view of the command-line options."""
+
+    spec: str | None = None
+    key: str | None = None
+    write: bool = False
+
+
+class InlineEntryError(ValueError):
+    """A one-line model entry did not have the expected `"key": {...},` shape."""
+
+    def __init__(self, line: str) -> None:
+        """Remember the offending source line."""
+        super().__init__(f"cannot edit one-line entry: {line!r}")
+
 
 SPEC_URL = "https://docs.pollo.ai/openapi.json"
 # Per-type ref caps live in the free-text "constraints" of the refs description;
 # pull the common phrasings so the audit can compare them to our ref_mode limits.
-_LIMIT_PATTERNS = {
+_LIMIT_PATTERNS: dict[LimitKind, re.Pattern[str]] = {
     "image": re.compile(r"(?:up to|most)\s+(\d+)\s+image", re.IGNORECASE),
     "video": re.compile(r"(?:up to|most)\s+(\d+)\s+(?:reference\s+)?video", re.IGNORECASE),
     "audio": re.compile(r"(?:up to|most)\s+(\d+)\s+(?:audio|voice)", re.IGNORECASE),
 }
 
 
-def _load_spec(path_or_none: str | None) -> dict:
+def _load_spec(path_or_none: str | None) -> Spec:
+    """The OpenAPI spec from a saved file, or fetched from docs.pollo.ai."""
     if path_or_none:
         with Path(path_or_none).open(encoding="utf-8") as f:
-            return json.load(f)
-    print(f"Fetching {SPEC_URL} (~10 MB)…", file=sys.stderr)
-    with urllib.request.urlopen(SPEC_URL, timeout=60) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+            return as_object(cast("object", json.load(f)))
+    write(f"Fetching {SPEC_URL} (~10 MB)…", err=True)
+    resp = requests.get(SPEC_URL, timeout=60)
+    resp.raise_for_status()
+    return as_object(body_of(resp))
 
 
-def _resolve(spec: dict, node: dict) -> dict:
+def _resolve(spec: Spec, node: Spec) -> Spec:
     """Follow a single $ref (one level is enough for these schemas)."""
-    ref = node.get("$ref")
+    ref = as_str(node.get("$ref"))
     if not ref:
         return node
-    cur: dict = spec
+    cur = spec
     for part in ref.lstrip("#/").split("/"):
-        cur = cur.get(part, {})
+        cur = as_object(cur.get(part))
     return cur
 
 
-def _ref_branch(spec: dict, input_schema: dict) -> dict | None:
+def _ref_branch(spec: Spec, input_schema: Spec) -> Spec | None:
     """The Reference-To-Video branch of an `input` oneOf — the one with refs."""
-    for branch in input_schema.get("oneOf", []):
+    for branch in as_objects(input_schema.get("oneOf")):
         b = _resolve(spec, branch)
-        if "refs" in (b.get("properties") or {}):
+        if "refs" in as_object(b.get("properties")):
             return b
     return None
 
 
-def _enum(schema: dict, prop: str) -> list | None:
-    p = (schema.get("properties") or {}).get(prop) or {}
-    return p.get("enum")
+def _enum(schema: Spec, prop: str) -> list[str] | None:
+    """A property's `enum` values (the string ones), or None when it declares none."""
+    raw = as_object(as_object(schema.get("properties")).get(prop)).get("enum")
+    if raw is None:
+        return None
+    return [s for item in as_list(raw) if (s := as_str(item)) is not None]
 
 
-def _docs_feature(spec: dict, op: dict) -> dict:
+def _docs_feature(spec: Spec, path: str, op: Spec) -> DocFeature:
     """Extract one model's refs/durations/resolutions feature set from its POST op."""
-    body = (((op.get("requestBody") or {}).get("content") or {}).get("application/json") or {}).get("schema") or {}
-    body = _resolve(spec, body)
-    input_schema = _resolve(spec, (body.get("properties") or {}).get("input") or {})
-    feat: dict = {"refs": None}
+    content = as_object(as_object(op.get("requestBody")).get("content"))
+    body = _resolve(spec, as_object(as_object(content.get("application/json")).get("schema")))
+    input_schema = _resolve(spec, as_object(as_object(body.get("properties")).get("input")))
+    refs: DocRefs | None = None
     branch = _ref_branch(spec, input_schema)
     if branch:
-        refs_prop = branch["properties"]["refs"]
-        items = _resolve(spec, refs_prop.get("items") or {})
+        refs_prop = as_object(as_object(branch.get("properties")).get("refs"))
+        items = _resolve(spec, as_object(refs_prop.get("items")))
         desc = str(refs_prop.get("description") or "") + " " + str(branch.get("description") or "")
-        limits = {k: int(m.group(1)) for k, pat in _LIMIT_PATTERNS.items() if (m := pat.search(desc))}
-        feat["refs"] = {
-            "max": refs_prop.get("maxItems"),
+        limits: dict[LimitKind, int] = {
+            k: int(m.group(1)) for k, pat in _LIMIT_PATTERNS.items() if (m := pat.search(desc))
+        }
+        refs = {
+            "max": as_int(refs_prop.get("maxItems")),
             "types": _enum(items, "type") or [t for t in ("image", "video", "audio") if t in desc],
             "limits": limits,
         }
-    feat["resolutions"] = _enum(input_schema, "resolution")
-    feat["ratios"] = _enum(input_schema, "aspectRatio")
-    return feat
+    return {
+        "path": path,
+        "refs": refs,
+        "resolutions": _enum(input_schema, "resolution"),
+        "ratios": _enum(input_schema, "aspectRatio"),
+    }
 
 
-def parse_docs(spec: dict) -> dict[str, dict]:
+def parse_docs(spec: Spec) -> dict[str, DocFeature]:
     """{last path segment's model slug -> feature dict} for every POST generation path."""
-    out: dict[str, dict] = {}
-    for path, methods in (spec.get("paths") or {}).items():
-        if "/generation/" not in path or "post" not in methods:
+    out: dict[str, DocFeature] = {}
+    for path, methods in as_object(spec.get("paths")).items():
+        method_ops = as_object(methods)
+        if "/generation/" not in path or "post" not in method_ops:
             continue
         # .../<provider>/<model-slug>/video  (slug is the identifying segment)
         parts = [p for p in path.split("/") if p]
         slug = parts[-2] if parts[-1] in ("video", "image", "audio") else parts[-1]
-        out[slug] = {"path": path, **_docs_feature(spec, methods["post"])}
+        out[slug] = _docs_feature(spec, path, as_object(method_ops["post"]))
     return out
 
 
-def _our_models() -> dict[str, dict]:
+def _our_models() -> dict[str, OurModel]:
     """Our video registry keyed by Pollo model slug (MODEL)."""
-    out = {}
+    out: dict[str, OurModel] = {}
     for key, cfg in VIDEO_MODELS.items():
         slug = cfg.get("MODEL")
         if slug:
@@ -139,29 +214,30 @@ def _our_models() -> dict[str, dict]:
     return out
 
 
-def _mismatches(ours: dict, docs: dict | None) -> list[str]:
+def _mismatches(ours: OurModel, docs: DocFeature | None) -> list[str]:
     """Where our ref_mode config disagrees with the docs (empty = consistent)."""
     if not docs:
         return []
-    msgs = []
+    msgs: list[str] = []
     rm = ours["info"].get("ref_mode")
-    doc_refs = docs.get("refs")
+    doc_refs = docs["refs"]
     if doc_refs and not rm:
         msgs.append(f"docs has refs (max {doc_refs['max']}) but we declare no ref_mode")
     elif rm and not doc_refs:
         msgs.append("we declare ref_mode but docs show no refs branch")
     elif rm and doc_refs:
-        if doc_refs.get("max") and rm.get("max") != doc_refs["max"]:
+        if doc_refs["max"] and rm.get("max") != doc_refs["max"]:
             msgs.append(f"refs max ours={rm.get('max')} docs={doc_refs['max']}")
-        for t, n in (doc_refs.get("limits") or {}).items():
-            if (rm.get("limits") or {}).get(t) != n:
-                msgs.append(f"{t} cap ours={(rm.get('limits') or {}).get(t)} docs={n}")
+        our_limits = rm.get("limits") or {}
+        for t, n in doc_refs["limits"].items():
+            if our_limits.get(t) != n:
+                msgs.append(f"{t} cap ours={our_limits.get(t)} docs={n}")
     return msgs
 
 
 def _enablement(keys: list[str], api_key: str) -> dict[str, str]:
     """Live estimate probe (reuses probe_pollo_models) -> {our_key: verdict}."""
-    return {k: _probe_estimate(k, api_key)[0] for k in keys}
+    return {k: probe_estimate(k, api_key)[0] for k in keys}
 
 
 # ── --write: safe, surgical edits to our source (you review the git diff) ──
@@ -169,9 +245,8 @@ def _enablement(keys: list[str], api_key: str) -> dict[str, str]:
 # `ref_mode` in pollo_models.py, and `HAS_REFS` in v1_video.py. Curated bits —
 # labels, deliberate "Superseded" hides, ref_mode's own quirks like
 # `no_audio_with_video` — are merged around, never overwritten.
-_REMOVE = object()
+REMOVE: Final = _Remove.REMOVE
 _REPO = Path(__file__).resolve().parent.parent  # repo root
-_RUFF = shutil.which("ruff")
 MODELS_FILE = _REPO / "web" / "providers" / "pollo_models.py"
 ENGINE_FILE = _REPO / "web" / "providers" / "pollo_engine" / "v1_video.py"
 # A hide we may clear is one justified by enablement; a deliberate hide is kept.
@@ -182,13 +257,27 @@ def py_literal(v: JsonValue) -> str:
     """A Python literal using double quotes and True/False (ruff-style)."""
     if isinstance(v, bool):
         return "True" if v else "False"
-    if isinstance(v, dict):
+    if isinstance(v, Mapping):
         return "{" + ", ".join(f'"{k}": {py_literal(x)}' for k, x in v.items()) + "}"
     if isinstance(v, (list, tuple)):
         return "[" + ", ".join(py_literal(x) for x in v) + "]"
     if isinstance(v, str):
         return '"' + v.replace('"', '\\"') + '"'
     return str(v)
+
+
+def _to_json(value: object) -> JsonValue:
+    """A JSON-shaped copy of an in-memory literal (tuples become lists)."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Mapping):
+        return {k: _to_json(v) for k, v in as_object(cast("object", value)).items()}
+    return [_to_json(v) for v in as_list(value)]
+
+
+def _ref_mode_json(rm: RefMode) -> dict[str, JsonValue]:
+    """A ref_mode as a plain JSON object, keeping its key order."""
+    return {k: _to_json(v) for k, v in rm.items()}
 
 
 def _block_range(lines: list[str], key: str) -> tuple[int, int] | None:
@@ -215,6 +304,8 @@ def _edit_inline(line: str, field: str, val: str) -> str:
     """
     val = re.sub(r"\s+#.*$", "", val)
     m = re.match(r'^(\s*".*?": \{)(.*?)(\},?\s*)$', line)
+    if not m:
+        raise InlineEntryError(line)
     prefix, inner, suffix = m.group(1), m.group(2).rstrip(), m.group(3)
     existing = re.search(r'("' + re.escape(field) + r'": )[^,}]+', inner)
     if existing:
@@ -242,7 +333,7 @@ def _field_range(lines: list[str], start: int, end: int, field: str) -> tuple[in
     return None
 
 
-def apply_edits(path: str, edits: dict[str, dict], warnings: list[str]) -> int:
+def apply_edits(path: str, edits: Mapping[str, Mapping[str, EditValue]], warnings: list[str]) -> int:
     """Apply model-field edits to a source file and return the edit count.
 
     Re-scan after each change so line indices stay valid.
@@ -257,12 +348,12 @@ def apply_edits(path: str, edits: dict[str, dict], warnings: list[str]) -> int:
                 continue
             s, e = blk
             if s == e:  # one-line inline entry
-                if val is not _REMOVE:
+                if not isinstance(val, _Remove):
                     lines[s] = _edit_inline(lines[s], field, val)
                     n += 1
                 continue
             fr = _field_range(lines, s, e, field)
-            if val is _REMOVE:
+            if isinstance(val, _Remove):
                 if fr:
                     del lines[fr[0] : fr[1] + 1]
                     n += 1
@@ -280,14 +371,16 @@ def apply_edits(path: str, edits: dict[str, dict], warnings: list[str]) -> int:
     return n
 
 
-def plan_writes(ours: dict, docs: dict[str, dict], enabled: dict[str, str]) -> tuple[dict, dict, list[str]]:
+def plan_writes(
+    ours: Mapping[str, OurModel], docs: Mapping[str, DocFeature], enabled: Mapping[str, str]
+) -> tuple[Edits, Edits, list[str]]:
     """Plan source edits and human-only notes from the model audit.
 
     Add or update ``ref_mode`` from docs but never remove it because the spec is
     incomplete; clear hides only when they were justified by enablement.
     """
-    models_edits: dict[str, dict] = {}
-    engine_edits: dict[str, dict] = {}
+    models_edits: Edits = {}
+    engine_edits: Edits = {}
     notes: list[str] = []
     today = datetime.now().astimezone().date().isoformat()
     for slug, o in ours.items():
@@ -296,17 +389,17 @@ def plan_writes(ours: dict, docs: dict[str, dict], enabled: dict[str, str]) -> t
         verdict = enabled.get(key)
         hide = info.get("hidden")
         if verdict == "ENABLED" and hide and _ENABLEMENT_HIDE.search(hide):
-            models_edits.setdefault(key, {})["hidden"] = _REMOVE
+            models_edits.setdefault(key, {})["hidden"] = REMOVE
         elif verdict == "DISABLED" and not hide:
             reason = f'"Not enabled for API access on this key (403)"  # audit {today}'
             models_edits.setdefault(key, {})["hidden"] = reason
         # Features → ref_mode (+ engine HAS_REFS), merged so curated keys survive
-        doc_refs = d.get("refs") if d else None
+        doc_refs = d["refs"] if d else None
         if doc_refs:
-            cur = info.get("ref_mode") or {}
-            merged = {**cur, "types": doc_refs["types"], "max": doc_refs["max"]}
-            if doc_refs.get("limits"):
-                merged["limits"] = doc_refs["limits"]
+            cur = _ref_mode_json(info.get("ref_mode") or {})
+            merged: dict[str, JsonValue] = {**cur, "types": doc_refs["types"], "max": doc_refs["max"]}
+            if doc_refs["limits"]:
+                merged["limits"] = {str(k): v for k, v in doc_refs["limits"].items()}
             if merged != cur:
                 models_edits.setdefault(key, {})["ref_mode"] = py_literal(merged)
             if not o["cfg"].get("HAS_REFS"):
@@ -316,23 +409,19 @@ def plan_writes(ours: dict, docs: dict[str, dict], enabled: dict[str, str]) -> t
     return models_edits, engine_edits, notes
 
 
-def _write(ours: dict, docs: dict, enabled: dict) -> None:
+def _write(ours: Mapping[str, OurModel], docs: Mapping[str, DocFeature], enabled: Mapping[str, str]) -> None:
     """Apply the mechanical fixes to our source, then report; you review the diff."""
     models_edits, engine_edits, notes = plan_writes(ours, docs, enabled)
     warnings: list[str] = []
     n = apply_edits(str(MODELS_FILE), models_edits, warnings) + apply_edits(str(ENGINE_FILE), engine_edits, warnings)
     for w in warnings:
-        print(f"  ! {w}")
+        write(f"  ! {w}")
     if notes:
-        print("\nHand-review (not auto-applied):")
+        write("\nHand-review (not auto-applied):")
         for note in notes:
-            print(f"  - {note}")
-    # Re-flow to our formatting; harmless if ruff isn't installed.
-    with contextlib.suppress(Exception):
-        subprocess.run(
-            [_RUFF or "ruff", "format", str(MODELS_FILE), str(ENGINE_FILE)], cwd=_REPO, check=False, capture_output=True
-        )
-    print(f"\nApplied {n} edit(s) to pollo_models.py / v1_video.py. Review with `git diff` before committing.")
+            write(f"  - {note}")
+    write(f"\nApplied {n} edit(s) to pollo_models.py / v1_video.py.")
+    write("Run `ruff format` on them, then review with `git diff` before committing.")
 
 
 def main() -> int:
@@ -345,7 +434,7 @@ def main() -> int:
         action="store_true",
         help="apply the mechanical fixes (hidden/ref_mode/HAS_REFS) to our source — review the git diff after",
     )
-    args = ap.parse_args()
+    args = ap.parse_args(namespace=_Args())
 
     docs = parse_docs(_load_spec(args.spec))
     ours = _our_models()
@@ -355,27 +444,27 @@ def main() -> int:
         _write(ours, docs, enabled)
         return 0
 
-    print(f"\n{'model (our key)':26} {'slug':22} docs enabled refs            notes")
-    print("-" * 110)
+    write(f"\n{'model (our key)':26} {'slug':22} docs enabled refs            notes")
+    write("-" * 110)
     for slug, o in sorted(ours.items(), key=lambda kv: kv[1]["key"]):
         d = docs.get(slug)
-        refs = d and d.get("refs")
-        refs_s = f"{refs['max']}:{','.join(refs['types'] or [])}"[:15] if refs else "-"
+        refs = d["refs"] if d else None
+        refs_s = f"{refs['max']}:{','.join(refs['types'])}"[:15] if refs else "-"
         notes = "; ".join(_mismatches(o, d))
         if o["info"].get("hidden"):
             notes = (notes + "; " if notes else "") + "hidden in UI"
-        print(f"{o['key']:26} {slug:22} {'Y' if d else '-':4} {enabled.get(o['key'], '?'):7} {refs_s:15} {notes}")
+        write(f"{o['key']:26} {slug:22} {'Y' if d else '-':4} {enabled.get(o['key'], '?'):7} {refs_s:15} {notes}")
 
     # Models documented but absent from our registry — candidates to add.
     missing = sorted(set(docs) - set(ours))
     if missing:
-        print("\nIn docs, not in our registry (candidates to add):")
+        write("\nIn docs, not in our registry (candidates to add):")
         for slug in missing:
-            r = docs[slug].get("refs")
-            print(f"  {slug:28} {docs[slug]['path']}" + (f"  refs max {r['max']}" if r else ""))
-    print(f"\n{len(ours)} models in registry, {len(docs)} documented, {len(missing)} documented-but-missing.")
+            r = docs[slug]["refs"]
+            write(f"  {slug:28} {docs[slug]['path']}" + (f"  refs max {r['max']}" if r else ""))
+    write(f"\n{len(ours)} models in registry, {len(docs)} documented, {len(missing)} documented-but-missing.")
     if enabled:
-        print(f"{sum(1 for v in enabled.values() if v == 'ENABLED')}/{len(enabled)} enabled on this key.")
+        write(f"{sum(1 for v in enabled.values() if v == 'ENABLED')}/{len(enabled)} enabled on this key.")
     return 0
 
 

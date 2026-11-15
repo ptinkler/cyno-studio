@@ -13,10 +13,27 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import sys
 
 from web.core import config
 from web.core.metadata import get_db
 from web.passwords import hash_password
+
+
+def _emit(text: str) -> None:
+    """Write one line of this command's output."""
+    sys.stdout.write(text + "\n")
+
+
+MIN_PASSWORD_LENGTH = 10
+
+
+class PasswordTooShortError(SystemExit):
+    """The chosen admin password is shorter than the minimum."""
+
+    def __init__(self) -> None:
+        """Build the message shown on exit."""
+        super().__init__(f"Password must be at least {MIN_PASSWORD_LENGTH} characters.")
 
 
 class _Args(argparse.Namespace):
@@ -42,17 +59,17 @@ def main() -> None:
     db = get_db()
     if args.set_password:
         pw = args.password or getpass.getpass("New admin password: ")
-        if len(pw) < 10:
-            raise SystemExit("Password must be at least 10 characters.")  # noqa: TRY003
+        if len(pw) < MIN_PASSWORD_LENGTH:
+            raise PasswordTooShortError
         admin = db.create_local_admin(args.email, hash_password(pw), name=args.name)
     else:
         admin = db.ensure_admin(args.email, args.name)
-    print(f"Admin: {admin.email}  (id {admin.id}, provider {admin.provider}, is_admin={admin.is_admin})")
+    _emit(f"Admin: {admin.email}  (id {admin.id}, provider {admin.provider}, is_admin={admin.is_admin})")
     if args.claim_orphans:
         n = db.claim_orphans(admin.id)
-        print(f"Assigned {n} previously-unowned row(s) to the admin.")
+        _emit(f"Assigned {n} previously-unowned row(s) to the admin.")
         moved = _migrate_library(admin.id)
-        print(f"Moved {moved} legacy library upload(s) into the admin's folder.")
+        _emit(f"Moved {moved} legacy library upload(s) into the admin's folder.")
 
 
 def _migrate_library(admin_id: str) -> int:
