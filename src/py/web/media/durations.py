@@ -4,7 +4,7 @@ import threading
 from pathlib import Path
 
 from web.media import cache as media_cache
-from web.media.paths import MediaItem, item_path
+from web.media.paths import LibraryEntry, item_path
 from web.media.video import video_seconds
 
 # Reading a length means opening the file with OpenCV, which on a NAS costs
@@ -91,7 +91,7 @@ def _read_duration(path: Path) -> tuple[int, float | None] | None:
         return None
 
 
-def _unread_video_path(item: MediaItem) -> Path | None:
+def _unread_video_path(item: LibraryEntry) -> Path | None:
     """The file of a video item whose length isn't known yet, else None."""
     if item.get("kind") != "video" or item.get("duration") is not None:
         return None
@@ -107,7 +107,7 @@ def _remember_durations(read: list[tuple[str, int, float | None]]) -> None:
     media_cache.remember(read)
 
 
-def fill_durations(items: list[MediaItem]) -> None:
+def fill_durations(items: list[LibraryEntry]) -> None:
     """Fill missing video durations in items, subject to a read budget.
 
     The budget keeps a page of previously unseen videos from making one

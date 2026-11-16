@@ -30,6 +30,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Protocol, TypedDict
 
+from pydantic import BaseModel, ValidationError
+
 from web.core import config
 from web.core.metadata import current_tenant
 from web.jsonutil import as_object, body_of, loads
@@ -40,6 +42,25 @@ _BARE_BASE64_MIN_CHARS = 2000  # a long string with no spaces is taken to be bas
 MAX_BYTES = 5 * 1024 * 1024
 _lock = threading.Lock()
 MAX_TEXT = 4000  # a non-JSON response body is kept up to this many characters
+
+
+class RequestLogEntry(BaseModel):
+    """One logged provider call: what was sent, what came back and how it went.
+
+    The log is a file that outlives versions, so everything past the first four fields may be missing.
+    """
+
+    at: str
+    provider: str
+    method: str
+    path: str
+    model: str | None = None
+    status: int | None = None
+    seconds: float | None = None
+    error: str | None = None
+    flags: dict[str, str] | None = None
+    request: JsonValue = None
+    response: JsonValue = None
 
 
 class _ToolReply(TypedDict):
@@ -231,6 +252,17 @@ def _jsonable(value: JsonValue) -> JsonValue:
         if isinstance(calls, dict):
             return {**value, "tool_calls": list(calls.values()) or None}
     return value
+
+
+def recent_entries(limit: int = 100) -> list[RequestLogEntry]:
+    """The latest entries that are readable as such, newest first (a damaged or foreign line is skipped)."""
+    entries: list[RequestLogEntry] = []
+    for raw in recent(limit):
+        try:
+            entries.append(RequestLogEntry.model_validate(raw))
+        except ValidationError:
+            continue
+    return entries
 
 
 def recent(limit: int = 100) -> list[dict[str, JsonValue]]:

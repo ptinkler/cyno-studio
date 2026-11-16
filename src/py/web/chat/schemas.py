@@ -9,6 +9,8 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 from pydantic.alias_generators import to_camel
 
+from web.characters import CharacterInfo
+from web.core.request_log import RequestLogEntry
 from web.types import CreditEstimate, JsonValue
 
 
@@ -299,6 +301,72 @@ class ShownBranch(BaseModel):
     messages: list[ShownMessage]
 
 
+# --- Attachments, the library, active generations and the request log ----------------------------------
+
+
+class AttachedFile(BaseModel):
+    """The name an uploaded attachment was stored under in the chat."""
+
+    file: str
+
+
+class Discarded(BaseModel):
+    """Whether an unsent attachment's file was removed (it stays if a message still uses it)."""
+
+    deleted: bool
+
+
+class LibraryCard(MediaCard):
+    """A generated card in the chat library, with where it lives."""
+
+    conversation_id: str
+    conversation_title: str | None
+    message_id: int | None  # null when an older edit or retry detached it from its message
+    attached: bool  # still in its chat, on some branch
+    created_at: str | None
+
+
+class LibraryList(BaseModel):
+    """Every generated image and video across chats, newest first."""
+
+    items: list[LibraryCard]
+
+
+class DeletedLibraryItem(BaseModel):
+    """The id of the library item a delete removed."""
+
+    deleted: str
+
+
+class RequestLog(BaseModel):
+    """The latest provider requests, newest first."""
+
+    entries: list[RequestLogEntry]
+
+
+class Generation(BaseModel):
+    """A generation the queue dock tracks: where it is, what it is and how it is going."""
+
+    media_id: str
+    message_id: int
+    conversation_id: str
+    conversation_title: str
+    kind: Literal["image", "video", "audio"]
+    prompt: str | None
+    model: str | None
+    status: Literal["pending", "done", "error"]
+    file: str | None
+    error: str | None
+    moderated: bool
+    created_at: str | None
+
+
+class ActiveGenerations(BaseModel):
+    """The pending generations, and the final state of the ones the client was tracking."""
+
+    items: list[Generation]
+
+
 # --- Prompt tools, estimates and voices ---------------------------------------------------------
 
 
@@ -351,19 +419,6 @@ class Cancelled(BaseModel):
 # from them. Every event names itself in `type`, so they form a discriminated union.
 
 
-class Character(BaseModel):
-    """A reusable character with reference images."""
-
-    id: int
-    name: str
-    description: str
-    images: list[str]  # file names, main one first
-    conversation_id: str | None  # set for an ad hoc character that belongs to that chat
-    adhoc: bool
-    created_at: str | None
-    updated_at: str | None
-
-
 class StartEvent(BaseModel):
     """The turn began: the prompt that was saved (if any) and the reply being written."""
 
@@ -393,7 +448,7 @@ class CharactersEvent(BaseModel):
 
     type: Literal["characters"]
     character_ids: list[int]
-    characters: list[Character]
+    characters: list[CharacterInfo]
 
 
 class InstructionsEvent(BaseModel):

@@ -23,6 +23,7 @@ from web.core.metadata import current_tenant
 from web.transfer import export as chat_export
 from web.transfer.chatgpt.common import NOT_AN_EXPORT
 from web.transfer.chatgpt.importer import run_import
+from web.transfer.schemas import ImportFile, ImportJob, ImportStatus, UploadCancelled, UploadProgress, UploadStarted
 from web.types import JsonValue
 from web.uploads.files import safe_filename
 
@@ -75,26 +76,26 @@ class StartImport(BaseModel):
 
 
 @router.get("/chatgpt")
-def api_import_status() -> dict[str, JsonValue]:
+def api_import_status() -> ImportStatus:
     """The exports in the imports folder (newest first) and this user's last import's progress."""
     folder = _import_dir()
     files = sorted(folder.glob("*.zip"), key=lambda p: p.stat().st_mtime, reverse=True) if folder.is_dir() else []
-    return {
-        "folder": str(folder),
-        "files": [
-            {
-                "name": p.name,
-                "size": p.stat().st_size,
-                "modified": datetime.fromtimestamp(p.stat().st_mtime).astimezone().replace(tzinfo=None).isoformat(),
-            }
+    return ImportStatus(
+        folder=str(folder),
+        files=[
+            ImportFile(
+                name=p.name,
+                size=p.stat().st_size,
+                modified=datetime.fromtimestamp(p.stat().st_mtime).astimezone().replace(tzinfo=None).isoformat(),
+            )
             for p in files
         ],
-        "job": dict(_current_job()),
-    }
+        job=ImportJob.model_validate(_current_job()),
+    )
 
 
 @router.post("/chatgpt")
-def api_start_import(data: StartImport) -> dict[str, JsonValue]:
+def api_start_import(data: StartImport) -> ImportJob:
     """Start importing an export in the background; progress is in GET."""
     path = _import_dir() / safe_filename(data.file)
     if not path.is_file() or not zipfile.is_zipfile(path):
@@ -112,7 +113,7 @@ def api_start_import(data: StartImport) -> dict[str, JsonValue]:
     # Copy the request context so imported rows belong to the signed-in user
     ctx = contextvars.copy_context()
     threading.Thread(target=lambda: ctx.run(_run_job, path, job), daemon=True).start()
-    return dict(job)
+    return ImportJob.model_validate(job)
 
 
 def _run_job(path: Path, job: dict[str, JsonValue]) -> None:
@@ -151,7 +152,7 @@ def _clear_stale_uploads(folder: Path) -> None:
 
 
 @router.post("/chatgpt/uploads")
-def api_start_upload(data: StartUpload) -> dict[str, int | str]:
+def api_start_upload(data: StartUpload) -> UploadStarted:
     """Start a chunked upload and return its ID and chunk size."""
     name = Path(data.name.replace("\\", "/")).name
     if not name.lower().endswith(".zip") or name.startswith("."):
@@ -163,7 +164,7 @@ def api_start_upload(data: StartUpload) -> dict[str, int | str]:
     part, meta = _upload_paths(upload_id)
     part.touch()
     meta.write_text(json.dumps({"name": name, "size": data.size}))
-    return {"id": upload_id, "received": 0, "chunk_size": UPLOAD_CHUNK}
+    return UploadStarted(id=upload_id, received=0, chunk_size=UPLOAD_CHUNK)
 
 
 @router.post("/chatgpt/uploads/{upload_id}")
@@ -171,7 +172,7 @@ async def api_upload_chunk(
     upload_id: str,
     offset: Annotated[int, Form(..., ge=0)],
     chunk: Annotated[UploadFile, File(...)],
-) -> dict[str, int | str]:
+) -> UploadProgress:
     """Write one chunk at `offset`.
 
     Returns how much has arrived, and once
@@ -187,7 +188,7 @@ async def api_upload_chunk(
     return await run_in_threadpool(_write_chunk, part, meta, info, offset, raw)
 
 
-def _write_chunk(part: Path, meta: Path, info: _UploadMeta, offset: int, raw: bytes) -> dict[str, int | str]:
+def _write_chunk(part: Path, meta: Path, info: _UploadMeta, offset: int, raw: bytes) -> UploadProgress:
     received = part.stat().st_size
     if offset > received:
         raise HTTPException(409, f"Expected the chunk at {received}")
@@ -197,7 +198,7 @@ def _write_chunk(part: Path, meta: Path, info: _UploadMeta, offset: int, raw: by
         f.write(raw)
     received = offset + len(raw)
     if received < info["size"]:
-        return {"received": received}
+        return UploadProgress(received=received)
     if not zipfile.is_zipfile(part):
         part.unlink()
         meta.unlink()
@@ -214,12 +215,12 @@ def _write_chunk(part: Path, meta: Path, info: _UploadMeta, offset: int, raw: by
         target = part.parent / f"{Path(info['name']).stem} ({n}).zip"
     part.rename(target)
     meta.unlink()
-    return {"received": received, "file": target.name}
+    return UploadProgress(received=received, file=target.name)
 
 
 @router.delete("/chatgpt/uploads/{upload_id}")
-def api_cancel_upload(upload_id: str) -> dict[str, str]:
+def api_cancel_upload(upload_id: str) -> UploadCancelled:
     """Cancel an unfinished upload and remove its temporary files."""
     for p in _upload_paths(upload_id):
         p.unlink(missing_ok=True)
-    return {"cancelled": upload_id}
+    return UploadCancelled(cancelled=upload_id)

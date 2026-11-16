@@ -108,3 +108,11 @@ export type SendArgs<M extends Method, E extends string> = [RouteFor<M, E>] exte
   : [BodyFor<M, E>] extends [never]
     ? []
     : [body: BodyFor<M, E>]
+
+type FormBodyOf<O> = O extends { requestBody: { content: { 'multipart/form-data': infer B } } } ? B : never
+
+/** The multipart form fields of POST route `E` (`never` when it takes no form). */
+export type FormBodyFor<E extends string> = FormBodyOf<Operation<RouteFor<'post', E>, 'post'>>
+
+/** No extra arguments when POST route `E` takes a multipart form, else one no caller can supply. */
+export type FormEndpoint<E extends string> = [FormBodyFor<E>] extends [never] ? [endpointTakesNoForm: never] : []

@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from datetime import datetime
 
 from web import characters
+from web.characters import CharacterInfo
 from web.chat.catalogue import RefMode
 from web.chat.constants import (
     CONSISTENCY_REFS,
@@ -18,7 +19,6 @@ from web.chat.generation import (
     plan_refs,
 )
 from web.chat.helpers import effective_ids
-from web.chat.schemas import Character as SchemaCharacter
 from web.chat.schemas import CharactersEvent
 from web.chat.tools import (
     SYSTEM_PROMPT,
@@ -170,7 +170,7 @@ class HistoryTurn(TurnBase):
             CharactersEvent(
                 type="characters",
                 character_ids=own,
-                characters=[SchemaCharacter.model_validate(c.to_dict()) for c in self.characters],
+                characters=[CharacterInfo.of(c) for c in self.characters],
             )
         )
 

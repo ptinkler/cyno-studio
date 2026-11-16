@@ -20,7 +20,7 @@ import shutil
 import uuid
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Self
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -242,6 +242,42 @@ def _delete(character_id: int, db: MetadataDB) -> None:
             db.update_conversation(conv.id, character_ids=[i for i in conv.character_ids if i != character_id])
 
 
+class CharacterInfo(BaseModel):
+    """A reusable character with reference images."""
+
+    id: int
+    name: str
+    description: str
+    images: list[str]  # file names, main one first
+    conversation_id: str | None  # set for an ad hoc character that belongs to that chat
+    adhoc: bool
+    created_at: str | None
+    updated_at: str | None
+
+    @classmethod
+    def of(cls, char: Character) -> Self:
+        """The public view of a stored character."""
+        return cls.model_validate(char.to_dict())
+
+
+class ListedCharacter(CharacterInfo):
+    """A character in the list, with the title of the chat an ad hoc one belongs to."""
+
+    conversation_title: str | None
+
+
+class CharacterList(BaseModel):
+    """The characters the caller may see."""
+
+    characters: list[ListedCharacter]
+
+
+class DeletedCharacter(BaseModel):
+    """The id of the character a delete removed."""
+
+    deleted: int
+
+
 class CharacterIn(BaseModel):
     """Character details accepted when creating a character."""
 
@@ -273,9 +309,7 @@ def _require_char(character_id: int) -> Character:
 
 
 @router.get("")
-def api_list_characters(
-    conversation_id: str | None = None, *, include_adhoc: bool = False
-) -> dict[str, list[dict[str, JsonValue]]]:
+def api_list_characters(conversation_id: str | None = None, *, include_adhoc: bool = False) -> CharacterList:
     """List saved characters and relevant ad-hoc characters.
 
     Set ``include_adhoc`` to include all chats' ad-hoc characters for management.
@@ -284,16 +318,17 @@ def api_list_characters(
     titles: dict[str, str] = {}
     if include_adhoc:
         titles = db.conversation_titles()
-    items = [
-        {**c.to_dict(), "conversation_title": titles.get(c.conversation_id or "")}
-        for c in db.list_characters()
-        if c.conversation_id is None or include_adhoc or c.conversation_id == conversation_id
-    ]
-    return {"characters": items}
+    return CharacterList(
+        characters=[
+            ListedCharacter.model_validate({**c.to_dict(), "conversation_title": titles.get(c.conversation_id or "")})
+            for c in db.list_characters()
+            if c.conversation_id is None or include_adhoc or c.conversation_id == conversation_id
+        ]
+    )
 
 
 @router.post("")
-def api_create_character(data: CharacterIn) -> dict[str, JsonValue]:
+def api_create_character(data: CharacterIn) -> CharacterInfo:
     """Create a saved character or attach an ad-hoc one to a chat."""
     db = get_db()
     conv = None
@@ -304,17 +339,17 @@ def api_create_character(data: CharacterIn) -> dict[str, JsonValue]:
     char = db.create_character(data.name.strip(), data.description.strip(), data.conversation_id)
     if conv:
         db.update_conversation(conv.id, character_ids=[*conv.character_ids, char.id])
-    return char.to_dict()
+    return CharacterInfo.of(char)
 
 
 @router.get("/{character_id}")
-def api_get_character(character_id: int) -> dict[str, JsonValue]:
+def api_get_character(character_id: int) -> CharacterInfo:
     """Return one character by ID."""
-    return _require_char(character_id).to_dict()
+    return CharacterInfo.of(_require_char(character_id))
 
 
 @router.patch("/{character_id}")
-def api_update_character(character_id: int, data: CharacterUpdate) -> dict[str, JsonValue]:
+def api_update_character(character_id: int, data: CharacterUpdate) -> CharacterInfo:
     """Update a character's name, description or reference images."""
     char = _require_char(character_id)
     fields: dict[str, JsonValue] = {}
@@ -329,38 +364,38 @@ def api_update_character(character_id: int, data: CharacterUpdate) -> dict[str, 
         for f in set(char.images) - set(keep):
             (char_dir(character_id) / f).unlink(missing_ok=True)
         fields["images"] = keep
-    return _updated(get_db(), character_id, **fields).to_dict()
+    return CharacterInfo.of(_updated(get_db(), character_id, **fields))
 
 
 @router.delete("/{character_id}")
-def api_delete_character(character_id: int) -> dict[str, int]:
+def api_delete_character(character_id: int) -> DeletedCharacter:
     """Delete a character and its stored images.
 
     Existing chats and generations continue working without sending the character.
     """
     _require_char(character_id)
     _delete(character_id, get_db())
-    return {"deleted": character_id}
+    return DeletedCharacter(deleted=character_id)
 
 
 @router.post("/{character_id}/promote")
-def api_promote_character(character_id: int) -> dict[str, JsonValue]:
+def api_promote_character(character_id: int) -> CharacterInfo:
     """Turn an ad-hoc chat character into a saved one, attachable anywhere."""
     _require_char(character_id)
-    return _updated(get_db(), character_id, conversation_id=None).to_dict()
+    return CharacterInfo.of(_updated(get_db(), character_id, conversation_id=None))
 
 
-def _add_image(char: Character, content: bytes, ext: str) -> dict[str, JsonValue]:
+def _add_image(char: Character, content: bytes, ext: str) -> CharacterInfo:
     if len(char.images) >= MAX_IMAGES:
         raise HTTPException(400, f"A character can have up to {MAX_IMAGES} images")
     name = f"img_{uuid.uuid4().hex[:12]}{ext}"
     d = char_dir(char.id)
     d.mkdir(parents=True, exist_ok=True)
     (d / name).write_bytes(content)
-    return _updated(get_db(), char.id, images=[*char.images, name]).to_dict()
+    return CharacterInfo.of(_updated(get_db(), char.id, images=[*char.images, name]))
 
 
-def add_image_from_file(char: Character, source: Path) -> dict[str, JsonValue]:
+def add_image_from_file(char: Character, source: Path) -> CharacterInfo:
     """Copy an image file into the character (used by the media library too)."""
     if not source.is_file() or not image_media_type(source):
         raise HTTPException(404, "Image not found")
@@ -368,7 +403,7 @@ def add_image_from_file(char: Character, source: Path) -> dict[str, JsonValue]:
 
 
 @router.post("/{character_id}/images")
-async def api_upload_character_image(character_id: int, file: Annotated[UploadFile, File(...)]) -> dict[str, JsonValue]:
+async def api_upload_character_image(character_id: int, file: Annotated[UploadFile, File(...)]) -> CharacterInfo:
     """Upload a reference image to a character."""
     char = _require_char(character_id)
     content, ext = await read_image_upload(file)
@@ -376,7 +411,7 @@ async def api_upload_character_image(character_id: int, file: Annotated[UploadFi
 
 
 @router.post("/{character_id}/images/from-chat")
-def api_character_image_from_chat(character_id: int, data: CopyFromChat) -> dict[str, JsonValue]:
+def api_character_image_from_chat(character_id: int, data: CopyFromChat) -> CharacterInfo:
     """Copy an image from a chat (uploaded or generated) into the character."""
     char = _require_char(character_id)
     return add_image_from_file(

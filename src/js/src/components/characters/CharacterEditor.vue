@@ -4,7 +4,7 @@ import MediaPicker from '../media/MediaPicker.vue'
 import { confirmDialog } from '../../composables/useDialog'
 import BaseDialog from '../BaseDialog.vue'
 import DefaultToggles from '../chat/DefaultToggles.vue'
-import { importMedia } from '../../composables/useMedia'
+import { importMediaToCharacter } from '../../composables/useMedia'
 import {
   createCharacter,
   updateCharacter,
@@ -100,7 +100,7 @@ function onDropOn(e, i) {
 
 function addImage(id, p) {
   if (p.kind === 'chat') return copyChatImageToCharacter(id, p.conversationId, p.file)
-  if (p.kind === 'media') return importMedia(p.mediaId, { target: 'character', character_id: id })
+  if (p.kind === 'media') return importMediaToCharacter(p.mediaId, id)
   return uploadCharacterImage(id, p.file)
 }
 

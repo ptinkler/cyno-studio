@@ -36,7 +36,7 @@ from web.chat.helpers import (
     saved_media,
     shown_message,
 )
-from web.chat.schemas import ShownMessage
+from web.chat.schemas import ActiveGenerations, Generation, ShownMessage
 from web.chat.workers import with_owner_keys
 from web.core.metadata import get_db, iso
 from web.core.metadata.models import ChatMessage
@@ -357,25 +357,27 @@ class ActiveQuery(BaseModel):
     known: list[int] = []
 
 
-def _gen_descriptor(msg: ChatMessage, item: dict[str, JsonValue], title: str) -> dict[str, JsonValue]:
-    return {
-        "media_id": item["id"],
-        "message_id": msg.id,
-        "conversation_id": msg.conversation_id,
-        "conversation_title": title,
-        "kind": item.get("kind"),
-        "prompt": item.get("prompt"),
-        "model": item.get("model") or msg.model,
-        "status": item.get("status"),
-        "file": item.get("file"),
-        "error": item.get("error"),
-        "moderated": bool(item.get("moderated")),
-        "created_at": iso(msg.created_at),
-    }
+def _gen_descriptor(msg: ChatMessage, item: dict[str, JsonValue], title: str) -> Generation:
+    return Generation.model_validate(
+        {
+            "media_id": item["id"],
+            "message_id": msg.id,
+            "conversation_id": msg.conversation_id,
+            "conversation_title": title,
+            "kind": item.get("kind"),
+            "prompt": item.get("prompt"),
+            "model": item.get("model") or msg.model,
+            "status": item.get("status"),
+            "file": item.get("file"),
+            "error": item.get("error"),
+            "moderated": bool(item.get("moderated")),
+            "created_at": iso(msg.created_at),
+        }
+    )
 
 
 @router.post("/generations/active")
-def api_active_generations(data: ActiveQuery) -> dict[str, list[dict[str, JsonValue]]]:
+def api_active_generations(data: ActiveQuery) -> ActiveGenerations:
     """List pending generations and the final states of tracked messages.
 
     Results cover all of the signed-in user's conversations. `known` IDs let
@@ -386,7 +388,7 @@ def api_active_generations(data: ActiveQuery) -> dict[str, list[dict[str, JsonVa
     for m in db.get_chat_messages_by_ids([i for i in data.known if i not in msgs]):
         msgs.setdefault(m.id, m)
     titles: dict[str, str] = {}
-    items: list[dict[str, JsonValue]] = []
+    items: list[Generation] = []
     seen: set[str] = set()
     for m in msgs.values():
         for item in m.media:
@@ -401,7 +403,7 @@ def api_active_generations(data: ActiveQuery) -> dict[str, list[dict[str, JsonVa
                 conv = db.get_conversation(cid)
                 titles[cid] = conv.title if conv else ""
             items.append(_gen_descriptor(m, item, titles[cid]))
-    return {"items": items}
+    return ActiveGenerations(items=items)
 
 
 @dataclass

@@ -1,5 +1,7 @@
 """Chat attachments, the served media files, the library of detached media and the request log."""
 
+from typing import TYPE_CHECKING
+
 from fastapi import File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 
@@ -13,25 +15,35 @@ from web.chat.helpers import (
     require_conv,
     require_own_conversation,
 )
+from web.chat.schemas import (
+    AttachedFile,
+    DeletedLibraryItem,
+    Discarded,
+    LibraryCard,
+    LibraryList,
+    RequestLog,
+)
 from web.core import request_log
 from web.core.metadata import get_db, iso
 from web.media.index import referenced_files
 from web.media.kinds import VIDEO_SUFFIXES
 from web.media.thumbs import thumb_response
-from web.types import JsonValue
 from web.uploads.files import read_audio_upload, read_image_upload, read_video_upload, safe_filename, store_deduped
+
+if TYPE_CHECKING:
+    from web.types import JsonValue
 
 
 @router.post("/conversations/{conv_id}/attachments")
-async def api_upload_attachment(conv_id: str, file: UploadFile = File(...)) -> dict[str, str]:
+async def api_upload_attachment(conv_id: str, file: UploadFile = File(...)) -> AttachedFile:
     """Save an image attachment for a conversation."""
     require_conv(conv_id)
     content, ext = await read_image_upload(file)
-    return {"file": store_deduped(conversation_dir(conv_id), "up_", content, ext)}
+    return AttachedFile(file=store_deduped(conversation_dir(conv_id), "up_", content, ext))
 
 
 @router.post("/conversations/{conv_id}/attachments/video")
-async def api_upload_video_attachment(conv_id: str, file: UploadFile = File(...)) -> dict[str, str]:
+async def api_upload_video_attachment(conv_id: str, file: UploadFile = File(...)) -> AttachedFile:
     """A source video upload (e.g.
 
     Recast). Saved with a 'upv_' prefix so the
@@ -39,11 +51,11 @@ async def api_upload_video_attachment(conv_id: str, file: UploadFile = File(...)
     """
     require_conv(conv_id)
     content, ext = await read_video_upload(file)
-    return {"file": store_deduped(conversation_dir(conv_id), "upv_", content, ext)}
+    return AttachedFile(file=store_deduped(conversation_dir(conv_id), "upv_", content, ext))
 
 
 @router.post("/conversations/{conv_id}/attachments/audio")
-async def api_upload_audio_attachment(conv_id: str, file: UploadFile = File(...)) -> dict[str, str]:
+async def api_upload_audio_attachment(conv_id: str, file: UploadFile = File(...)) -> AttachedFile:
     """A lip-sync audio upload.
 
     Saved with a 'upa_' prefix so the message
@@ -51,11 +63,11 @@ async def api_upload_audio_attachment(conv_id: str, file: UploadFile = File(...)
     """
     require_conv(conv_id)
     content, ext = await read_audio_upload(file)
-    return {"file": store_deduped(conversation_dir(conv_id), "upa_", content, ext)}
+    return AttachedFile(file=store_deduped(conversation_dir(conv_id), "upa_", content, ext))
 
 
 @router.delete("/conversations/{conv_id}/attachments/{filename}")
-def api_discard_attachment(conv_id: str, filename: str) -> dict[str, bool]:
+def api_discard_attachment(conv_id: str, filename: str) -> Discarded:
     """Drop an attachment that was uploaded but never sent (removed from the composer).
 
     Files any message or library entry still uses are kept.
@@ -63,16 +75,16 @@ def api_discard_attachment(conv_id: str, filename: str) -> dict[str, bool]:
     require_conv(conv_id)
     name = safe_filename(filename)
     if not name.startswith(("up_", "upv_", "upa_")):
-        return {"deleted": False}
+        return Discarded(deleted=False)
     db = get_db()
     in_use = any(name in referenced_files(i) for m in db.get_chat_messages(conv_id) for i in m.media) or any(
         lib.conversation_id == conv_id and name in referenced_files(lib.item) for lib in db.list_chat_library()
     )
     path = conversation_dir(conv_id) / name
     if in_use or not path.is_file():
-        return {"deleted": False}
+        return Discarded(deleted=False)
     path.unlink()
-    return {"deleted": True}
+    return Discarded(deleted=True)
 
 
 @router.get("/media/{conv_id}/{filename}")
@@ -106,16 +118,16 @@ async def api_chat_media_preview(conv_id: str, filename: str) -> Response:
 
 
 @router.get("/request-log")
-def api_request_log(limit: int = 100) -> dict[str, JsonValue]:
+def api_request_log(limit: int = 100) -> RequestLog:
     """The latest provider requests (Venice image/video calls): what was sent and what came back, newest first.
 
     See web/core/request_log.py.
     """
-    return {"entries": request_log.recent(max(1, min(limit, 1000)))}
+    return RequestLog(entries=request_log.recent_entries(max(1, min(limit, 1000))))
 
 
 @router.get("/library")
-def api_chat_library() -> dict[str, JsonValue]:
+def api_chat_library() -> LibraryList:
     """Every generated image/video across chats, newest first.
 
     `attached`
@@ -153,11 +165,11 @@ def api_chat_library() -> dict[str, JsonValue]:
     for i in items:
         cid = i["conversation_id"]
         i["conversation_title"] = titles.get(cid) if isinstance(cid, str) else None
-    return {"items": items}
+    return LibraryList(items=[LibraryCard.model_validate(i) for i in items])
 
 
 @router.delete("/library/{media_id}")
-def api_delete_library_item(media_id: str) -> dict[str, str]:
+def api_delete_library_item(media_id: str) -> DeletedLibraryItem:
     """Delete an unattached library item and its file.
 
     Attached media goes
@@ -171,4 +183,4 @@ def api_delete_library_item(media_id: str) -> dict[str, str]:
     file = lib.item.get("file")
     if isinstance(file, str):
         (chat_root() / lib.conversation_id / safe_filename(file)).unlink(missing_ok=True)
-    return {"deleted": media_id}
+    return DeletedLibraryItem(deleted=media_id)

@@ -1838,6 +1838,14 @@ export interface components {
             provider: string;
         };
         /**
+         * ActiveGenerations
+         * @description The pending generations, and the final state of the ones the client was tracking.
+         */
+        ActiveGenerations: {
+            /** Items */
+            items: components["schemas"]["Generation"][];
+        };
+        /**
          * ActiveQuery
          * @description Message IDs whose generation state the client still tracks.
          */
@@ -1847,6 +1855,14 @@ export interface components {
              * @default []
              */
             known?: number[];
+        };
+        /**
+         * AttachedFile
+         * @description The name an uploaded attachment was stored under in the chat.
+         */
+        AttachedFile: {
+            /** File */
+            file: string;
         };
         /**
          * AudioOptions
@@ -1903,6 +1919,16 @@ export interface components {
             authenticated: boolean;
             user: components["schemas"]["SessionUser"] | null;
         };
+        /**
+         * BlockedCounts
+         * @description How many chat generations a content filter blocked.
+         */
+        BlockedCounts: {
+            /** Black */
+            black: number;
+            /** Moderated */
+            moderated: number;
+        };
         /** Body_api_upload_attachment_api_chat_conversations__conv_id__attachments_post */
         Body_api_upload_attachment_api_chat_conversations__conv_id__attachments_post: {
             /** File */
@@ -1936,6 +1962,16 @@ export interface components {
             file: string;
         };
         /**
+         * BulkDeleted
+         * @description What a bulk delete removed, and the ids it could not.
+         */
+        BulkDeleted: {
+            /** Deleted */
+            deleted: string[];
+            /** Failed */
+            failed: string[];
+        };
+        /**
          * Cancelled
          * @description Whether a running reply was found and told to stop.
          */
@@ -1962,10 +1998,25 @@ export interface components {
             video?: components["schemas"]["ModelEntry"][];
         };
         /**
-         * Character
+         * CharacterIn
+         * @description Character details accepted when creating a character.
+         */
+        CharacterIn: {
+            /** Conversation Id */
+            conversation_id?: string | null;
+            /**
+             * Description
+             * @default
+             */
+            description?: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * CharacterInfo
          * @description A reusable character with reference images.
          */
-        Character: {
+        CharacterInfo: {
             /** Adhoc */
             adhoc: boolean;
             /** Conversation Id */
@@ -1984,19 +2035,12 @@ export interface components {
             updated_at: string | null;
         };
         /**
-         * CharacterIn
-         * @description Character details accepted when creating a character.
+         * CharacterList
+         * @description The characters the caller may see.
          */
-        CharacterIn: {
-            /** Conversation Id */
-            conversation_id?: string | null;
-            /**
-             * Description
-             * @default
-             */
-            description?: string;
-            /** Name */
-            name: string;
+        CharacterList: {
+            /** Characters */
+            characters: components["schemas"]["ListedCharacter"][];
         };
         /**
          * CharacterUpdate
@@ -2018,7 +2062,7 @@ export interface components {
             /** Character Ids */
             character_ids: number[];
             /** Characters */
-            characters: components["schemas"]["Character"][];
+            characters: components["schemas"]["CharacterInfo"][];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2050,6 +2094,14 @@ export interface components {
             openrouter: boolean;
             /** Venice */
             venice: boolean;
+        };
+        /**
+         * ClearedBlocked
+         * @description How many blocked generations were removed.
+         */
+        ClearedBlocked: {
+            /** Cleared */
+            cleared: number;
         };
         /**
          * Conversation
@@ -2362,10 +2414,34 @@ export interface components {
             deleted: number;
         };
         /**
+         * DeletedCharacter
+         * @description The id of the character a delete removed.
+         */
+        DeletedCharacter: {
+            /** Deleted */
+            deleted: number;
+        };
+        /**
          * DeletedConversation
          * @description The chat a delete removed.
          */
         DeletedConversation: {
+            /** Deleted */
+            deleted: string;
+        };
+        /**
+         * DeletedLibraryItem
+         * @description The id of the library item a delete removed.
+         */
+        DeletedLibraryItem: {
+            /** Deleted */
+            deleted: string;
+        };
+        /**
+         * DeletedMedia
+         * @description The id of the item a delete removed.
+         */
+        DeletedMedia: {
             /** Deleted */
             deleted: string;
         };
@@ -2381,6 +2457,14 @@ export interface components {
              * @enum {string}
              */
             type: "delta";
+        };
+        /**
+         * Discarded
+         * @description Whether an unsent attachment's file was removed (it stays if a message still uses it).
+         */
+        Discarded: {
+            /** Deleted */
+            deleted: boolean;
         };
         /**
          * DoneEvent
@@ -2517,6 +2601,30 @@ export interface components {
             resolution?: string | null;
         };
         /**
+         * ExportableChat
+         * @description A chat that can be picked for export.
+         */
+        ExportableChat: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Space */
+            space: string | null;
+            /** Title */
+            title: string;
+            /** Updated At */
+            updated_at: string | null;
+        };
+        /**
+         * ExportableChats
+         * @description Every chat, for picking which to export.
+         */
+        ExportableChats: {
+            /** Chats */
+            chats: components["schemas"]["ExportableChat"][];
+        };
+        /**
          * FavouriteMedia
          * @description Requested favourite state for a media item.
          */
@@ -2556,6 +2664,42 @@ export interface components {
             /** Title */
             title: string;
         };
+        /**
+         * Generation
+         * @description A generation the queue dock tracks: where it is, what it is and how it is going.
+         */
+        Generation: {
+            /** Conversation Id */
+            conversation_id: string;
+            /** Conversation Title */
+            conversation_title: string;
+            /** Created At */
+            created_at: string | null;
+            /** Error */
+            error: string | null;
+            /** File */
+            file: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "image" | "video" | "audio";
+            /** Media Id */
+            media_id: string;
+            /** Message Id */
+            message_id: number;
+            /** Model */
+            model: string | null;
+            /** Moderated */
+            moderated: boolean;
+            /** Prompt */
+            prompt: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "done" | "error";
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -2574,6 +2718,69 @@ export interface components {
             instruction_group: number[];
         };
         /**
+         * ImportFailure
+         * @description A chat that could not be imported, and why.
+         */
+        ImportFailure: {
+            /** Error */
+            error: string;
+            /** Title */
+            title: string | null;
+        };
+        /**
+         * ImportFile
+         * @description An export zip waiting in the imports folder.
+         */
+        ImportFile: {
+            /** Modified */
+            modified: string;
+            /** Name */
+            name: string;
+            /** Size */
+            size: number;
+        };
+        /**
+         * ImportJob
+         * @description An import run: its state, then its counters as they move.
+         *
+         *     The counters appear once a run has started, and `space_id` once new chats have a space to go in.
+         */
+        ImportJob: {
+            /** Deleted */
+            deleted?: number | null;
+            /** Empty */
+            empty?: number | null;
+            /** Error */
+            error?: string | null;
+            /** Failed */
+            failed?: components["schemas"]["ImportFailure"][] | null;
+            /** File */
+            file?: string | null;
+            /** Images */
+            images?: number | null;
+            /** Missing Images */
+            missing_images?: number | null;
+            /** New */
+            new?: number | null;
+            /** Processed */
+            processed?: number | null;
+            /** Space Id */
+            space_id?: number | null;
+            /** Started At */
+            started_at?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "idle" | "running" | "done" | "error";
+            /** Total */
+            total?: number | null;
+            /** Unchanged */
+            unchanged?: number | null;
+            /** Updated */
+            updated?: number | null;
+        };
+        /**
          * ImportMedia
          * @description Request describing a library item and its import destination.
          */
@@ -2589,6 +2796,25 @@ export interface components {
              * @enum {string}
              */
             target: "chat" | "character";
+        };
+        /**
+         * ImportStatus
+         * @description What is in the imports folder (newest first), and this user's last import.
+         */
+        ImportStatus: {
+            /** Files */
+            files: components["schemas"]["ImportFile"][];
+            /** Folder */
+            folder: string;
+            job: components["schemas"]["ImportJob"];
+        };
+        /**
+         * ImportedFile
+         * @description The attachment name a library item was copied to in a chat.
+         */
+        ImportedFile: {
+            /** File */
+            file: string;
         };
         /**
          * Instruction
@@ -2709,6 +2935,135 @@ export interface components {
             };
         };
         /**
+         * LibraryCard
+         * @description A generated card in the chat library, with where it lives.
+         */
+        LibraryCard: {
+            /** Attached */
+            attached: boolean;
+            /** Conversation Id */
+            conversation_id: string;
+            /** Conversation Title */
+            conversation_title: string | null;
+            /** Cost */
+            cost?: number | null;
+            /** Created At */
+            created_at: string | null;
+            /** Credits */
+            credits?: number | null;
+            /** Error */
+            error?: string | null;
+            /** Favourite */
+            favourite?: boolean | null;
+            /** File */
+            file?: string | null;
+            /** Id */
+            id: string;
+            /** Job Id */
+            job_id?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "image" | "video" | "audio";
+            /** Message Id */
+            message_id: number | null;
+            /** Model */
+            model?: string | null;
+            /** Moderated */
+            moderated?: boolean | null;
+            params?: components["schemas"]["JsonObject"] | null;
+            /** Pinned */
+            pinned?: boolean | null;
+            /** Prompt */
+            prompt?: string | null;
+            request?: components["schemas"]["JsonObject"] | null;
+            response?: components["schemas"]["JsonObject"] | null;
+            /** Source */
+            source: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "done" | "error";
+            /** Version Shown */
+            version_shown?: number | null;
+            /** Versions */
+            versions?: components["schemas"]["MediaVersion"][] | null;
+        };
+        /**
+         * LibraryEntry
+         * @description One row of the media library list: a file from the library, a chat, or an orphan, with where it is.
+         */
+        LibraryEntry: {
+            /** Conversation Id */
+            conversation_id?: string | null;
+            /** Conversation Title */
+            conversation_title?: string | null;
+            /** Cost */
+            cost?: number | null;
+            /** Created At */
+            created_at: string | null;
+            /** Duration */
+            duration: number | null;
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string | null;
+            /** Model */
+            model?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "library" | "chat" | "orphan";
+            /** Prompt */
+            prompt?: string | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "upload" | "generated";
+            /** Thumb Url */
+            thumb_url: string;
+            /** Url */
+            url: string;
+        };
+        /**
+         * LibraryList
+         * @description Every generated image and video across chats, newest first.
+         */
+        LibraryList: {
+            /** Items */
+            items: components["schemas"]["LibraryCard"][];
+        };
+        /**
+         * ListedCharacter
+         * @description A character in the list, with the title of the chat an ad hoc one belongs to.
+         */
+        ListedCharacter: {
+            /** Adhoc */
+            adhoc: boolean;
+            /** Conversation Id */
+            conversation_id: string | null;
+            /** Conversation Title */
+            conversation_title: string | null;
+            /** Created At */
+            created_at: string | null;
+            /** Description */
+            description: string;
+            /** Id */
+            id: number;
+            /** Images */
+            images: string[];
+            /** Name */
+            name: string;
+            /** Updated At */
+            updated_at: string | null;
+        };
+        /**
          * LoginRequest
          * @description Credentials submitted to the local email-and-password login endpoint.
          */
@@ -2804,8 +3159,17 @@ export interface components {
             /** Ids */
             ids: string[];
         };
-        MediaItem: {
-            [key: string]: components["schemas"]["JsonValue"];
+        /**
+         * MediaPage
+         * @description One page of the media list, with the count of matching items before paging.
+         */
+        MediaPage: {
+            /** Items */
+            items: components["schemas"]["LibraryEntry"][];
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
         };
         /**
          * MediaVersion
@@ -2926,6 +3290,16 @@ export interface components {
             totalCredits: number;
         };
         /**
+         * PublicIp
+         * @description The address the app reaches the internet from, and where that is.
+         */
+        PublicIp: {
+            /** Country */
+            country: string | null;
+            /** Ip */
+            ip: string | null;
+        };
+        /**
          * RefChoices
          * @description The composer's reference picks: chat files or "char:" refs.
          */
@@ -2960,6 +3334,44 @@ export interface components {
              * @default false
              */
             replace?: boolean;
+        };
+        /**
+         * RequestLog
+         * @description The latest provider requests, newest first.
+         */
+        RequestLog: {
+            /** Entries */
+            entries: components["schemas"]["RequestLogEntry"][];
+        };
+        /**
+         * RequestLogEntry
+         * @description One logged provider call: what was sent, what came back and how it went.
+         *
+         *     The log is a file that outlives versions, so everything past the first four fields may be missing.
+         */
+        RequestLogEntry: {
+            /** At */
+            at: string;
+            /** Error */
+            error?: string | null;
+            /** Flags */
+            flags?: {
+                [key: string]: string;
+            } | null;
+            /** Method */
+            method: string;
+            /** Model */
+            model?: string | null;
+            /** Path */
+            path: string;
+            /** Provider */
+            provider: string;
+            request?: components["schemas"]["JsonValue"];
+            response?: components["schemas"]["JsonValue"];
+            /** Seconds */
+            seconds?: number | null;
+            /** Status */
+            status?: number | null;
         };
         /**
          * RetryMessage
@@ -3377,6 +3789,14 @@ export interface components {
             resolution?: string | null;
         };
         /**
+         * UploadCancelled
+         * @description The id of the upload that was cancelled.
+         */
+        UploadCancelled: {
+            /** Cancelled */
+            cancelled: string;
+        };
+        /**
          * UploadPrefs
          * @description The effective source-media hosting preferences.
          */
@@ -3405,6 +3825,16 @@ export interface components {
             selfhost_base?: string | null;
         };
         /**
+         * UploadProgress
+         * @description How much of an upload has arrived; `file` is the stored name once it is all there.
+         */
+        UploadProgress: {
+            /** File */
+            file?: string | null;
+            /** Received */
+            received: number;
+        };
+        /**
          * UploadSettings
          * @description A user's upload preferences and the choices the settings page offers.
          */
@@ -3420,6 +3850,18 @@ export interface components {
             public_base_url_set: boolean;
             /** Selfhost Base Default */
             selfhost_base_default: string;
+        };
+        /**
+         * UploadStarted
+         * @description A chunked upload begun: its id, and how much to send per request.
+         */
+        UploadStarted: {
+            /** Chunk Size */
+            chunk_size: number;
+            /** Id */
+            id: string;
+            /** Received */
+            received: number;
         };
         /** ValidationError */
         ValidationError: {
@@ -3503,12 +3945,48 @@ export interface components {
             voices: components["schemas"]["Voice"][];
         };
         /**
+         * VpnAction
+         * @description Whether a tunnel change was accepted, with a message to show.
+         */
+        VpnAction: {
+            /** Message */
+            message: string;
+            /** Ok */
+            ok: boolean;
+        };
+        /**
+         * VpnCountries
+         * @description The server countries that may be chosen.
+         */
+        VpnCountries: {
+            /** Countries */
+            countries: string[];
+        };
+        /**
          * VpnCountryRequest
          * @description Country requested for the VPN server.
          */
         VpnCountryRequest: {
             /** Country */
             country: string;
+        };
+        /**
+         * VpnStatus
+         * @description The tunnel, its exit address and the countries its servers are in.
+         */
+        VpnStatus: {
+            public_ip: components["schemas"]["PublicIp"];
+            /** Server Countries */
+            server_countries: string[];
+            vpn: components["schemas"]["VpnTunnel"];
+        };
+        /**
+         * VpnTunnel
+         * @description The tunnel's state as Gluetun reports it ("running", "stopped"; "unknown" / "unreachable" when it can't).
+         */
+        VpnTunnel: {
+            /** Status */
+            status: string;
         };
     };
     responses: never;
@@ -3767,11 +4245,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: {
-                            [key: string]: components["schemas"]["JsonValue"];
-                        }[];
-                    };
+                    "application/json": components["schemas"]["CharacterList"];
                 };
             };
             /** @description Validation Error */
@@ -3806,9 +4280,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["CharacterInfo"];
                 };
             };
             /** @description Validation Error */
@@ -3841,9 +4313,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["CharacterInfo"];
                 };
             };
             /** @description Validation Error */
@@ -3876,9 +4346,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: number;
-                    };
+                    "application/json": components["schemas"]["DeletedCharacter"];
                 };
             };
             /** @description Validation Error */
@@ -3915,9 +4383,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["CharacterInfo"];
                 };
             };
             /** @description Validation Error */
@@ -3954,9 +4420,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["CharacterInfo"];
                 };
             };
             /** @description Validation Error */
@@ -3993,9 +4457,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["CharacterInfo"];
                 };
             };
             /** @description Validation Error */
@@ -4062,9 +4524,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["CharacterInfo"];
                 };
             };
             /** @description Validation Error */
@@ -4343,9 +4803,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
+                    "application/json": components["schemas"]["AttachedFile"];
                 };
             };
             /** @description Validation Error */
@@ -4382,9 +4840,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
+                    "application/json": components["schemas"]["AttachedFile"];
                 };
             };
             /** @description Validation Error */
@@ -4421,9 +4877,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
+                    "application/json": components["schemas"]["AttachedFile"];
                 };
             };
             /** @description Validation Error */
@@ -4457,9 +4911,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: boolean;
-                    };
+                    "application/json": components["schemas"]["Discarded"];
                 };
             };
             /** @description Validation Error */
@@ -4880,11 +5332,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: {
-                            [key: string]: components["schemas"]["JsonValue"];
-                        }[];
-                    };
+                    "application/json": components["schemas"]["ExportableChats"];
                 };
             };
             /** @description Validation Error */
@@ -4919,11 +5367,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: {
-                            [key: string]: components["schemas"]["JsonValue"];
-                        }[];
-                    };
+                    "application/json": components["schemas"]["ActiveGenerations"];
                 };
             };
             /** @description Validation Error */
@@ -4954,9 +5398,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["ImportStatus"];
                 };
             };
             /** @description Validation Error */
@@ -4991,9 +5433,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["ImportJob"];
                 };
             };
             /** @description Validation Error */
@@ -5028,9 +5468,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: number | string;
-                    };
+                    "application/json": components["schemas"]["UploadStarted"];
                 };
             };
             /** @description Validation Error */
@@ -5067,9 +5505,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: number | string;
-                    };
+                    "application/json": components["schemas"]["UploadProgress"];
                 };
             };
             /** @description Validation Error */
@@ -5102,9 +5538,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
+                    "application/json": components["schemas"]["UploadCancelled"];
                 };
             };
             /** @description Validation Error */
@@ -5376,9 +5810,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["LibraryList"];
                 };
             };
             /** @description Validation Error */
@@ -5411,9 +5843,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
+                    "application/json": components["schemas"]["DeletedLibraryItem"];
                 };
             };
             /** @description Validation Error */
@@ -5901,9 +6331,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["RequestLog"];
                 };
             };
             /** @description Validation Error */
@@ -6339,7 +6767,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["MediaPage"];
                 };
             };
             /** @description Validation Error */
@@ -6370,9 +6798,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: number;
-                    };
+                    "application/json": components["schemas"]["BlockedCounts"];
                 };
             };
             /** @description Validation Error */
@@ -6403,9 +6829,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: number;
-                    };
+                    "application/json": components["schemas"]["ClearedBlocked"];
                 };
             };
             /** @description Validation Error */
@@ -6440,9 +6864,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: string[];
-                    };
+                    "application/json": components["schemas"]["BulkDeleted"];
                 };
             };
             /** @description Validation Error */
@@ -6512,9 +6934,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["ImportedFile"] | components["schemas"]["CharacterInfo"];
                 };
             };
             /** @description Validation Error */
@@ -6615,7 +7035,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MediaItem"];
+                    "application/json": components["schemas"]["LibraryEntry"];
                 };
             };
             /** @description Validation Error */
@@ -6648,9 +7068,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
+                    "application/json": components["schemas"]["DeletedMedia"];
                 };
             };
             /** @description Validation Error */
@@ -6813,9 +7231,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: string[];
-                    };
+                    "application/json": components["schemas"]["VpnCountries"];
                 };
             };
             /** @description Validation Error */
@@ -6850,9 +7266,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: boolean | string;
-                    };
+                    "application/json": components["schemas"]["VpnAction"];
                 };
             };
             /** @description Validation Error */
@@ -6883,9 +7297,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: boolean | string;
-                    };
+                    "application/json": components["schemas"]["VpnAction"];
                 };
             };
             /** @description Validation Error */
@@ -6916,9 +7328,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["VpnStatus"];
                 };
             };
             /** @description Validation Error */

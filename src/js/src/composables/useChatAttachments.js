@@ -7,7 +7,7 @@ import {
   uploadChatAudioAttachment,
   uploadChatVideoAttachment,
 } from './useChat'
-import { importMedia } from './useMedia'
+import { importMediaToChat } from './useMedia'
 
 export const MAX_ATTACHMENTS = 8
 
@@ -122,7 +122,7 @@ export function useChatAttachments({
       attachEach(
         [item],
         () => preview || '',
-        (it, id) => importMedia(it.id, { target: 'chat', conversation_id: id }),
+        (it, id) => importMediaToChat(it.id, id),
         item.kind === 'video',
         item.kind === 'audio',
       )
@@ -139,7 +139,7 @@ export function useChatAttachments({
       attachEach(
         [{ id: `chat:${fromConv}:${file}`, thumb: chatMediaPreviewUrl(fromConv, file) }],
         s => s.thumb,
-        (s, id) => importMedia(s.id, { target: 'chat', conversation_id: id }),
+        (s, id) => importMediaToChat(s.id, id),
         video,
         audio,
       )

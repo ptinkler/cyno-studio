@@ -442,8 +442,8 @@ class TestUpload:
         """Test that a resent chunk replaces itself."""
         raw = story_zip.read_bytes()
         up = self._start(client, raw)
-        assert dig(self._send(client, up, 0, raw[:1000])) == {"received": 1000}
-        assert dig(self._send(client, up, 0, raw[:1000])) == {"received": 1000}
+        assert dig(self._send(client, up, 0, raw[:1000])) == {"received": 1000, "file": None}
+        assert dig(self._send(client, up, 0, raw[:1000])) == {"received": 1000, "file": None}
         assert self._send(client, up, 2000, raw[2000:3000]).status_code == 409  # one was skipped
         sent = [self._send(client, up, offset, raw[offset : offset + 1000]) for offset in range(1000, len(raw), 1000)]
         assert text(sent[-1], "file") == "export1.zip"

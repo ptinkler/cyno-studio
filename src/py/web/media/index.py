@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING
 
 from web.core import config
 from web.core.metadata import ChatLibraryItem, ChatMessage, MetadataDB, current_tenant, get_db, iso
-from web.jsonutil import as_list, as_object, as_objects, as_str
+from web.jsonutil import as_list, as_number, as_object, as_objects, as_str
 from web.media.durations import known_duration
-from web.media.paths import MediaItem, chat_dir, library_dir, library_kind, media_thumb_url, mtime_iso
+from web.media.paths import LibraryEntry, MediaItem, chat_dir, library_dir, library_kind, media_thumb_url, mtime_iso
 
 if TYPE_CHECKING:
     from web.types import JsonValue
@@ -23,34 +23,36 @@ ORPHAN_GRACE = 3600
 PARAM_FILES = ("first_frame", "last_frame", "source_video")  # chat media params naming one file
 
 
-def library_items() -> list[MediaItem]:
+def library_items() -> list[LibraryEntry]:
     """The images uploaded straight to the library."""
     d = library_dir()
     if not d.is_dir():
         return []
     return [
-        {
-            "id": f"lib:{p.name}",
-            "kind": library_kind(p),
-            "source": "upload",
-            "origin": "library",
-            "name": p.name,
-            "url": f"/api/media/library/{p.name}",
-            "thumb_url": media_thumb_url(f"lib:{p.name}"),
-            "created_at": mtime_iso(p),
-            "duration": known_duration(p, library_kind(p)),
-        }
+        LibraryEntry(
+            id=f"lib:{p.name}",
+            kind=library_kind(p),
+            source="upload",
+            origin="library",
+            name=p.name,
+            url=f"/api/media/library/{p.name}",
+            thumb_url=media_thumb_url(f"lib:{p.name}"),
+            created_at=mtime_iso(p),
+            duration=known_duration(p, library_kind(p)),
+        )
         for p in d.iterdir()
         if p.is_file() and library_kind(p)
     ]
 
 
-def chat_records(msgs: list[ChatMessage], lib_items: list[ChatLibraryItem], titles: dict[str, str]) -> list[MediaItem]:
+def chat_records(
+    msgs: list[ChatMessage], lib_items: list[ChatLibraryItem], titles: dict[str, str]
+) -> list[LibraryEntry]:
     """The media each chat message and detached library entry records."""
     # Keyed by file name alone: a branched chat links its media in under the
     # same names (web/chat/routes.py api_fork_conversation), so each shows once —
     # in the oldest chat that still has it
-    items: dict[str, MediaItem] = {}
+    items: dict[str, LibraryEntry] = {}
 
     def add(conv_id: str, item: MediaItem, created_at: datetime, *, replace: bool = False) -> None:
         file = as_str(item.get("file"))
@@ -59,22 +61,22 @@ def chat_records(msgs: list[ChatMessage], lib_items: list[ChatLibraryItem], titl
         if not (chat_dir(conv_id) / file).is_file():
             return
         kind = as_str(item.get("kind")) or library_kind(file)
-        items[file] = {
-            "id": f"chat:{conv_id}:{file}",
-            "kind": kind,
-            "duration": known_duration(chat_dir(conv_id) / file, kind),
-            "source": "upload" if item.get("source") == "upload" else "generated",
-            "origin": "chat",
-            "name": file,
-            "url": f"/api/chat/media/{conv_id}/{file}",
-            "thumb_url": media_thumb_url(f"chat:{conv_id}:{file}"),
-            "created_at": iso(created_at),
-            "conversation_id": conv_id,
-            "conversation_title": titles.get(conv_id),
-            "prompt": item.get("prompt"),
-            "model": item.get("model"),
-            "cost": item.get("cost"),
-        }
+        items[file] = LibraryEntry(
+            id=f"chat:{conv_id}:{file}",
+            kind=kind,
+            duration=known_duration(chat_dir(conv_id) / file, kind),
+            source="upload" if item.get("source") == "upload" else "generated",
+            origin="chat",
+            name=file,
+            url=f"/api/chat/media/{conv_id}/{file}",
+            thumb_url=media_thumb_url(f"chat:{conv_id}:{file}"),
+            created_at=iso(created_at),
+            conversation_id=conv_id,
+            conversation_title=titles.get(conv_id),
+            prompt=as_str(item.get("prompt")),
+            model=as_str(item.get("model")),
+            cost=as_number(item.get("cost")),
+        )
 
     for msg in msgs:  # newest first, so older copies win
         for item in msg.media:
@@ -107,27 +109,27 @@ def _used_files(msgs: list[ChatMessage], lib_items: list[ChatLibraryItem]) -> se
     return used
 
 
-def _orphan_item(p: Path, conv_id: str, kind: str, titles: dict[str, str]) -> MediaItem:
+def _orphan_item(p: Path, conv_id: str, kind: str, titles: dict[str, str]) -> LibraryEntry:
     """The library row for one unrecorded file in a chat's folder."""
     media_id = f"chat:{conv_id}:{p.name}"
-    return {
-        "id": media_id,
-        "kind": kind,
-        "source": "upload" if p.name.startswith("up_") else "generated",
-        "origin": "orphan",
-        "name": p.name,
-        "url": f"/api/chat/media/{conv_id}/{p.name}",
-        "thumb_url": media_thumb_url(media_id),
-        "created_at": mtime_iso(p),
-        "duration": known_duration(p, kind),
-        "conversation_id": conv_id if conv_id in titles else None,
-        "conversation_title": titles.get(conv_id),
-    }
+    return LibraryEntry(
+        id=media_id,
+        kind=kind,
+        source="upload" if p.name.startswith("up_") else "generated",
+        origin="orphan",
+        name=p.name,
+        url=f"/api/chat/media/{conv_id}/{p.name}",
+        thumb_url=media_thumb_url(media_id),
+        created_at=mtime_iso(p),
+        duration=known_duration(p, kind),
+        conversation_id=conv_id if conv_id in titles else None,
+        conversation_title=titles.get(conv_id),
+    )
 
 
-def _orphans_in(folder: Path, used: set[tuple[str, str]], cutoff: float, titles: dict[str, str]) -> list[MediaItem]:
+def _orphans_in(folder: Path, used: set[tuple[str, str]], cutoff: float, titles: dict[str, str]) -> list[LibraryEntry]:
     """The old-enough, unrecorded media files in one chat folder."""
-    items: list[MediaItem] = []
+    items: list[LibraryEntry] = []
     for p in folder.iterdir():
         kind = library_kind(p) if p.is_file() and (folder.name, p.name) not in used else None
         if kind and p.stat().st_mtime <= cutoff:
@@ -135,14 +137,16 @@ def _orphans_in(folder: Path, used: set[tuple[str, str]], cutoff: float, titles:
     return items
 
 
-def _chat_orphans(msgs: list[ChatMessage], lib_items: list[ChatLibraryItem], titles: dict[str, str]) -> list[MediaItem]:
+def _chat_orphans(
+    msgs: list[ChatMessage], lib_items: list[ChatLibraryItem], titles: dict[str, str]
+) -> list[LibraryEntry]:
     """Files in chat folders that no message or library entry records."""
     root = config.ROOT_DIR / "chat"
     if not root.is_dir():
         return []
     used = _used_files(msgs, lib_items)
     cutoff = time.time() - ORPHAN_GRACE
-    items: list[MediaItem] = []
+    items: list[LibraryEntry] = []
     # Only the current user's conversation folders (titles is tenant-scoped), so
     # one user's orphan scan never lists another user's files.
     for conv_id in titles:
@@ -153,7 +157,7 @@ def _chat_orphans(msgs: list[ChatMessage], lib_items: list[ChatLibraryItem], tit
     return items
 
 
-def build_items(db: MetadataDB) -> list[MediaItem]:
+def build_items(db: MetadataDB) -> list[LibraryEntry]:
     """Build the complete library, newest first.
 
     Fetches chat messages and detached library entries once for both the
@@ -180,13 +184,13 @@ class _ListCacheEntry:
     """A built media list and when (monotonic seconds) it was built."""
 
     at: float
-    items: list[MediaItem]
+    items: list[LibraryEntry]
 
 
 _list_cache: dict[tuple[Path, str | None], _ListCacheEntry] = {}
 
 
-def all_items() -> list[MediaItem]:
+def all_items() -> list[LibraryEntry]:
     """The complete media list for the current user, newest first, cached briefly."""
     key = (config.ROOT_DIR, current_tenant())
     now = time.monotonic()
@@ -202,7 +206,7 @@ def invalidate_list() -> None:
     _list_cache.clear()
 
 
-def origin_label(item: MediaItem) -> str:
+def origin_label(item: LibraryEntry) -> str:
     """Where an item is from, for search — mirrors mediaOrigin in the frontend."""
     origin = item.get("origin")
     if origin == "chat":
@@ -213,7 +217,7 @@ def origin_label(item: MediaItem) -> str:
     return "Library"
 
 
-def item_matches(item: MediaItem, kind: str, source: str, origin: str, q: str) -> bool:
+def item_matches(item: LibraryEntry, kind: str, source: str, origin: str, q: str) -> bool:
     """Whether an item passes the list's kind / source / origin filters and the search text."""
     if kind != "all" and item.get("kind") != kind:
         return False

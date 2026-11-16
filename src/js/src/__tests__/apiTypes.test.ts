@@ -6,7 +6,15 @@
  */
 import { describe, expectTypeOf, it } from 'vitest'
 import type { components } from '../api/schema'
-import type { BodyFor, EndpointPattern, KnownEndpoint, ResponseFor, RouteFor } from '../api/paths'
+import type {
+  BodyFor,
+  EndpointPattern,
+  FormEndpoint,
+  KnownEndpoint,
+  ResponseFor,
+  RouteFor,
+  SendArgs,
+} from '../api/paths'
 import { api } from '../composables/useApi'
 import type { TurnEvent, TurnEventOf } from '../composables/chatStreamApi'
 
@@ -114,5 +122,17 @@ describe('streamed turns', () => {
   it('narrow on `type`', () => {
     const text = (event: TurnEvent): string | undefined => (event.type === 'delta' ? event.text : undefined)
     expectTypeOf(text).returns.toEqualTypeOf<string | undefined>()
+  })
+})
+
+describe('writes without a JSON body, and multipart uploads', () => {
+  it('a bodyless route takes no body argument', () => {
+    expectTypeOf<SendArgs<'post', '/api/chat/messages/5/cancel'>>().toEqualTypeOf<[]>()
+    expectTypeOf<SendArgs<'put', '/api/keys'>>().toEqualTypeOf<[body: Schemas['KeysUpdate']]>()
+  })
+
+  it('only a route that declares a multipart form takes an upload', () => {
+    expectTypeOf<FormEndpoint<'/api/characters/3/images'>>().toEqualTypeOf<[]>()
+    expectTypeOf<FormEndpoint<'/api/keys'>>().toEqualTypeOf<[endpointTakesNoForm: never]>()
   })
 })

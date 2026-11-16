@@ -2,7 +2,7 @@
      pane. Replaces the old /requests page. -->
 <script setup>
 import { ref, computed, onMounted, inject } from 'vue'
-import { apiGet } from '../../composables/useApi'
+import { fetchRequestLog } from '../../composables/chatFilesApi'
 import { useCopy } from '../../composables/useClipboard'
 
 const emit = defineEmits(['close'])
@@ -20,7 +20,7 @@ const key = (e, i) => `${e.at}-${i}`
 async function load() {
   loading.value = true
   try {
-    entries.value = (await apiGet('/api/chat/request-log?limit=200')).entries
+    entries.value = (await fetchRequestLog(200)).entries
   } catch (e) {
     showToast(`Couldn't load the request log: ${e.message}`, 'error')
   } finally {

@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 from web.auth.users import require_admin
 from web.core.metadata import User
-from web.jsonutil import as_object, body_of
+from web.jsonutil import as_list, as_object, as_str, body_of
 from web.types import JsonValue
 
 log = logging.getLogger(__name__)
@@ -49,6 +49,40 @@ ALLOWED_VPN_COUNTRIES = [
     "Denmark",
     "Ireland",
 ]
+
+
+class VpnTunnel(BaseModel):
+    """The tunnel's state as Gluetun reports it ("running", "stopped"; "unknown" / "unreachable" when it can't)."""
+
+    status: str
+
+
+class PublicIp(BaseModel):
+    """The address the app reaches the internet from, and where that is."""
+
+    ip: str | None
+    country: str | None
+
+
+class VpnStatus(BaseModel):
+    """The tunnel, its exit address and the countries its servers are in."""
+
+    vpn: VpnTunnel
+    public_ip: PublicIp
+    server_countries: list[str]
+
+
+class VpnAction(BaseModel):
+    """Whether a tunnel change was accepted, with a message to show."""
+
+    ok: bool
+    message: str
+
+
+class VpnCountries(BaseModel):
+    """The server countries that may be chosen."""
+
+    countries: list[str]
 
 
 class VpnCountryRequest(BaseModel):
@@ -97,27 +131,28 @@ def _egress_ip() -> str | None:
 
 
 @router.get("/status")
-def vpn_status(_admin: Annotated[User, Depends(require_admin)]) -> dict[str, JsonValue]:
+def vpn_status(_admin: Annotated[User, Depends(require_admin)]) -> VpnStatus:
     """Current VPN status, public IP, and server country from Gluetun."""
     # Gluetun's /v1/publicip/ip returns the tunnel's exit IP under "public_ip"
     # (older builds used "ip"); normalise to {ip, country} for the UI.
     raw = _gluetun_json("/v1/publicip/ip", {}, {}, timeout=10)
-    ip = raw.get("public_ip") or raw.get("ip")
-    country = raw.get("country")
-    if not ip:
-        ip = _egress_ip()
+    ip = as_str(raw.get("public_ip")) or as_str(raw.get("ip")) or _egress_ip()
+    country = as_str(raw.get("country"))
     settings = _gluetun_json("/v1/vpn/settings", {}, {})
     # The public IP lookup's country stands in when settings name none
-    countries = settings.get("server_countries") or ([country] if country else [])
-    return {
-        "vpn": _gluetun_json("/v1/vpn/status", {"status": "unknown"}, {"status": "unreachable"}),
-        "public_ip": {"ip": ip, "country": country},
-        "server_countries": countries,
-    }
+    countries = [c for c in as_list(settings.get("server_countries")) if isinstance(c, str)] or (
+        [country] if country else []
+    )
+    tunnel = _gluetun_json("/v1/vpn/status", {"status": "unknown"}, {"status": "unreachable"})
+    return VpnStatus(
+        vpn=VpnTunnel(status=as_str(tunnel.get("status")) or "unknown"),
+        public_ip=PublicIp(ip=ip, country=country),
+        server_countries=countries,
+    )
 
 
 @router.post("/restart")
-def vpn_restart(_admin: Annotated[User, Depends(require_admin)]) -> dict[str, bool | str]:
+def vpn_restart(_admin: Annotated[User, Depends(require_admin)]) -> VpnAction:
     """Restart the VPN tunnel by cycling Gluetun's status off then on."""
     try:
         _gluetun_put("/v1/vpn/status", {"status": "stopped"})
@@ -126,14 +161,12 @@ def vpn_restart(_admin: Annotated[User, Depends(require_admin)]) -> dict[str, bo
     except requests.RequestException as e:
         raise HTTPException(502, detail=f"Cannot reach Gluetun control server: {e}") from e
     if r.ok:
-        return {"ok": True, "message": "VPN tunnel restarted — new IP in ~10s"}
-    return {"ok": False, "message": f"Gluetun responded {r.status_code}"}
+        return VpnAction(ok=True, message="VPN tunnel restarted — new IP in ~10s")
+    return VpnAction(ok=False, message=f"Gluetun responded {r.status_code}")
 
 
 @router.put("/country")
-def vpn_change_country(
-    data: VpnCountryRequest, _admin: Annotated[User, Depends(require_admin)]
-) -> dict[str, bool | str]:
+def vpn_change_country(data: VpnCountryRequest, _admin: Annotated[User, Depends(require_admin)]) -> VpnAction:
     """Change VPN server country. Body: {"country": "United Kingdom"}."""
     country = data.country.strip()
     if not country:
@@ -145,11 +178,11 @@ def vpn_change_country(
     except requests.RequestException as e:
         raise HTTPException(502, detail=f"Cannot reach Gluetun control server: {e}") from e
     if not r.ok:
-        return {"ok": False, "message": f"Gluetun responded {r.status_code}: {r.text}"}
-    return {"ok": True, "message": f"Switching to {country} — new IP in ~10s"}
+        return VpnAction(ok=False, message=f"Gluetun responded {r.status_code}: {r.text}")
+    return VpnAction(ok=True, message=f"Switching to {country} — new IP in ~10s")
 
 
 @router.get("/countries")
-def vpn_countries(_admin: Annotated[User, Depends(require_admin)]) -> dict[str, list[str]]:
+def vpn_countries(_admin: Annotated[User, Depends(require_admin)]) -> VpnCountries:
     """The allowed VPN server countries."""
-    return {"countries": ALLOWED_VPN_COUNTRIES}
+    return VpnCountries(countries=ALLOWED_VPN_COUNTRIES)

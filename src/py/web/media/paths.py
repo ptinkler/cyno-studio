@@ -2,12 +2,12 @@
 
 from datetime import datetime
 from pathlib import Path
+from typing import Literal, NotRequired, TypedDict
 
 from fastapi import HTTPException
 
 from web.core import config
 from web.core.metadata import current_tenant, get_db
-from web.jsonutil import as_str
 from web.media.kinds import VIDEO_SUFFIXES
 from web.types import JsonValue
 from web.uploads.files import (
@@ -15,8 +15,29 @@ from web.uploads.files import (
     safe_filename,
 )
 
-# One media item: the dict the media list and the grids work with (id, kind, name, url, ...).
+# One media card of a chat message or detached library entry, as stored (see web/chat/__init__.py).
 type MediaItem = dict[str, JsonValue]
+
+
+class LibraryEntry(TypedDict):
+    """One row of the media library list: a file from the library, a chat, or an orphan, with where it is."""
+
+    id: str  # "lib:<file>" or "chat:<conversation id>:<file>"
+    kind: str | None  # "image" | "video" (| "audio" for a chat card)
+    source: Literal["upload", "generated"]
+    origin: Literal["library", "chat", "orphan"]
+    name: str
+    url: str
+    thumb_url: str
+    created_at: str | None
+    duration: float | None  # video length, once read
+    # chat and orphan rows only
+    conversation_id: NotRequired[str | None]
+    conversation_title: NotRequired[str | None]
+    # generated chat rows only
+    prompt: NotRequired[str | None]
+    model: NotRequired[str | None]
+    cost: NotRequired[float | None]
 
 
 def library_dir() -> Path:
@@ -84,13 +105,10 @@ def resolve(media_id: str) -> tuple[str, Path, dict[str, str]]:
     return origin, path, parts
 
 
-def item_path(item: MediaItem) -> Path | None:
+def item_path(item: LibraryEntry) -> Path | None:
     """The file a media item's id points at (None when the id is malformed or the file is gone)."""
-    media_id = as_str(item.get("id"))
-    if media_id is None:
-        return None
     try:
-        return resolve(media_id)[1]
+        return resolve(item["id"])[1]
     except HTTPException:
         return None
 

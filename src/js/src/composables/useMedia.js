@@ -1,47 +1,18 @@
 import { reactive, computed } from 'vue'
-import { apiGet, apiPost, apiDelete, apiUpload, apiDownload } from './useApi'
 
-// The media library (see web/media.py): every upload and creation — library
-// uploads, Generate projects' uploads/creations, chats' uploads/creations.
-// Using an item somewhere copies it there (importMedia).
-const enc = encodeURIComponent
-
-export const fetchMedia = () => apiGet('/api/media').then(r => r.items)
-
-/**
- * A page of the library with its filters applied server-side (for the Media
- * page's infinite scroll). Returns { items, total } — total is how many match
- * before paging. `all`/'' filter values and null params are left off.
- */
-export function fetchMediaPage(
-  /** @type {{ offset?: number, limit?: number, kind?: string, source?: string, origin?: string, q?: string }} */ {
-    offset = 0,
-    limit = 0,
-    kind,
-    source,
-    origin,
-    q,
-  } = {},
-) {
-  const params = { offset, limit, kind, source, origin, q }
-  const qs = new URLSearchParams(
-    Object.entries(params)
-      .filter(([, v]) => v != null && v !== '' && v !== 'all')
-      .map(([k, v]) => [k, String(v)]),
-  ).toString()
-  return apiGet(`/api/media${qs ? `?${qs}` : ''}`).then(r => ({ items: r.items, total: r.total ?? r.items.length }))
-}
-export const uploadMedia = file => apiUpload('/api/media/upload', file)
-export const deleteMediaMany = ids => apiPost('/api/media/bulk-delete', { ids })
-export const downloadMediaMany = ids => apiDownload('/api/media/bulk-download', { ids }, 'media.zip')
-export const deleteMedia = id => apiDelete(`/api/media/${enc(id)}`)
-
-/** Chat generations a content filter blocked: { moderated, black } counts, and clearing them all. */
-export const fetchBlockedCounts = () => apiGet('/api/media/blocked')
-export const clearBlocked = () => apiPost('/api/media/blocked/clear', {})
-
-/** Copy an image to a chat ({ file }) or a character (the character). */
-export const importMedia = (mediaId, target) => apiPost('/api/media/import', { media_id: mediaId, ...target })
+// The media library (see web/media/): the API wrappers are typed in mediaApi.ts and re-exported here.
+export {
+  fetchMedia,
+  fetchMediaPage,
+  uploadMedia,
+  deleteMediaMany,
+  downloadMediaMany,
+  deleteMedia,
+  fetchBlockedCounts,
+  clearBlocked,
+  importMediaToChat,
+  importMediaToCharacter,
+} from './mediaApi'
 
 /** Where an item came from, for display. */
 export function mediaOrigin(item) {

@@ -40,6 +40,7 @@ from web.chat import ConversationCreate, api_create_conversation, conversation_d
 from web.core.metadata import get_db, iso
 from web.core.metadata.imports import ImportStamp
 from web.core.metadata.models import ChatConversation
+from web.transfer.schemas import ExportableChat, ExportableChats
 from web.types import JsonValue
 from web.uploads.files import safe_filename
 
@@ -142,21 +143,21 @@ def write_export(conv_ids: list[str], out: Path) -> int:
 
 
 @router.get("/chats")
-def api_export_list() -> dict[str, list[dict[str, JsonValue]]]:
+def api_export_list() -> ExportableChats:
     """Every chat, for picking which to export."""
     spaces = _space_names()
-    return {
-        "chats": [
-            {
-                "id": c.id,
-                "title": c.title,
-                "kind": c.kind,
-                "space": spaces.get(c.space_id) if c.space_id is not None else None,
-                "updated_at": iso(c.updated_at),
-            }
+    return ExportableChats(
+        chats=[
+            ExportableChat(
+                id=c.id,
+                title=c.title,
+                kind=c.kind,
+                space=spaces.get(c.space_id) if c.space_id is not None else None,
+                updated_at=iso(c.updated_at),
+            )
             for c in get_db().list_conversations(limit=None)
         ]
-    }
+    )
 
 
 @router.get("")

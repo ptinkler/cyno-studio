@@ -35,7 +35,7 @@ from web.jsonutil import as_str
 from web.media.blank import blocked_generations
 from web.media.durations import fill_durations
 from web.media.index import all_items, invalidate_list, item_matches, library_items
-from web.media.paths import MediaItem, chat_dir, library_dir, library_kind, resolve
+from web.media.paths import LibraryEntry, chat_dir, library_dir, library_kind, resolve
 from web.media.thumbs import forget_file, thumb_response
 from web.types import JsonValue
 from web.uploads.files import (
@@ -54,7 +54,7 @@ router = APIRouter(prefix="/api/media", dependencies=[Depends(require_user)])
 class MediaPage(TypedDict):
     """One page of the media list, with the count of matching items before paging."""
 
-    items: list[MediaItem]
+    items: list[LibraryEntry]
     total: int
     offset: int
 
@@ -81,7 +81,7 @@ class MediaFilter:
         return self.kind != "all" or self.source != "all" or self.origin != "all" or bool(self.q.strip())
 
 
-@router.get("", response_model=None)
+@router.get("")
 def api_list_media(
     filters: Annotated[MediaFilter, Depends()],
     offset: int = 0,
@@ -111,7 +111,7 @@ def api_library_file(filename: str) -> FileResponse:
 
 
 @router.post("/upload")
-async def api_upload_media(file: Annotated[UploadFile, File()]) -> MediaItem:
+async def api_upload_media(file: Annotated[UploadFile, File()]) -> LibraryEntry:
     """Upload an image or video directly to the library.
 
     Audio uploads remain limited to chats.
@@ -132,8 +132,34 @@ class MediaIds(BaseModel):
 BULK_MAX = 500
 
 
+class BulkDeleted(BaseModel):
+    """What a bulk delete removed, and the ids it could not."""
+
+    deleted: list[str]
+    failed: list[str]
+
+
+class DeletedMedia(BaseModel):
+    """The id of the item a delete removed."""
+
+    deleted: str
+
+
+class BlockedCounts(BaseModel):
+    """How many chat generations a content filter blocked."""
+
+    moderated: int
+    black: int  # black images saved before the app detected them
+
+
+class ClearedBlocked(BaseModel):
+    """How many blocked generations were removed."""
+
+    cleared: int
+
+
 @router.post("/bulk-delete")
-def api_bulk_delete_media(data: MediaIds) -> dict[str, list[str]]:
+def api_bulk_delete_media(data: MediaIds) -> BulkDeleted:
     """Delete several items (see api_delete_media). Ones already gone are skipped."""
     deleted: list[str] = []
     failed: list[str] = []
@@ -143,7 +169,7 @@ def api_bulk_delete_media(data: MediaIds) -> dict[str, list[str]]:
             deleted.append(media_id)
         except HTTPException:
             failed.append(media_id)
-    return {"deleted": deleted, "failed": failed}
+    return BulkDeleted(deleted=deleted, failed=failed)
 
 
 @router.post("/bulk-download")
@@ -174,12 +200,12 @@ def api_bulk_download_media(data: MediaIds) -> Response:
 
 
 @router.delete("/{media_id:path}")
-def api_delete_media(media_id: str) -> dict[str, str]:
+def api_delete_media(media_id: str) -> DeletedMedia:
     """Delete a media item and the record that indexes it."""
     return _delete_item(media_id)
 
 
-def _delete_item(media_id: str) -> dict[str, str]:
+def _delete_item(media_id: str) -> DeletedMedia:
     """Delete an item's file and the record that indexes it.
 
     Existing copies used as character images, attachments, or generation
@@ -200,24 +226,24 @@ def _delete_item(media_id: str) -> dict[str, str]:
                 db.delete_chat_library_item(lib.media_id)
         path.unlink()
     invalidate_list()
-    return {"deleted": media_id}
+    return DeletedMedia(deleted=media_id)
 
 
 @router.get("/blocked")
-def api_blocked_count() -> dict[str, int]:
+def api_blocked_count() -> BlockedCounts:
     """Count moderated and black-image chat generations.
 
     Counts include black images saved before the app detected them.
     """
     found = blocked_generations(get_db())
-    return {
-        "moderated": sum(b.reason == "moderated" for b in found),
-        "black": sum(b.reason == "black" for b in found),
-    }
+    return BlockedCounts(
+        moderated=sum(b.reason == "moderated" for b in found),
+        black=sum(b.reason == "black" for b in found),
+    )
 
 
 @router.post("/blocked/clear")
-def api_clear_blocked() -> dict[str, int]:
+def api_clear_blocked() -> ClearedBlocked:
     """Remove blocked generations and their saved black-image files.
 
     Removes failed cards from chats and detached items from the library.
@@ -241,7 +267,7 @@ def api_clear_blocked() -> dict[str, int]:
         if msg:
             db.update_chat_message(msg_id, media=[i for i in msg.media if i.get("id") not in ids])
     invalidate_list()
-    return {"cleared": len(found)}
+    return ClearedBlocked(cleared=len(found))
 
 
 class ImportMedia(BaseModel):
@@ -253,8 +279,14 @@ class ImportMedia(BaseModel):
     character_id: int | None = None  # target "character"
 
 
+class ImportedFile(BaseModel):
+    """The attachment name a library item was copied to in a chat."""
+
+    file: str
+
+
 @router.post("/import")
-def api_import_media(data: ImportMedia) -> dict[str, JsonValue]:
+def api_import_media(data: ImportMedia) -> ImportedFile | characters.CharacterInfo:
     """Copy a library item to a chat or character.
 
     Chat imports return a file name for attachment; character imports add an
@@ -272,10 +304,10 @@ def api_import_media(data: ImportMedia) -> dict[str, JsonValue]:
         if not db.get_conversation(conv_id):
             raise HTTPException(404, "Conversation not found")
         if origin == "chat" and parts["conversation_id"] == conv_id:
-            return {"file": path.name}  # already in this chat
+            return ImportedFile(file=path.name)  # already in this chat
         name = store_deduped(chat_dir(conv_id), "up_", path.read_bytes(), ext)
         invalidate_list()
-        return {"file": name}
+        return ImportedFile(file=name)
 
     if kind != "image":
         raise HTTPException(400, "Only images can be used here")
