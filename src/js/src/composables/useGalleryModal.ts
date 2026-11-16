@@ -1,10 +1,7 @@
 import { ref, computed } from 'vue'
 import type { Studio } from './useStudio'
 import { chatMediaUrl, chatMediaPreviewUrl } from './chatFilesApi'
-import type { GenerationItem } from './studioTypes'
-
-/** What the "use this image" buttons hand over: the file, the mode to switch to and the chat it lives in. */
-type ImagePick = Parameters<Studio['useImage']>[0]
+import type { GenerationItem, ImagePick } from './studioTypes'
 
 // The generation shown in the big-view card modal, opened from a thread's gallery (with manage actions —
 // regenerate, delete) or from Favourites (view only), and what the modal's buttons do.

@@ -1,24 +1,28 @@
-<!-- Credit usage / balances for every provider, shown in the center pane.
-     Balances come from the shared studio state; key status is fetched here.
-     Replaces the old project-centric /usage page. -->
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { fetchUserKeys } from '../../composables/useAccount'
 import { fetchSpendBreakdown } from '../../composables/useChat'
+import type { Balances } from '../../composables/studioTypes'
 import { fmtCost, creditsToUsd, shortModel } from '../../utils/format'
 
-const props = defineProps({
-  // { pollo, openrouter, venice, veniceCredits } — nulls show as —
-  balances: { type: Object, default: () => ({}) },
-})
-const emit = defineEmits(['close', 'manage-keys', 'refresh'])
+type KeyStatus = Awaited<ReturnType<typeof fetchUserKeys>>['keys']
+type Breakdown = Awaited<ReturnType<typeof fetchSpendBreakdown>>
 
-const keys = ref({})
+const props = withDefaults(
+  defineProps<{
+    /** Nulls show as —. */
+    balances?: Balances | undefined
+  }>(),
+  { balances: () => ({ pollo: null, openrouter: null, venice: null, veniceCredits: null }) },
+)
+const emit = defineEmits<{ close: []; 'manage-keys': []; refresh: [] }>()
+
+const keys = ref<KeyStatus>({})
 const loading = ref(true)
-async function loadKeys() {
+async function loadKeys(): Promise<void> {
   loading.value = true
   try {
-    keys.value = (await fetchUserKeys()).keys || {}
+    keys.value = (await fetchUserKeys()).keys
   } catch {
     keys.value = {}
   } finally {
@@ -28,38 +32,38 @@ async function loadKeys() {
 
 // What the money went on, per model, over a chosen period (Pollo credits are
 // converted to dollars so every provider adds up)
-const PERIODS = [
+const PERIODS: readonly { days: number; label: string }[] = [
   { days: 7, label: '7 days' },
   { days: 30, label: '30 days' },
   { days: 0, label: 'All time' },
 ]
 const days = ref(30)
-const breakdown = ref(null)
-async function loadBreakdown() {
+const breakdown = ref<Breakdown | null>(null)
+async function loadBreakdown(): Promise<void> {
   try {
     breakdown.value = await fetchSpendBreakdown(days.value)
   } catch {
     breakdown.value = null
   }
 }
-function setDays(d) {
+function setDays(d: number): void {
   days.value = d
-  loadBreakdown()
+  void loadBreakdown()
 }
 onMounted(() => {
-  loadKeys()
-  loadBreakdown()
+  void loadKeys()
+  void loadBreakdown()
 })
 
-const fmtCredits = v => (v == null ? '—' : Math.round(v).toLocaleString())
-const fmtBal = v => (v == null ? '—' : `$${v.toFixed(2)}`)
+const fmtCredits = (value: number | null): string => (value === null ? '—' : Math.round(value).toLocaleString())
+const fmtBal = (value: number | null): string => (value === null ? '—' : `$${value.toFixed(2)}`)
 
 const providers = computed(() => [
   {
     id: 'pollo',
     label: 'Pollo',
     unit: 'balance',
-    value: props.balances.pollo == null ? '—' : fmtBal(creditsToUsd(props.balances.pollo)),
+    value: props.balances.pollo === null ? '—' : fmtBal(creditsToUsd(props.balances.pollo)),
     note: `${fmtCredits(props.balances.pollo)} credits · image & video generation`,
   },
   {
@@ -74,17 +78,18 @@ const providers = computed(() => [
     label: 'Venice',
     unit: 'balance',
     value: fmtBal(props.balances.venice),
-    note: props.balances.veniceCredits != null ? `${props.balances.veniceCredits} plan credits` : 'Chat & media',
+    note:
+      props.balances.veniceCredits === null ? 'Chat & media' : `${String(props.balances.veniceCredits)} plan credits`,
   },
 ])
-function keySet(id) {
-  return !!keys.value[id]?.set
-}
+const keySet = (id: string): boolean => !!keys.value[id]?.set
 
 // A row's share of the biggest spender, drawn as a faint bar behind the model
 // name so the shape of the spend reads without squinting at the numbers.
-const topSpend = computed(() => Math.max(...(breakdown.value?.rows || []).map(r => r.usd), 0))
-const share = usd => `${topSpend.value > 0 ? Math.max(1.5, (usd / topSpend.value) * 100) : 0}%`
+const MIN_BAR_PCT = 1.5
+const topSpend = computed(() => Math.max(...(breakdown.value?.rows ?? []).map(r => r.usd), 0))
+const share = (usd: number): string =>
+  `${String(topSpend.value > 0 ? Math.max(MIN_BAR_PCT, (usd / topSpend.value) * 100) : 0)}%`
 </script>
 
 <template>

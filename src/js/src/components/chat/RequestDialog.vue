@@ -1,26 +1,30 @@
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useCopy } from '../../composables/useClipboard'
 
 // What an image/video card sent to its provider and what came back, as
 // JSON. Images in them are cut down to their type and size by the server.
-const props = defineProps({
-  request: { type: Object, required: true },
-  response: { type: [Object, String, Array], default: null },
-  error: { type: String, default: '' },
+const props = withDefaults(defineProps<{ request: unknown; response: unknown; error?: string | undefined }>(), {
+  error: '',
 })
-const emit = defineEmits(['close'])
+const emit = defineEmits<{ close: [] }>()
 const { copiedKey, copy } = useCopy()
 
-const fmt = v => (typeof v === 'string' ? v : JSON.stringify(v, null, 2))
+const fmt = (value: unknown): string => (typeof value === 'string' ? value : JSON.stringify(value, null, 2))
 const requestJson = computed(() => fmt(props.request))
 const responseJson = computed(() => (props.response == null ? '' : fmt(props.response)))
 const both = computed(() => JSON.stringify({ request: props.request, response: props.response }, null, 2))
 
-const onKey = e => e.key === 'Escape' && emit('close')
-onMounted(() => window.addEventListener('keydown', onKey))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
+const onKey = (event: KeyboardEvent): void => {
+  if (event.key === 'Escape') emit('close')
+}
+onMounted(() => {
+  window.addEventListener('keydown', onKey)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKey)
+})
 </script>
 
 <template>

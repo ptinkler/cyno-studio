@@ -4,6 +4,7 @@ import prettier from 'eslint-config-prettier'
 import pluginVue from 'eslint-plugin-vue'
 import globals from 'globals'
 import tseslint from 'typescript-eslint'
+import vueParser from 'vue-eslint-parser'
 
 export default [
   { ignores: ['coverage/**', 'dist/**', 'src/api/schema.d.ts'] }, // dist is the build output; schema.d.ts is generated
@@ -48,6 +49,25 @@ export default [
     languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } },
     rules: {
       'no-unused-vars': 'off', // @typescript-eslint/no-unused-vars replaces it
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrors: 'none' }],
+      '@typescript-eslint/consistent-type-imports': 'error',
+    },
+  }),
+  ...defineConfig({
+    // Every component is <script setup lang="ts">: the same strict, type-aware rules as .ts files.
+    files: ['**/*.vue'],
+    extends: [...tseslint.configs.strictTypeChecked, ...tseslint.configs.stylisticTypeChecked],
+    languageOptions: {
+      parser: vueParser,
+      parserOptions: {
+        parser: tseslint.parser,
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+        extraFileExtensions: ['.vue'],
+      },
+    },
+    rules: {
+      'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrors: 'none' }],
       '@typescript-eslint/consistent-type-imports': 'error',
     },

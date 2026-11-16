@@ -1,5 +1,6 @@
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from 'vue'
+import type { Model, ModelKind } from '../../composables/chatModelsApi'
 import { useDropdown } from '../../composables/useDropdown'
 import { useModelList } from '../../composables/useModelList'
 import { usePopPlacement } from '../../composables/usePopPlacement'
@@ -9,22 +10,24 @@ import ModelBadge from './ModelBadge.vue'
 import ModelFilterPanel from './ModelFilterPanel.vue'
 import ModelRow from './ModelRow.vue'
 
-const props = defineProps({
-  modelValue: { type: String, default: '' },
-  models: { type: Array, default: () => [] },
-  label: { type: String, required: true },
-  icon: { type: String, default: '' },
-  kind: { type: String, default: 'text' }, // text | image | video | audio
-  loading: { type: Boolean, default: false },
-  // Render the trigger as a small text button (e.g. "Try another model…")
-  // instead of the labelled picker box, for one-off picks
-  triggerText: { type: String, default: '' },
-  allowNone: { type: Boolean, default: true },
-})
-const emit = defineEmits(['update:modelValue'])
+const props = withDefaults(
+  defineProps<{
+    modelValue?: string | undefined
+    models?: readonly Model[] | undefined
+    label: string
+    icon?: string | undefined
+    kind?: ModelKind | undefined
+    loading?: boolean | undefined
+    /** Render the trigger as a small text button (e.g. "Try another model…") instead of the labelled picker box, for one-off picks. */
+    triggerText?: string | undefined
+    allowNone?: boolean | undefined
+  }>(),
+  { modelValue: '', models: () => [], icon: '', kind: 'text', loading: false, triggerText: '', allowNone: true },
+)
+const emit = defineEmits<{ 'update:modelValue': [id: string] }>()
 
 const query = ref('')
-const searchInput = ref(null)
+const searchInput = ref<HTMLInputElement | null>(null)
 // The filter menu (providers, capabilities, uncensored, show-hidden) sits in
 // the pop-up behind the Filters button; the active picks also show as chips
 const filtersOpen = ref(false)
@@ -54,12 +57,13 @@ const {
   toggleTag,
 } = list
 
-function clearAll() {
+function clearAll(): void {
   list.clearAll()
   searchInput.value?.focus()
 }
 
-const colorVar = b => (b.color ? { '--b': b.color } : null)
+const colorVar = (badge: { color?: string | undefined }): Record<string, string> | undefined =>
+  badge.color ? { '--b': badge.color } : undefined
 
 const { open, root, toggle, close } = useDropdown({
   focus: searchInput,
@@ -76,22 +80,25 @@ const placement = usePopPlacement(root)
 const { popStyle } = placement
 
 // A click anywhere in the pop-up but the filter menu / its button closes the menu
-function closeFiltersOutside(e) {
-  if (filtersOpen.value && !e.target.closest('.fpanel, .filters-btn')) filtersOpen.value = false
+function closeFiltersOutside(event: MouseEvent): void {
+  if (filtersOpen.value && event.target instanceof Element && !event.target.closest('.fpanel, .filters-btn')) {
+    filtersOpen.value = false
+  }
 }
 
 // A model, or null for none
-function pick(m) {
-  emit('update:modelValue', m?.id ?? '')
+function pick(model: Model | null): void {
+  emit('update:modelValue', model?.id ?? '')
   close()
 }
 
-function onKeydown(e) {
-  if (e.key === 'Escape') {
+function onKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape') {
     if (filtersOpen.value) filtersOpen.value = false
     else close()
   }
-  if (e.key === 'Enter' && filtered.value.length) pick(filtered.value[0])
+  const [first] = filtered.value
+  if (event.key === 'Enter' && first) pick(first)
 }
 </script>
 
@@ -125,7 +132,7 @@ function onKeydown(e) {
           <template v-if="loading">Loading…</template>
           <template v-else>{{ current?.name || 'None' }}</template>
           <ModelBadge v-if="!loading && current?.uncensored" :badge="UNCENSORED" picked />
-          <ModelBadge v-if="!loading && PRIVACY[current?.privacy]" :badge="PRIVACY[current.privacy]" picked />
+          <ModelBadge v-if="!loading && current?.privacy" :badge="PRIVACY[current.privacy]" picked />
         </span>
       </span>
       <span class="chev">▾</span>
@@ -181,8 +188,8 @@ function onKeydown(e) {
         :uncensored-count="uncensoredCount"
         :hidden-count="hiddenCount"
         :any-filter="anyFilter"
-        @toggle-provider="id => toggleProvider(kind, id)"
-        @toggle-tag="slug => toggleTag(kind, slug)"
+        @toggle-provider="id => toggleProvider(props.kind, id)"
+        @toggle-tag="slug => toggleTag(props.kind, slug)"
         @clear="clearAll"
       />
       <div v-if="activeChips.length" class="picker-active">
@@ -204,7 +211,7 @@ function onKeydown(e) {
           <ModelRow
             v-if="section.id === 'all' && kind !== 'text' && allowNone && !query"
             none
-            :kind="kind"
+            :kind="props.kind"
             :selected="!modelValue"
             @pick="pick(null)"
           />
@@ -212,12 +219,12 @@ function onKeydown(e) {
             v-for="m in section.models"
             :key="m.id"
             :model="m"
-            :kind="kind"
+            :kind="props.kind"
             :selected="m.id === modelValue"
-            :favourite="isFavourite(kind, m.id)"
+            :favourite="isFavourite(props.kind, m.id)"
             :show-provider="showProviders"
             @pick="pick(m)"
-            @toggle-favourite="toggleFavourite(kind, m.id)"
+            @toggle-favourite="toggleFavourite(props.kind, m.id)"
           />
         </template>
         <div v-if="!filtered.length" class="picker-empty">

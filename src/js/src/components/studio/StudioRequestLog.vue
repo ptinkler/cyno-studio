@@ -1,41 +1,46 @@
-<!-- Provider request log (Venice / OpenRouter / Pollo) in the Studio center
-     pane. Replaces the old /requests page. -->
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted, inject } from 'vue'
+import { showToastKey, noToast } from '../../injection'
 import { fetchRequestLog } from '../../composables/chatFilesApi'
 import { useCopy } from '../../composables/useClipboard'
 
-const emit = defineEmits(['close'])
-const showToast = inject('showToast', () => {})
+type Entry = Awaited<ReturnType<typeof fetchRequestLog>>['entries'][number]
+
+const emit = defineEmits<{ close: [] }>()
+
+const LOG_SIZE = 200
+const HTTP_ERROR = 400
+const showToast = inject(showToastKey, noToast)
 const { copiedKey, copy } = useCopy()
 
-const entries = ref([])
+const entries = ref<Entry[]>([])
 const loading = ref(true)
 const failedOnly = ref(false)
-const open = ref(new Set())
+const open = ref<ReadonlySet<string>>(new Set())
 
-const shown = computed(() => entries.value.filter(e => !failedOnly.value || e.error || e.status >= 400))
-const key = (e, i) => `${e.at}-${i}`
+const ok = (entry: Entry): boolean => !entry.error && (entry.status ?? 0) < HTTP_ERROR
+const shown = computed(() => entries.value.filter(e => !failedOnly.value || !ok(e)))
+const key = (entry: Entry, index: number): string => `${entry.at}-${String(index)}`
 
-async function load() {
+async function load(): Promise<void> {
   loading.value = true
   try {
-    entries.value = (await fetchRequestLog(200)).entries
+    entries.value = (await fetchRequestLog(LOG_SIZE)).entries
   } catch (e) {
-    showToast(`Couldn't load the request log: ${e.message}`, 'error')
+    showToast(`Couldn't load the request log: ${e instanceof Error ? e.message : String(e)}`, 'error')
   } finally {
     loading.value = false
   }
 }
-function toggle(k) {
+function toggle(k: string): void {
   const next = new Set(open.value)
-  next.has(k) ? next.delete(k) : next.add(k)
+  if (!next.delete(k)) next.add(k)
   open.value = next
 }
-const ok = e => !e.error && e.status < 400
-const flagged = e => Object.values(e.flags || {}).some(v => String(v).toLowerCase() === 'true')
-const fmtTime = s => new Date(s).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'medium' })
-const json = e => JSON.stringify(e, null, 2)
+const flagged = (entry: Entry): boolean => Object.values(entry.flags ?? {}).some(v => v.toLowerCase() === 'true')
+const fmtTime = (iso: string): string =>
+  new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'medium' })
+const json = (entry: Entry): string => JSON.stringify(entry, null, 2)
 onMounted(load)
 </script>
 

@@ -1,14 +1,16 @@
-<!-- Settings card: live VPN status (Gluetun) with a restart control. -->
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { fetchVpnStatus, restartVpn } from '../../composables/vpnApi'
 
-const status = ref(null)
+type Status = Awaited<ReturnType<typeof fetchVpnStatus>>
+
+const RECHECK_MS = 10_000
+const status = ref<Status | null>(null)
 const loading = ref(false)
 const restarting = ref(false)
 const message = ref('')
 
-async function load() {
+async function load(): Promise<void> {
   loading.value = true
   try {
     status.value = await fetchVpnStatus()
@@ -18,15 +20,15 @@ async function load() {
     loading.value = false
   }
 }
-async function restart() {
+async function restart(): Promise<void> {
   restarting.value = true
   message.value = ''
   try {
-    const r = await restartVpn()
-    message.value = r.message || (r.ok ? 'Restarted' : 'Restart failed')
-    setTimeout(load, 10000)
+    const result = await restartVpn()
+    message.value = result.message || (result.ok ? 'Restarted' : 'Restart failed')
+    setTimeout(() => void load(), RECHECK_MS)
   } catch (e) {
-    message.value = e.message
+    message.value = e instanceof Error ? e.message : String(e)
   } finally {
     restarting.value = false
   }

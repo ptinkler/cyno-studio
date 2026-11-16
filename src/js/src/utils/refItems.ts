@@ -2,7 +2,7 @@ import type { components } from '../api/schema'
 
 // What the Studio composer knows about its attachments' roles in a prompt.
 
-type RefMode = components['schemas']['RefMode']
+export type RefMode = components['schemas']['RefMode']
 type RefType = 'image' | 'video' | 'audio'
 
 /** The part of a composer attachment that decides what it can be referenced as. */

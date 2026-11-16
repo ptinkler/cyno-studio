@@ -5,16 +5,20 @@
   icon sprite. All logic lives in useStudio; all markup in the child
   components. Route: /studio — runs alongside the existing app during the build.
 -->
-<script setup>
-import { ref, reactive, provide, inject, onMounted, onUnmounted } from 'vue'
+<script setup lang="ts">
+import { ref, reactive, computed, provide, inject, onMounted, onUnmounted } from 'vue'
+import { showToastKey, noToast, composerSettingsKey, chatModelsKey } from '../injection'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
+import { isVideoModel } from '../composables/chatModelsApi'
+import type { Catalogues } from '../composables/useComposerSettings'
 import { useComposerSettings } from '../composables/useComposerSettings'
 import { useStudio } from '../composables/useStudio'
 import { useStudioTheme } from '../composables/useStudioTheme'
 import { useThreadView } from '../composables/useThreadView'
 import { useAttachmentPicker } from '../composables/useAttachmentPicker'
 import { useGalleryModal } from '../composables/useGalleryModal'
+import type { Space } from '../composables/studioTypes'
 import { useStudioRoutes } from '../composables/useStudioRoutes'
 import StudioSidebar from '../components/studio/StudioSidebar.vue'
 import StudioInspector from '../components/studio/StudioInspector.vue'
@@ -25,6 +29,7 @@ import GenerationGrid from '../components/studio/GenerationGrid.vue'
 import GenerationModal from '../components/studio/GenerationModal.vue'
 import GenerationQueueDock from '../components/studio/GenerationQueueDock.vue'
 import { useGenQueue } from '../composables/useGenQueue'
+import type { Generation } from '../composables/chatFilesApi'
 import StudioSpace from '../components/studio/StudioSpace.vue'
 import StudioMedia from '../components/studio/StudioMedia.vue'
 import StudioUsage from '../components/studio/StudioUsage.vue'
@@ -47,7 +52,7 @@ const router = useRouter()
 const route = useRoute()
 const { logout } = useAuth()
 
-async function onSignOut() {
+async function onSignOut(): Promise<void> {
   try {
     await logout()
   } catch {
@@ -56,13 +61,18 @@ async function onSignOut() {
   window.location.href = '/'
 }
 
-const showToast = inject('showToast', (m, t) => console.warn(`[${t}] ${m}`))
+const showToast = inject(showToastKey, noToast)
 
-const models = reactive({ text: [], image: [], video: [], audio: [] })
-provide('chatModels', models) // ChatMessage's "Try another model"
+const models = reactive<Catalogues>({ text: [], image: [], video: [], audio: [] })
+provide(chatModelsKey, models) // ChatMessage's "Try another model"
 const settings = useComposerSettings(models)
-provide('composerSettings', settings) // read by the inspector's model/options sections
+provide(composerSettingsKey, settings) // read by the inspector's model/options sections
 const { mode } = settings
+// The picked video model, when the mode is Video: what its inputs allow shapes the composer
+const activeVideo = computed(() => {
+  const info = settings.activeInfo.value
+  return info && isVideoModel(info) ? info : undefined
+})
 
 const studio = useStudio({ models, settings, showToast })
 const {
@@ -151,30 +161,31 @@ const { pickerOpen, pickerKinds, pickerLimits, pickerTitle } = useAttachmentPick
 // Always-visible generation queue (polls across all threads; survives navigation).
 const genQueue = useGenQueue()
 const { entries: queueItems, pending: queuePending, done: queueDone } = genQueue
-onMounted(() => genQueue.start())
-onUnmounted(() => genQueue.stop())
+onMounted(() => {
+  genQueue.start()
+})
+onUnmounted(() => {
+  genQueue.stop()
+})
 // Generate from the composer, then refresh the queue so the new tile shows at once.
-function onGenerate() {
-  send()
-  genQueue.refresh()
+function onGenerate(): void {
+  void send()
+  void genQueue.refresh()
 }
 // Clicking a queued item jumps to that thread's gallery (where its tile lives).
-function openQueueItem(e) {
-  router.push(`/${e.conversation_id}/gallery`)
+function openQueueItem(entry: Generation): void {
+  void router.push(`/${entry.conversation_id}/gallery`)
 }
 const leftCollapsed = ref(false)
 const rightCollapsed = ref(false)
 const search = ref('')
-const spaceSettings = ref(null) // a space | 'new' | 'global' | null (closed)
+const spaceSettings = ref<Space | 'new' | 'global' | null>(null) // a space | 'new' | 'global' | null (closed)
 const importOpen = ref(false)
-function onSpacesChanged() {
-  loadDefaults()
-  loadLists()
+function onSpacesChanged(): void {
+  void loadDefaults()
+  void loadLists()
 }
-function onImported() {
-  loadLists()
-  loadDefaults()
-}
+const onImported = onSpacesChanged
 
 const {
   centerView,
@@ -215,13 +226,13 @@ const {
 } = useGalleryModal({ studio, genQueue, openThreadView })
 
 onMounted(() => {
-  loadLists()
-  loadModels()
-  loadStatus() // which providers are configured + refresh their balances (Pollo/OpenRouter/Venice)
-  loadInstructions()
-  loadCharacters()
-  loadDefaults()
-  syncFromRoute()
+  void loadLists()
+  void loadModels()
+  void loadStatus() // which providers are configured + refresh their balances (Pollo/OpenRouter/Venice)
+  void loadInstructions()
+  void loadCharacters()
+  void loadDefaults()
+  void syncFromRoute()
 })
 </script>
 
@@ -358,7 +369,7 @@ onMounted(() => {
         <StudioGenerations
           v-else
           :messages="messages"
-          :conv-id="active"
+          :conv-id="active ?? undefined"
           @open="openGeneration"
           @favourite="onGalleryFavourite"
         />
@@ -375,9 +386,9 @@ onMounted(() => {
           :enhancing="enhancing"
           :estimate="estimate"
           :unused="unusedAttachments"
-          :video-input="!!settings.activeInfo.value?.video_input"
-          :audio-input="!!settings.activeInfo.value?.audio_input"
-          :ref-mode="settings.activeInfo.value?.ref_mode || null"
+          :video-input="!!activeVideo?.video_input"
+          :audio-input="!!activeVideo?.audio_input"
+          :ref-mode="activeVideo?.ref_mode ?? null"
           @send="onGenerate"
           @files="addFiles"
           @remove="removeAttachment"

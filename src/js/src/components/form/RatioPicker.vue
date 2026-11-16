@@ -1,12 +1,9 @@
-<script setup>
-defineProps({
-  modelValue: { type: String, default: '' },
-  ratios: { type: Array, required: true },
-})
+<script setup lang="ts">
+withDefaults(defineProps<{ modelValue?: string; ratios: readonly string[] }>(), { modelValue: '' })
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits<{ 'update:modelValue': [ratio: string] }>()
 
-const RATIO_ICONS = {
+const RATIO_ICONS: Readonly<Record<string, readonly [number, number]>> = {
   '1:1': [18, 18],
   '4:3': [20, 15],
   '3:4': [15, 20],
@@ -15,13 +12,13 @@ const RATIO_ICONS = {
   '21:9': [26, 11],
 }
 
-function selectRatio(ratio) {
+function selectRatio(ratio: string): void {
   emit('update:modelValue', ratio)
 }
 
-function getIconSize(ratio) {
-  const [w, h] = RATIO_ICONS[ratio] || [16, 16]
-  return { width: `${w}px`, height: `${h}px` }
+function getIconSize(ratio: string): { width: string; height: string } {
+  const [w, h] = RATIO_ICONS[ratio] ?? [16, 16]
+  return { width: `${String(w)}px`, height: `${String(h)}px` }
 }
 </script>
 

@@ -1,24 +1,26 @@
-<!-- Studio center pane when a space is opened: its threads as a gallery. -->
-<script setup>
+<script setup lang="ts">
 import { ref, watch } from 'vue'
+import type { ConversationSummary } from '../../composables/chatConversationsApi'
 import { fetchConversationThumbs, chatMediaPreviewUrl } from '../../composables/useChat'
+import type { Space } from '../../composables/studioTypes'
 
-const props = defineProps({
-  space: { type: Object, required: true },
-  threads: { type: Array, default: () => [] },
+const props = withDefaults(defineProps<{ space: Space; threads?: readonly ConversationSummary[] | undefined }>(), {
+  threads: () => [],
 })
-defineEmits(['open', 'close', 'new'])
+defineEmits<{ open: [id: string]; close: []; new: [] }>()
 
 // Cover thumbnail per thread (newest image), loaded lazily; threads without a
 // generated image fall back to the placeholder icon.
-const thumbs = ref({})
+const thumbs = ref<Record<string, string>>({})
 watch(
   () => props.threads.map(t => t.id).join(','),
   async ids => {
     if (!ids) return
     try {
-      const { thumbs: t } = await fetchConversationThumbs(props.threads.map(x => x.id))
-      thumbs.value = Object.fromEntries(Object.entries(t).map(([id, file]) => [id, chatMediaPreviewUrl(id, file)]))
+      const found = await fetchConversationThumbs(props.threads.map(t => t.id))
+      thumbs.value = Object.fromEntries(
+        Object.entries(found.thumbs).map(([id, file]) => [id, chatMediaPreviewUrl(id, file)]),
+      )
     } catch {
       /* placeholders shown */
     }
@@ -43,7 +45,7 @@ watch(
           </button>
         </div>
       </div>
-      <div v-if="!threads.length" class="empty">No threads in this space yet.</div>
+      <div v-if="!props.threads.length" class="empty">No threads in this space yet.</div>
       <div v-else class="grid">
         <button v-for="t in threads" :key="t.id" class="gcard card" @click="$emit('open', t.id)">
           <div class="cthumb">

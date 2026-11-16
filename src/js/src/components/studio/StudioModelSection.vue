@@ -1,15 +1,12 @@
-<!-- Inspector section: the four searchable model pickers. -->
-<script setup>
-import { inject } from 'vue'
+<script setup lang="ts">
+import { composerSettingsKey, injectRequired } from '../../injection'
+import type { Catalogues } from '../../composables/useComposerSettings'
 import ModelPicker from '../chat/ModelPicker.vue'
 import StudioPresets from './StudioPresets.vue'
 
-defineProps({
-  models: { type: Object, required: true },
-  loading: { type: Boolean, default: false },
-})
+withDefaults(defineProps<{ models: Catalogues; loading?: boolean | undefined }>(), { loading: false })
 // Shared composer settings (not a prop) — binding to its slice is intended
-const { selected } = inject('composerSettings')
+const { selected } = injectRequired(composerSettingsKey)
 </script>
 
 <template>

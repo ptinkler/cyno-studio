@@ -1,7 +1,8 @@
-<script setup>
+<script setup lang="ts">
 import { computed, ref, nextTick } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import type { GenerationItem, ImagePick, RegenerateRequest, UiMessage } from '../../composables/studioTypes'
 import { useCopy } from '../../composables/useClipboard'
 import { shortModel, fmtCost } from '../../utils/format'
 import ChatAttachments from './ChatAttachments.vue'
@@ -9,32 +10,38 @@ import ChatMediaCard from './ChatMediaCard.vue'
 import ForkList from './ForkList.vue'
 import PromptBox from './PromptBox.vue'
 
-const props = defineProps({
-  message: { type: Object, required: true },
-  convId: { type: String, required: true },
-  canRetry: { type: Boolean, default: false },
-  canEdit: { type: Boolean, default: false },
-  canSwitch: { type: Boolean, default: false }, // ‹ › arrows usable (not mid-reply)
-  canBranch: { type: Boolean, default: false }, // ⑂ Branch on a reply (prompts go with canEdit)
-  canReword: { type: Boolean, default: false }, // Edit / Redo a finished reply's text in place
-})
-const emit = defineEmits([
-  'retry',
-  'open-media',
-  'stop',
-  'edit',
-  'resend',
-  'regenerate',
-  'branch',
-  'use-image',
-  'reword',
-  'text-version',
-  'media-version',
-  'pin',
-  'delete',
-  'fork',
-  'open-chat',
-])
+const props = withDefaults(
+  defineProps<{
+    message: UiMessage
+    convId: string
+    canRetry?: boolean | undefined
+    canEdit?: boolean | undefined
+    /** The ‹ › arrows are usable (not mid-reply). */
+    canSwitch?: boolean | undefined
+    /** ⑂ Branch on a reply (prompts go with canEdit). */
+    canBranch?: boolean | undefined
+    /** Edit / Redo a finished reply's text in place. */
+    canReword?: boolean | undefined
+  }>(),
+  { canRetry: false, canEdit: false, canSwitch: false, canBranch: false, canReword: false },
+)
+const emit = defineEmits<{
+  retry: []
+  'open-media': [item: GenerationItem]
+  stop: []
+  edit: [text: string]
+  resend: []
+  regenerate: [request: RegenerateRequest]
+  branch: [id: number]
+  'use-image': [pick: ImagePick]
+  reword: [instruction: string]
+  'text-version': [index: number]
+  'media-version': [pick: { mediaId: string; index: number }]
+  pin: [pick: { mediaId: string; pinned: boolean }]
+  delete: []
+  fork: []
+  'open-chat': [id: string]
+}>()
 
 marked.setOptions({ gfm: true, breaks: true })
 
@@ -46,64 +53,71 @@ const streaming = computed(() => props.message.status === 'streaming')
 const MEDIA_NOTE_LINE =
   /^[ \t]*\[(?:generated (?:image|video)|(?:image|video) (?:rendering|failed))\b[^\n]*\][ \t]*$/gim
 const displayText = computed(() =>
-  (props.message.content || '')
+  props.message.content
     .replace(MEDIA_NOTE_LINE, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim(),
 )
 const html = computed(() => {
   if (!displayText.value) return ''
-  return DOMPurify.sanitize(marked.parse(displayText.value))
+  return DOMPurify.sanitize(marked.parse(displayText.value, { async: false }))
 })
 // Image/Video mode failures already show on the media card — don't repeat them
 const errorShownOnMedia = computed(() =>
-  props.message.media?.some(m => m.status === 'error' && m.error === props.message.error),
+  props.message.media.some(m => m.status === 'error' && m.error === props.message.error),
 )
 const modelShort = computed(() => shortModel(props.message.model))
 // Media-only replies (Image/Video mode) have no text model to name
-const showTextModel = computed(() => !!props.message.content || !props.message.media?.length)
+const showTextModel = computed(() => !!props.message.content || !props.message.media.length)
 
 // Prompts sent outside Auto mode say so — an edit or retry reruns them in that mode
-const MODE_TAGS = { image: '🖼 Image', video: '🎬 Video', text: '💬 Text only' }
-const modeTag = computed(() => MODE_TAGS[props.message.mode] || '')
-
-const replyEl = ref(null)
+const MODE_TAGS: Readonly<Record<string, string>> = { image: '🖼 Image', video: '🎬 Video', text: '💬 Text only' }
+const modeTag = computed(() => MODE_TAGS[props.message.mode ?? ''] ?? '')
 
 // The reply's text on its own: Edit (say how to change it) or Redo (write it
 // again) replaces just the words; the pictures stay. Each wording is kept and
 // the ‹ › under the text switch between them, apart from the pictures' own.
-const textVersions = computed(() => props.message.text_versions || 0)
-const textShown = computed(() => props.message.text_shown ?? textVersions.value - 1)
-const hasPendingMedia = computed(() => !!props.message.media?.some(m => m.status === 'pending'))
+const textVersions = computed(() => props.message.text_versions)
+const textShown = computed(() => props.message.text_shown)
+const hasPendingMedia = computed(() => props.message.media.some(m => m.status === 'pending'))
 const canRewordNow = computed(() => props.canReword && !hasPendingMedia.value)
-const textBox = ref(null) // { text } while the Edit text box is open
-function submitTextEdit() {
+const textBox = ref<{ text: string } | null>(null) // while the Edit text box is open
+
+function submitTextEdit(): void {
   const text = textBox.value?.text.trim()
   if (!text) return
   textBox.value = null
   emit('reword', text)
 }
-function stepText(by) {
+function stepText(by: number): void {
   const next = textShown.value + by
   if (next >= 0 && next < textVersions.value) emit('text-version', next)
 }
 
 // Branches: other versions of this turn (from edits/retries)
-const siblings = computed(() => props.message.siblings || [])
-const branchIndex = computed(() => siblings.value.indexOf(props.message.id))
-function goBranch(step) {
+const siblings = computed(() => props.message.siblings)
+const branchIndex = computed(() => siblings.value.indexOf(Number(props.message.id)))
+function goBranch(step: number): void {
   const id = siblings.value[branchIndex.value + step]
-  if (id != null) emit('branch', id)
+  if (id !== undefined) emit('branch', id)
 }
 
 const editing = ref(false)
 const editText = ref('')
-const editBox = ref(null)
+const editBox = ref<HTMLTextAreaElement | null>(null)
+const EDIT_BOX_MAX_PX = 320
 
-function startEdit() {
-  editText.value = props.message.content || ''
+function fitEditBox(): void {
+  const el = editBox.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${String(Math.min(el.scrollHeight, EDIT_BOX_MAX_PX))}px`
+}
+
+function startEdit(): void {
+  editText.value = props.message.content
   editing.value = true
-  nextTick(() => {
+  void nextTick(() => {
     const el = editBox.value
     if (!el) return
     fitEditBox()
@@ -113,26 +127,19 @@ function startEdit() {
   })
 }
 
-function fitEditBox() {
-  const el = editBox.value
-  if (!el) return
-  el.style.height = 'auto'
-  el.style.height = `${Math.min(el.scrollHeight, 320)}px`
-}
-
-function submitEdit() {
+function submitEdit(): void {
   const text = editText.value.trim()
-  if (!text && !props.message.media?.length) return
+  if (!text && !props.message.media.length) return
   editing.value = false
-  if (text !== (props.message.content || '').trim()) emit('edit', text)
+  if (text !== props.message.content.trim()) emit('edit', text)
 }
 
-function onEditKeydown(e) {
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-    e.preventDefault()
+function onEditKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+    event.preventDefault()
     submitEdit()
   }
-  if (e.key === 'Escape') editing.value = false
+  if (event.key === 'Escape') editing.value = false
 }
 
 const { copiedKey, copy } = useCopy()
@@ -228,7 +235,7 @@ const { copiedKey, copy } = useCopy()
 
       <template v-if="!isUser">
         <!-- eslint-disable-next-line vue/no-v-html -- sanitised with DOMPurify (see `html`) -->
-        <div v-if="html" ref="replyEl" class="markdown" v-html="html"></div>
+        <div v-if="html" class="markdown" v-html="html"></div>
         <div v-else-if="streaming && !message.media?.length" class="thinking">
           <span></span><span></span><span></span>
         </div>
@@ -347,7 +354,7 @@ const { copiedKey, copy } = useCopy()
           </template>
           <ForkList v-if="message.forks?.length" :forks="message.forks" @open="id => emit('open-chat', id)" />
           <span class="meta-spacer"></span>
-          <span v-if="modelShort && showTextModel" class="meta-info model" :title="message.model"
+          <span v-if="modelShort && showTextModel" class="meta-info model" :title="message.model ?? undefined"
             >💬 {{ modelShort }}</span
           >
           <span v-if="message.cost" class="meta-info" title="Total OpenRouter cost for this reply (text + media)"

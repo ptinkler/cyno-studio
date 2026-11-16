@@ -1,20 +1,20 @@
-<!-- Settings: the signed-in account (OAuth profile + sign out) or provider
-     sign-in buttons. Emits the loaded user so Settings can gate admin-only UI. -->
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { fetchAuthProviders, authLoginUrl, PROVIDER_LABELS } from '../../composables/useAccount'
 
-const emit = defineEmits(['user', 'sign-out'])
+type Providers = Awaited<ReturnType<typeof fetchAuthProviders>>
 
-const user = ref(null)
-const providers = ref([])
+const emit = defineEmits<{ user: [user: Providers['user']]; 'sign-out': [] }>()
 
-async function load() {
+const user = ref<Providers['user']>(null)
+const providers = ref<string[]>([])
+
+async function load(): Promise<void> {
   try {
-    const d = await fetchAuthProviders()
-    user.value = d.user
-    providers.value = d.providers || []
-    emit('user', d.user)
+    const found = await fetchAuthProviders()
+    user.value = found.user
+    providers.value = found.providers
+    emit('user', found.user)
   } catch {
     user.value = null
   }

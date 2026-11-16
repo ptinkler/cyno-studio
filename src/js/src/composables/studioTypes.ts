@@ -1,6 +1,10 @@
 import type { ComputedRef, Ref } from 'vue'
 import type { components } from '../api/schema'
 import type { Conversation, ConversationMessage, ConversationSummary } from './chatConversationsApi'
+import type { Character } from './charactersApi'
+import type { Instruction, InstructionGroup } from './chatSettingsApi'
+import type { Mode } from './composerPrefs'
+import type { InheritedDefault } from './useChatDefaults'
 
 // The shapes the Studio's composables pass around: its shared state, and a message in the shown chat.
 
@@ -42,6 +46,8 @@ export interface GenerationItem {
   conversation_id: string
   message_id: number | null
   file?: string | null
+  /** The full-size file's URL, when the card already knows it. */
+  url?: string
   prompt?: string | null
   /** The prompt as the user wrote it, when what was sent was reworded. */
   original_prompt?: string | null
@@ -49,4 +55,83 @@ export interface GenerationItem {
   params?: Record<string, unknown> | null
   status?: string
   favourite?: boolean | null
+  /** The small picture shown in a grid (the full file when there is no smaller one). */
+  preview?: string
+  /** A file in the chat's folder that no message records: it can be opened but not managed. */
+  orphan?: boolean
+  cost?: number | null
+  created_at?: string | null
+  /** A content filter blocked it (when it failed). */
+  moderated?: boolean | null
+  error?: string | null
+  /** Pollo bills in credits; everything else in dollars (`cost`). */
+  credits?: number | null
+  /** What was sent to the provider and what came back, as the server recorded them. */
+  request?: unknown
+  response?: unknown
+  conversation_title?: string | null
+}
+
+/** "Edit this image" / "animate this image": which file to attach, the mode to switch to, and the chat it lives in. */
+export interface ImagePick {
+  file?: string | null | undefined
+  mode?: Mode | undefined
+  conversation_id?: string | undefined
+}
+
+/** A request to make a card's picture again: with another model, prompt, or the picture itself as the reference. */
+export interface RegenerateRequest {
+  mediaId: string
+  model?: string | null
+  prompt?: string
+  edit?: boolean
+  replace?: boolean
+}
+
+export type InstructionKind = 'snippet' | 'group'
+
+/** Open the editor on a snippet or group (null id = a new one). */
+export interface InstructionEditEvent {
+  kind: InstructionKind
+  id: number | null
+}
+
+/** One instruction snippet or group, as the inspector's buttons name it. */
+export interface InstructionTarget {
+  kind: InstructionKind
+  id: number
+}
+
+/** What the inspector shows of the instructions attached to the thread, by kind. */
+export interface InstructionsPane {
+  list: readonly Instruction[]
+  groups: readonly InstructionGroup[]
+  snippetIds: readonly number[]
+  groupIds: readonly number[]
+  summary: string
+  inheritedSnippets: readonly InheritedDefault[]
+  inheritedGroups: readonly InheritedDefault[]
+  hiddenSnippets: readonly InheritedDefault[]
+  hiddenGroups: readonly InheritedDefault[]
+  pausedSnippets: readonly number[]
+  pausedGroups: readonly number[]
+}
+
+/** What the inspector shows of the characters attached to the thread. */
+export interface CharactersPane {
+  list: readonly Character[]
+  ids: readonly number[]
+  names: string
+  /** Whether the picked models can use characters, and if not why. */
+  support: { ok: boolean; reason: string | null }
+  inherited: readonly InheritedDefault[]
+  hidden: readonly InheritedDefault[]
+}
+
+/** What is left to spend with each provider: dollars, except Pollo's credits. A provider with no key is null. */
+export interface Balances {
+  pollo: number | null
+  openrouter: number | null
+  venice: number | null
+  veniceCredits: number | null
 }

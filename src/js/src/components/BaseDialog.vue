@@ -1,29 +1,34 @@
-<script>
-const openStack = []
+<script lang="ts">
+// Open dialogs' Esc handlers, newest last, shared by every dialog on the page
+const openStack: ((event: KeyboardEvent) => void)[] = []
 </script>
 
-<script setup>
+<script setup lang="ts">
 import { onBeforeUnmount, watch } from 'vue'
 
 // A modal's shell: the backdrop, the card with its title and ✕, Esc and
 // backdrop clicks to close. Slots: `head` (beside the title), the body, and
 // `actions` (the button row). `form`: the card is a <form> (Enter submits;
 // `submit` is emitted). Emits `close` — the parent decides whether to.
-const props = defineProps({
-  open: { type: Boolean, default: false },
-  title: { type: String, default: '' },
-  label: { type: String, default: '' }, // for screen readers; the title by default
-  width: { type: String, default: '480px' },
-  form: { type: Boolean, default: false },
-})
-const emit = defineEmits(['close', 'submit'])
+const props = withDefaults(
+  defineProps<{
+    open?: boolean | undefined
+    title?: string | undefined
+    /** For screen readers; the title by default. */
+    label?: string | undefined
+    width?: string | undefined
+    form?: boolean | undefined
+  }>(),
+  { open: false, title: '', label: '', width: '480px', form: false },
+)
+const emit = defineEmits<{ close: []; submit: [] }>()
 
 // Open dialogs, newest last: Esc closes only the top one (a picker opened
 // from inside another dialog mustn't close both)
-function onKey(e) {
-  if (e.key === 'Escape' && openStack.at(-1) === onKey) emit('close')
+function onKey(event: KeyboardEvent): void {
+  if (event.key === 'Escape' && openStack.at(-1) === onKey) emit('close')
 }
-function release() {
+function release(): void {
   window.removeEventListener('keydown', onKey)
   const i = openStack.indexOf(onKey)
   if (i !== -1) openStack.splice(i, 1)
@@ -59,7 +64,7 @@ onBeforeUnmount(release)
           <button type="button" class="iconbtn x" title="Close" @click="emit('close')">✕</button>
         </div>
         <div class="body"><slot /></div>
-        <div v-if="$slots.actions" class="actions"><slot name="actions" /></div>
+        <div v-if="$slots['actions']" class="actions"><slot name="actions" /></div>
       </component>
     </div>
   </Teleport>

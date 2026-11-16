@@ -1,5 +1,6 @@
-<script setup>
+<script setup lang="ts">
 import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
+import type { LibraryEntry } from '../../composables/mediaApi'
 import { mediaOrigin } from '../../composables/useMedia'
 import { fmtDuration } from '../../utils/format'
 import { reloadImageLater } from '../../utils/imageRetry'
@@ -12,17 +13,26 @@ import { reloadImageLater } from '../../utils/imageRetry'
 // ('open'). `checkboxes`: each tile's tick circle shows on hover, and
 // clicking it toggles that item even when not `selectable` — so selecting
 // can start from any tile.
-const props = defineProps({
-  items: { type: Array, default: () => [] },
-  selected: { type: Set, default: () => new Set() },
-  selectable: { type: Boolean, default: false },
-  checkboxes: { type: Boolean, default: false },
-  pageSize: { type: Number, default: 20 },
-  // The caller has more rows it can load (server-side paging): once the last
-  // loaded tile is revealed, reaching the sentinel asks for them ('more').
-  hasMore: { type: Boolean, default: false },
-})
-const emit = defineEmits(['toggle', 'open', 'more'])
+const props = withDefaults(
+  defineProps<{
+    items?: readonly LibraryEntry[] | undefined
+    selected?: ReadonlySet<string> | undefined
+    selectable?: boolean | undefined
+    checkboxes?: boolean | undefined
+    pageSize?: number | undefined
+    /** The caller has more rows it can load (server-side paging): once the last loaded tile is revealed, reaching the sentinel asks for them ('more'). */
+    hasMore?: boolean | undefined
+  }>(),
+  {
+    items: () => [],
+    selected: () => new Set<string>(),
+    selectable: false,
+    checkboxes: false,
+    pageSize: 20,
+    hasMore: false,
+  },
+)
+const emit = defineEmits<{ toggle: [item: LibraryEntry, event: MouseEvent]; open: [item: LibraryEntry]; more: [] }>()
 
 const shown = ref(props.pageSize)
 const visible = computed(() => props.items.slice(0, shown.value))
@@ -31,15 +41,15 @@ const visible = computed(() => props.items.slice(0, shown.value))
 watch(
   () => props.items,
   (next, prev) => {
-    const appended = prev && next.length > prev.length && next[0] === prev[0]
+    const appended = next.length > prev.length && next[0] === prev[0]
     if (!appended) shown.value = props.pageSize
   },
 )
 
 // Add the next batch when the sentinel after the last tile comes within
 // ~a row of the screen. Without IntersectionObserver (old browsers, tests) show all.
-const sentinel = ref(null)
-let observer = null
+const sentinel = ref<HTMLElement | null>(null)
+let observer: IntersectionObserver | null = null
 watch(sentinel, el => {
   observer?.disconnect()
   if (!el) return
@@ -47,7 +57,7 @@ watch(sentinel, el => {
     shown.value = Infinity
     return
   }
-  observer = new IntersectionObserver(
+  const watching = new IntersectionObserver(
     entries => {
       if (!entries.some(e => e.isIntersecting)) return
       // Reveal the next batch of already-loaded tiles; once they're all shown,
@@ -56,26 +66,36 @@ watch(sentinel, el => {
       else if (props.hasMore) emit('more')
       // Still in range after the new page (a tall screen)? Observing afresh
       // reports the current state again, so it keeps filling.
-      nextTick(() => {
+      void nextTick(() => {
         if (!sentinel.value) return
-        observer.unobserve(sentinel.value)
-        observer.observe(sentinel.value)
+        watching.unobserve(sentinel.value)
+        watching.observe(sentinel.value)
       })
     },
     { rootMargin: '300px 0px' },
   )
-  observer.observe(el)
+  observer = watching
+  watching.observe(el)
 })
 onBeforeUnmount(() => observer?.disconnect())
 
+function onTileClick(item: LibraryEntry, event: MouseEvent): void {
+  if (props.selectable) {
+    emit('toggle', item, event)
+  } else {
+    event.preventDefault()
+    emit('open', item)
+  }
+}
+
 // A thumbnail that fails (e.g. the server was busy) is retried once, then
 // the tile shows a placeholder
-const retried = ref(new Set())
-const failed = ref(new Set())
-function onThumbError(item, e) {
+const retried = ref(new Set<string>())
+const failed = ref(new Set<string>())
+function onThumbError(item: LibraryEntry, event: Event): void {
   if (!retried.value.has(item.id)) {
     retried.value = new Set(retried.value).add(item.id)
-    reloadImageLater(e.target, item.thumb_url, 2000)
+    if (event.target instanceof HTMLImageElement) reloadImageLater(event.target, item.thumb_url, 2000)
   } else {
     failed.value = new Set(failed.value).add(item.id)
   }
@@ -91,9 +111,9 @@ function onThumbError(item, e) {
       :type="selectable ? 'button' : undefined"
       :href="selectable ? undefined : item.url"
       class="tile"
-      :class="{ selected: selected.has(item.id) }"
+      :class="{ selected: props.selected.has(item.id) }"
       :title="[item.prompt || item.name, mediaOrigin(item)].filter(Boolean).join(' — ')"
-      @click="selectable ? emit('toggle', item, $event) : ($event.preventDefault(), emit('open', item))"
+      @click="onTileClick(item, $event)"
     >
       <span v-if="failed.has(item.id)" class="no-thumb">{{ item.kind === 'video' ? '🎬' : '🖼' }}</span>
       <img v-else :src="item.thumb_url" alt="" loading="lazy" decoding="async" @error="onThumbError(item, $event)" />
@@ -105,13 +125,13 @@ function onThumbError(item, e) {
         class="check"
         :class="{ hover: !selectable }"
         role="checkbox"
-        :aria-checked="selected.has(item.id)"
+        :aria-checked="props.selected.has(item.id)"
         :aria-label="`Select ${item.name}`"
         @click.stop="emit('toggle', item, $event)"
-        >{{ selected.has(item.id) ? '✓' : '' }}</span
+        >{{ props.selected.has(item.id) ? '✓' : '' }}</span
       >
     </component>
-    <div v-if="visible.length < items.length || hasMore" ref="sentinel" class="sentinel" aria-hidden="true"></div>
+    <div v-if="visible.length < props.items.length || hasMore" ref="sentinel" class="sentinel" aria-hidden="true"></div>
   </div>
 </template>
 

@@ -13,7 +13,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc -p .",
+    "typecheck": "vue-tsc --noEmit -p .",
     "gen:api": "openapi-typescript --default-non-nullable false --output src/api/schema.d.ts"
   },
   "dependencies": {
@@ -38,6 +38,7 @@
     "typescript-eslint": "^8.72.2",
     "vite": "^5.0.0",
     "vitest": "^1.6.0",
+    "vue-eslint-parser": "^10.4.2",
     "vue-tsc": "^2.2.12"
   }
 }

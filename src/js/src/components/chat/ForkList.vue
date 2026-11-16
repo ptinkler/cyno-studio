@@ -1,16 +1,20 @@
-<script setup>
+<script setup lang="ts">
 import { useDropdown } from '../../composables/useDropdown'
 
 // The chats branched off at a message: "⑂ 2 branches", opening a list of them
-defineProps({
-  forks: { type: Array, required: true }, // [{ id, title }]
-  align: { type: String, default: 'left' }, // which edge the list lines up with
-})
-const emit = defineEmits(['open'])
+withDefaults(
+  defineProps<{
+    forks: readonly { id: string; title: string }[]
+    /** Which edge the list lines up with. */
+    align?: 'left' | 'right' | undefined
+  }>(),
+  { align: 'left' },
+)
+const emit = defineEmits<{ open: [id: string] }>()
 
 const { open, root, toggle, close } = useDropdown()
 
-function pick(id) {
+function pick(id: string): void {
   close()
   emit('open', id)
 }

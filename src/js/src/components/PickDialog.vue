@@ -1,4 +1,25 @@
-<script setup>
+<script lang="ts">
+/** One card in a pick dialog. */
+export interface PickItem {
+  key: string | number
+  name: string
+  /** A line under the name (a preview of the text). */
+  sub?: string
+  img?: string | null
+  dot?: string
+  icon?: string
+  /** Where it lives ("Library", "This chat"), shown on the card. */
+  badge?: string
+  /** The heading it is listed under (Groups / Snippets…). */
+  section?: string
+  /** Currently in use here. */
+  on: boolean
+  /** Set for defaults: where they come from. Turning one off hides it in this chat rather than detaching it. */
+  from?: string
+}
+</script>
+
+<script setup lang="ts" generic="T extends PickItem">
 import { computed, nextTick, ref, watch } from 'vue'
 import BaseDialog from './BaseDialog.vue'
 
@@ -6,23 +27,21 @@ import BaseDialog from './BaseDialog.vue'
 // each switched on or off with a tap. Shared by the character and the
 // instruction pickers. Names needn't be unique, so a card also shows its
 // picture or a preview of its text and where it lives (`badge`).
-//
-// items: [{ key, name, sub?, img?, dot?, icon?, badge?, section?, on, from? }]
-//   on    — currently in use here
-//   from  — set for defaults (the icon/title of where they come from): turning
-//           one off hides it in this chat rather than detaching it
 // Emits `toggle` with the item; the parent decides what that means.
-const props = defineProps({
-  open: { type: Boolean, default: false },
-  title: { type: String, required: true },
-  items: { type: Array, default: () => [] },
-  empty: { type: String, default: 'Nothing saved yet' },
-  searchPlaceholder: { type: String, default: 'Search' },
-})
-const emit = defineEmits(['close', 'toggle'])
+const props = withDefaults(
+  defineProps<{
+    open: boolean
+    title: string
+    items: readonly T[]
+    empty?: string | undefined
+    searchPlaceholder?: string | undefined
+  }>(),
+  { empty: 'Nothing saved yet', searchPlaceholder: 'Search' },
+)
+const emit = defineEmits<{ close: []; toggle: [item: T] }>()
 
 const query = ref('')
-const search = ref(null)
+const search = ref<HTMLInputElement | null>(null)
 watch(
   () => props.open,
   async open => {
@@ -33,17 +52,18 @@ watch(
   },
 )
 
-const matches = item => {
+const matches = (item: PickItem): boolean => {
   const q = query.value.trim().toLowerCase()
-  return !q || `${item.name} ${item.sub || ''} ${item.badge || ''}`.toLowerCase().includes(q)
+  return !q || `${item.name} ${item.sub ?? ''} ${item.badge ?? ''}`.toLowerCase().includes(q)
 }
 // In use first, then the rest; each in its section (Groups / Snippets…)
 const sections = computed(() => {
-  const out = new Map()
+  const out = new Map<string, T[]>()
   for (const item of props.items.filter(matches)) {
-    const name = item.section || ''
-    if (!out.has(name)) out.set(name, [])
-    out.get(name).push(item)
+    const name = item.section ?? ''
+    const list = out.get(name) ?? []
+    list.push(item)
+    out.set(name, list)
   }
   for (const list of out.values()) list.sort((a, b) => Number(b.on) - Number(a.on))
   return [...out.entries()]

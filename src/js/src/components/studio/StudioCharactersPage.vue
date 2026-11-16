@@ -1,70 +1,69 @@
-<!-- Characters library, shown in the Studio center pane (replaces the old
-     /characters page). Reuses CharacterEditor; Studio-styled. -->
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted, inject } from 'vue'
+import { showToastKey, noToast } from '../../injection'
 import { useRouter } from 'vue-router'
 import { confirmDialog } from '../../composables/useDialog'
 import CharacterEditor from '../characters/CharacterEditor.vue'
+import type { Character, ListedCharacter } from '../../composables/charactersApi'
 import { fetchCharacters, promoteCharacter, deleteCharacter, characterAvatar } from '../../composables/useCharacters'
+import { messageOf } from '../../utils/errors'
 
-const emit = defineEmits(['close'])
+const emit = defineEmits<{ close: [] }>()
 const router = useRouter()
-const showToast = inject('showToast', () => {})
+const showToast = inject(showToastKey, noToast)
 
-const characters = ref([])
+const characters = ref<ListedCharacter[]>([])
 const loading = ref(true)
-const editing = ref(null)
+const editing = ref<ListedCharacter | null>(null)
 const editorOpen = ref(false)
 
 const saved = computed(() => characters.value.filter(c => !c.adhoc))
 const adhoc = computed(() => characters.value.filter(c => c.adhoc))
 
-async function load() {
+async function load(): Promise<void> {
   try {
     characters.value = await fetchCharacters({ includeAdhoc: true })
   } catch (e) {
-    showToast(`Couldn't load characters: ${e.message}`, 'error')
+    showToast(`Couldn't load characters: ${messageOf(e)}`, 'error')
   } finally {
     loading.value = false
   }
 }
-function edit(c) {
-  editing.value = c
+function edit(character: ListedCharacter | null): void {
+  editing.value = character
   editorOpen.value = true
 }
-function onSaved(c) {
-  const i = characters.value.findIndex(x => x.id === c.id)
-  const keep = i === -1 ? {} : { conversation_title: characters.value[i].conversation_title }
-  if (i === -1) characters.value.push(c)
-  else characters.value.splice(i, 1, { ...keep, ...c })
-  if (editing.value?.id === c.id) editing.value = characters.value.find(x => x.id === c.id)
+function onSaved(character: Character): void {
+  const index = characters.value.findIndex(x => x.id === character.id)
+  const existing = characters.value[index]
+  if (existing === undefined) characters.value.push({ conversation_title: null, ...character })
+  else characters.value.splice(index, 1, { ...existing, ...character })
+  if (editing.value?.id === character.id) editing.value = characters.value.find(x => x.id === character.id) ?? null
 }
-function onDeleted(id) {
+function onDeleted(id: number): void {
   characters.value = characters.value.filter(c => c.id !== id)
 }
-async function promote(c) {
+async function promote(character: ListedCharacter): Promise<void> {
   try {
-    onSaved(await promoteCharacter(c.id))
-    showToast(`${c.name} saved`, 'success')
+    onSaved(await promoteCharacter(character.id))
+    showToast(`${character.name} saved`, 'success')
   } catch (e) {
-    showToast(`Couldn't save: ${e.message}`, 'error')
+    showToast(`Couldn't save: ${messageOf(e)}`, 'error')
   }
 }
-async function remove(c) {
-  if (
-    !(await confirmDialog({
-      title: `Delete “${c.name}”?`,
-      message: 'Its images are deleted too.',
-      confirmLabel: 'Delete',
-      danger: true,
-    }))
-  )
-    return
+async function remove(character: ListedCharacter): Promise<void> {
+  const confirmed = await confirmDialog({
+    title: `Delete “${character.name}”?`,
+    message: 'Its images are deleted too.',
+    confirmLabel: 'Delete',
+    danger: true,
+  })
+  if (!confirmed) return
   try {
-    await deleteCharacter(c.id)
-    onDeleted(c.id)
+    await deleteCharacter(character.id)
+    onDeleted(character.id)
   } catch (e) {
-    showToast(`Delete failed: ${e.message}`, 'error')
+    showToast(`Delete failed: ${messageOf(e)}`, 'error')
   }
 }
 onMounted(load)
@@ -97,7 +96,7 @@ onMounted(load)
         <div v-else class="grid">
           <button v-for="c in saved" :key="c.id" class="gcard card" @click="edit(c)">
             <div class="thumb">
-              <img v-if="characterAvatar(c)" :src="characterAvatar(c)" alt="" loading="lazy" />
+              <img v-if="characterAvatar(c)" :src="characterAvatar(c) ?? undefined" alt="" loading="lazy" />
               <span v-else>👤</span>
             </div>
             <div class="info">
@@ -112,7 +111,7 @@ onMounted(load)
           <h2 class="sect">Chat-only characters</h2>
           <p class="sub">Made inside a chat; deleted with it unless you save them.</p>
           <div v-for="c in adhoc" :key="c.id" class="arow">
-            <img v-if="characterAvatar(c)" :src="characterAvatar(c)" alt="" class="mini" />
+            <img v-if="characterAvatar(c)" :src="characterAvatar(c) ?? undefined" alt="" class="mini" />
             <span v-else class="mini blank">👤</span>
             <button class="link" @click="edit(c)">{{ c.name }}</button>
             <a class="chat-link" :href="`/${c.conversation_id}`" @click.prevent="router.push(`/${c.conversation_id}`)">

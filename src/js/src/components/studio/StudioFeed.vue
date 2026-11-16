@@ -1,60 +1,69 @@
-<!-- Studio center feed: the thread's messages via the shared ChatMessage
-     component (all per-message actions bubble up as events). -->
-<script setup>
+<script setup lang="ts">
 import { ref, watch, nextTick } from 'vue'
+import type { GenerationItem, ImagePick, RegenerateRequest, UiMessage } from '../../composables/studioTypes'
 import ChatMessage from '../chat/ChatMessage.vue'
 
-const props = defineProps({
-  messages: { type: Array, default: () => [] },
-  active: { type: String, default: null },
-  sending: { type: Boolean, default: false },
-  lastAssistantId: { type: [Number, String], default: null },
-})
-defineEmits([
-  'retry',
-  'edit',
-  'resend',
-  'branch',
-  'use-image',
-  'reword',
-  'text-version',
-  'media-version',
-  'regenerate',
-  'pin',
-  'delete',
-  'fork',
-  'open-chat',
-  'stop',
-  'open-media',
-])
+const props = withDefaults(
+  defineProps<{
+    messages?: readonly UiMessage[] | undefined
+    active?: string | null | undefined
+    sending?: boolean | undefined
+    lastAssistantId?: number | string | null | undefined
+  }>(),
+  { messages: () => [], active: null, sending: false, lastAssistantId: null },
+)
+defineEmits<{
+  retry: [message: UiMessage]
+  edit: [message: UiMessage, text: string]
+  resend: [message: UiMessage]
+  branch: [id: number]
+  'use-image': [pick: ImagePick]
+  reword: [message: UiMessage, instruction: string]
+  'text-version': [message: UiMessage, index: number]
+  'media-version': [message: UiMessage, pick: { mediaId: string; index: number }]
+  regenerate: [message: UiMessage, request: RegenerateRequest]
+  pin: [message: UiMessage, pick: { mediaId: string; pinned: boolean }]
+  delete: [message: UiMessage]
+  fork: [message: UiMessage]
+  'open-chat': [id: string]
+  stop: []
+  'open-media': [item: GenerationItem]
+}>()
 
-const scroller = ref(null)
-function scrollToBottom(force = false) {
-  nextTick(() => {
+const NEAR_BOTTOM_PX = 200
+const scroller = ref<HTMLElement | null>(null)
+function scrollToBottom(force = false): void {
+  void nextTick(() => {
     const el = scroller.value
     if (!el) return
-    const near = el.scrollHeight - el.scrollTop - el.clientHeight < 200
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX
     if (force || near) el.scrollTop = el.scrollHeight
   })
 }
 // Follow new messages, and streaming text on the last one
 watch(
   () => props.messages.length,
-  () => scrollToBottom(true),
+  () => {
+    scrollToBottom(true)
+  },
 )
 watch(
-  () => props.messages[props.messages.length - 1]?.content,
-  () => scrollToBottom(),
+  () => props.messages.at(-1)?.content,
+  () => {
+    scrollToBottom()
+  },
 )
 watch(
   () => props.active,
-  () => scrollToBottom(true),
+  () => {
+    scrollToBottom(true)
+  },
 )
 </script>
 
 <template>
   <div ref="scroller" class="feed">
-    <div v-if="!messages.length" class="empty">
+    <div v-if="!props.messages.length" class="empty">
       {{ active ? 'No messages yet.' : 'Start a new thread — type below.' }}
     </div>
     <div v-else class="finner">

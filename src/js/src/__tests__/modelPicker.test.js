@@ -7,7 +7,8 @@ import ModelPicker from '../components/chat/ModelPicker.vue'
 import { useModelFavourites } from '../composables/useModelFavourites'
 import { useModelFilters } from '../composables/useModelFilters'
 import { useShowHidden } from '../composables/useShowHidden'
-import { imageModel, videoModel } from './models'
+import { imageModel, videoModel, uiMessage } from './models'
+import { chatModelsKey } from '../injection'
 
 const MODELS = [
   imageModel({ id: 'a/alpha', name: 'Alpha' }),
@@ -93,7 +94,7 @@ describe('ModelPicker favourites', () => {
 import ChatMessage from '../components/chat/ChatMessage.vue'
 
 describe('ChatMessage user actions', () => {
-  const msg = { id: 5, role: 'user', content: 'hello', media: [], status: 'done' }
+  const msg = uiMessage({ id: 5, role: 'user', content: 'hello' })
 
   it('Retry emits resend without opening the editor', async () => {
     const w = mount(ChatMessage, { props: { message: msg, convId: 'c1', canEdit: true } })
@@ -121,20 +122,29 @@ describe('ChatMessage user actions', () => {
   it('media caption copies the prompt sent to the image model', async () => {
     const writeText = vi.fn().mockResolvedValue()
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
-    const reply = {
+    const reply = uiMessage({
       id: 6,
       role: 'assistant',
       content: 'Here',
       status: 'done',
       media: [
-        { id: 'm1', kind: 'image', status: 'done', file: 'a.png', model: 'x/seedream', prompt: 'a red fox, dusk' },
+        {
+          id: 'm1',
+          kind: 'image',
+          source: 'generated',
+          status: 'done',
+          file: 'a.png',
+          model: 'x/seedream',
+          prompt: 'a red fox, dusk',
+        },
       ],
-    }
+    })
     const w = mount(ChatMessage, { props: { message: reply, convId: 'c1' } })
-    await w.find('.caption-btn').trigger('click')
+    const copy = () => w.find('.caption-btn[title^="Copy the prompt"]')
+    await copy().trigger('click')
     await flushPromises()
     expect(writeText).toHaveBeenCalledWith('a red fox, dusk')
-    expect(w.find('.caption-btn').text()).toBe('✓ Copied')
+    expect(copy().text()).toBe('✓ Copied')
   })
 })
 
@@ -146,7 +156,7 @@ describe('copyText without the Clipboard API', () => {
 })
 
 describe('Failed media card', () => {
-  const failed = {
+  const failed = uiMessage({
     id: 7,
     role: 'assistant',
     content: 'Here goes.',
@@ -163,9 +173,9 @@ describe('Failed media card', () => {
         model: 'x/strict',
       },
     ],
-  }
+  })
   const provide = {
-    chatModels: {
+    [chatModelsKey]: {
       image: [imageModel({ id: 'x/strict', name: 'Strict' }), imageModel({ id: 'y/lenient', name: 'Lenient' })],
       video: [],
     },
@@ -191,7 +201,7 @@ describe('Failed media card', () => {
 
   it('hides the actions while the reply is still streaming', () => {
     const w = mount(ChatMessage, {
-      props: { message: { ...failed, status: 'streaming' }, convId: 'c1' },
+      props: { message: uiMessage({ ...failed, status: 'streaming' }), convId: 'c1' },
       global: { provide },
     })
     expect(w.find('.error-actions').exists()).toBe(false)
@@ -199,7 +209,7 @@ describe('Failed media card', () => {
 })
 
 describe('Media note lines in replies', () => {
-  const reply = (content, media = []) => ({ id: 9, role: 'assistant', content, status: 'done', media })
+  const reply = (content, media = []) => uiMessage({ id: 9, role: 'assistant', content, media })
   const img = [
     { id: 'm1', kind: 'image', source: 'generated', status: 'done', file: 'a.png', model: 'x/y', prompt: 'p' },
   ]

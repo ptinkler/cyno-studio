@@ -17,6 +17,23 @@ export interface ModelListProps {
   kind: ModelKind
 }
 
+/** A provider chip in the filter menu: how many models it has, and its colour. */
+export interface ProviderFacet {
+  id: Provider
+  label: string
+  title: string
+  n: number
+  color: string
+}
+
+/** A capability tag in the filter menu. */
+export interface TagFacet {
+  slug: string
+  label: string
+  n: number
+  color: string
+}
+
 export interface ActiveChip {
   key: string
   label: string
@@ -65,7 +82,7 @@ export function useModelList(props: ModelListProps, query: Ref<string>) {
   })
   const providersPresent = computed(() => PROVIDER_IDS.filter(id => providerCounts.value[id]))
   const showProviders = computed(() => providersPresent.value.length > 1)
-  const providerFacet = computed(() =>
+  const providerFacet = computed<ProviderFacet[]>(() =>
     showProviders.value
       ? providersPresent.value.map(id => ({
           id,
@@ -82,7 +99,7 @@ export function useModelList(props: ModelListProps, query: Ref<string>) {
     for (const m of visibleModels.value) for (const t of m.tags) counts.set(t, (counts.get(t) ?? 0) + 1)
     return counts
   })
-  const tagsPresent = computed(() =>
+  const tagsPresent = computed<TagFacet[]>(() =>
     Object.keys(TAG_LABELS)
       .filter(slug => tagCounts.value.has(slug))
       .map(slug => ({ slug, label: tagLabel(slug), n: tagCounts.value.get(slug) ?? 0, color: tagColor(slug) })),

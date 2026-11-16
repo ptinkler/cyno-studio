@@ -1,18 +1,19 @@
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from 'vue'
 
-const props = defineProps({
-  modelValue: { type: String, default: '' },
-  label: { type: String, required: true },
-  placeholder: { type: String, default: '' },
-  rows: { type: Number, default: 4 },
-  hint: { type: String, default: '' },
-})
+const props = withDefaults(
+  defineProps<{ modelValue?: string; label: string; placeholder?: string; rows?: number; hint?: string }>(),
+  { modelValue: '', placeholder: '', rows: 4, hint: '' },
+)
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 
 const focused = ref(false)
 const hasValue = computed(() => !!props.modelValue)
+
+function onInput(event: Event): void {
+  if (event.target instanceof HTMLTextAreaElement) emit('update:modelValue', event.target.value)
+}
 </script>
 
 <template>
@@ -26,7 +27,7 @@ const hasValue = computed(() => !!props.modelValue)
         :value="modelValue"
         :placeholder="placeholder"
         :rows="rows"
-        @input="emit('update:modelValue', $event.target.value)"
+        @input="onInput"
         @focus="focused = true"
         @blur="focused = false"
       ></textarea>

@@ -1,20 +1,23 @@
-<!-- One row of the picker's list: a model's name, provider, badges (folded into dots when there are many),
-     the favourite star and its id; or, with `none`, the "no model" choice. -->
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 import ModelBadge from './ModelBadge.vue'
+import type { Model, ModelKind } from '../../composables/chatModelsApi'
 import { ALL_PROVIDERS, providerOf } from '../../composables/modelTags'
 import { MAX_INLINE_BADGES, modelBadges } from '../../utils/modelBadges'
 
-const props = defineProps({
-  model: { type: Object, default: null }, // null with `none`
-  none: { type: Boolean, default: false },
-  kind: { type: String, default: 'text' },
-  selected: { type: Boolean, default: false },
-  favourite: { type: Boolean, default: false },
-  showProvider: { type: Boolean, default: false },
-})
-const emit = defineEmits(['pick', 'toggle-favourite'])
+const props = withDefaults(
+  defineProps<{
+    /** null with `none`. */
+    model?: Model | null | undefined
+    none?: boolean | undefined
+    kind?: ModelKind | undefined
+    selected?: boolean | undefined
+    favourite?: boolean | undefined
+    showProvider?: boolean | undefined
+  }>(),
+  { model: null, none: false, kind: 'text', selected: false, favourite: false, showProvider: false },
+)
+const emit = defineEmits<{ pick: []; 'toggle-favourite': [] }>()
 
 const badges = computed(() => (props.model ? modelBadges(props.model, props.kind) : []))
 const provider = computed(() => providerOf(props.model?.id))
@@ -30,7 +33,7 @@ const provider = computed(() => providerOf(props.model?.id))
     @keydown.enter.prevent="emit('pick')"
   >
     <span class="item-row">
-      <span class="item-name">{{ none ? 'None' : model.name }}</span>
+      <span class="item-name">{{ none ? 'None' : model?.name }}</span>
       <span
         v-if="showProvider && !none"
         class="row-provider"
@@ -61,7 +64,7 @@ const provider = computed(() => providerOf(props.model?.id))
         {{ favourite ? '★' : '☆' }}
       </button>
     </span>
-    <span class="item-id">{{ none ? `Disable ${kind} generation` : model.id }}</span>
+    <span class="item-id">{{ none ? `Disable ${kind} generation` : model?.id }}</span>
   </div>
 </template>
 

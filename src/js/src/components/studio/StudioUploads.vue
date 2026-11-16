@@ -1,7 +1,4 @@
-<!-- Settings: where source media (image/audio/video) is uploaded so a URL-only
-     provider (Pollo) can fetch it — a third-party temp host, or self-hosted
-     from this instance. One setting covers all media kinds. -->
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import {
   fetchUploadPrefs,
@@ -11,7 +8,9 @@ import {
   EXPIRY_LABELS,
 } from '../../composables/useAccount'
 
-const prefs = reactive({ primary: 'litterbox', backup: null, expiry_minutes: 60, selfhost_base: '' })
+type Settings = Awaited<ReturnType<typeof fetchUploadPrefs>>
+
+const prefs = reactive<Settings['prefs']>({ primary: 'litterbox', backup: null, expiry_minutes: 60, selfhost_base: '' })
 // Fallback mirrors the backend (web/upload_settings.py) so the form behaves
 // sanely before the fetch lands or if it fails — litterbox/selfhost retention
 // is user-settable, so don't default "Keep for" to locked.
@@ -23,44 +22,46 @@ const meta = reactive({
 const saving = ref(false)
 const message = ref('')
 const testing = ref(false)
-const testResult = ref(null) // { ok, detail }
+const testResult = ref<{ ok: boolean; detail: string } | null>(null)
 
 const usesSelfhost = computed(() => prefs.primary === 'selfhost' || prefs.backup === 'selfhost')
 const expiryEditable = computed(() =>
-  [prefs.primary, prefs.backup].some(h => h && meta.expiry_configurable.includes(h)),
+  [prefs.primary, prefs.backup].some(host => host !== null && meta.expiry_configurable.includes(host)),
 )
 
-async function load() {
+async function load(): Promise<void> {
   try {
-    const d = await fetchUploadPrefs()
-    Object.assign(prefs, d.prefs)
-    Object.assign(meta, d)
+    const loaded = await fetchUploadPrefs()
+    Object.assign(prefs, loaded.prefs)
+    meta.expiry_options = loaded.expiry_options
+    meta.expiry_configurable = loaded.expiry_configurable
+    meta.public_base_url_set = loaded.public_base_url_set
   } catch {
     /* keep defaults */
   }
 }
 
-async function save() {
+async function save(): Promise<void> {
   saving.value = true
   message.value = ''
   try {
-    const d = await saveUploadPrefs({ ...prefs, backup: prefs.backup || null })
-    Object.assign(prefs, d.prefs)
+    const saved = await saveUploadPrefs({ ...prefs, backup: prefs.backup === '' ? null : prefs.backup })
+    Object.assign(prefs, saved.prefs)
     message.value = 'Saved'
   } catch (e) {
-    message.value = e.message
+    message.value = e instanceof Error ? e.message : String(e)
   } finally {
     saving.value = false
   }
 }
 
-async function runTest() {
+async function runTest(): Promise<void> {
   testing.value = true
   testResult.value = null
   try {
     testResult.value = await testSelfhost(prefs.selfhost_base)
   } catch (e) {
-    testResult.value = { ok: false, detail: e.message }
+    testResult.value = { ok: false, detail: e instanceof Error ? e.message : String(e) }
   } finally {
     testing.value = false
   }

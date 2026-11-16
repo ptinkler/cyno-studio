@@ -1,20 +1,18 @@
-<!-- Settings card: which text model names new chats (blank = the chat's own
-     model). Reads the global chat settings; the model list comes from the
-     app-wide catalogue. -->
-<script setup>
-import { computed, inject, onMounted, ref } from 'vue'
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import { chatModelsKey, injectRequired } from '../../injection'
 import ModelPicker from '../chat/ModelPicker.vue'
 import { fetchSettings, setTitleModel } from '../../composables/useChat'
 
-const models = inject('chatModels')
+const models = injectRequired(chatModelsKey)
 const current = ref('')
 const loaded = ref(false)
 
-const titleModels = computed(() => models?.text || [])
+const titleModels = computed(() => models.text)
 
 onMounted(async () => {
   try {
-    current.value = (await fetchSettings()).title_model || ''
+    current.value = (await fetchSettings()).title_model ?? ''
   } catch {
     current.value = ''
   } finally {
@@ -22,10 +20,10 @@ onMounted(async () => {
   }
 })
 
-async function pick(id) {
+async function pick(id: string): Promise<void> {
   current.value = id
   try {
-    await setTitleModel(id || '')
+    await setTitleModel(id)
   } catch {
     /* keep the choice shown; it retries on next change */
   }

@@ -1,64 +1,73 @@
-<!-- Studio center pane: the media library (all generated images/videos),
-     reusing MediaGrid + useMedia with server-side paging. -->
-<script setup>
+<script setup lang="ts">
 import { ref, inject, onMounted } from 'vue'
+import { showToastKey, noToast } from '../../injection'
 import { confirmDialog } from '../../composables/useDialog'
 import MediaGrid from '../media/MediaGrid.vue'
+import type { LibraryEntry, MediaFilters } from '../../composables/mediaApi'
 import { fetchMediaPage, deleteMediaMany, downloadMediaMany } from '../../composables/useMedia'
+import { messageOf } from '../../utils/errors'
 
-defineEmits(['close'])
-const showToast = inject('showToast')
+defineEmits<{ close: [] }>()
+const showToast = inject(showToastKey, noToast)
 
 const PAGE = 30
-const KINDS = [
+interface Choice {
+  id: string
+  label: string
+}
+const KINDS: readonly Choice[] = [
   { id: 'all', label: 'All' },
   { id: 'image', label: 'Images' },
   { id: 'video', label: 'Videos' },
 ]
-const SOURCES = [
+const SOURCES: readonly Choice[] = [
   { id: 'all', label: 'Any source' },
   { id: 'generated', label: 'Generated' },
   { id: 'upload', label: 'Uploaded' },
 ]
 
-const ORIGINS = [
+const ORIGINS: readonly Choice[] = [
   { id: 'all', label: 'Everywhere' },
   { id: 'chat', label: 'Chats' },
   { id: 'library', label: 'Library' },
   { id: 'orphan', label: 'Orphaned' },
 ]
 
-const items = ref([])
+const items = ref<LibraryEntry[]>([])
 const total = ref(0)
 const kind = ref('all')
 const source = ref('all')
 const origin = ref('all')
 const q = ref('')
 const loading = ref(false)
-const preview = ref(null)
-const picked = ref(new Set()) // ids chosen for a bulk action
+const preview = ref<LibraryEntry | null>(null)
+const picked = ref<ReadonlySet<string>>(new Set()) // ids chosen for a bulk action
 const busy = ref(false)
-function toggle(item) {
+function toggle(item: LibraryEntry): void {
   const next = new Set(picked.value)
   if (!next.delete(item.id)) next.add(item.id)
   picked.value = next
 }
-const selectAll = () => (picked.value = new Set(items.value.map(i => i.id)))
-const clearPicked = () => (picked.value = new Set())
-async function bulkDownload() {
+const selectAll = (): void => {
+  picked.value = new Set(items.value.map(i => i.id))
+}
+const clearPicked = (): void => {
+  picked.value = new Set()
+}
+async function bulkDownload(): Promise<void> {
   busy.value = true
   try {
     await downloadMediaMany([...picked.value])
   } catch (e) {
-    showToast(e.message, 'error')
+    showToast(messageOf(e), 'error')
   } finally {
     busy.value = false
   }
 }
-async function bulkDelete() {
+async function bulkDelete(): Promise<void> {
   const n = picked.value.size
   const ok = await confirmDialog({
-    title: `Delete ${n} item${n === 1 ? '' : 's'}?`,
+    title: `Delete ${String(n)} item${n === 1 ? '' : 's'}?`,
     message: "This removes the files and can't be undone.",
     confirmLabel: 'Delete',
     danger: true,
@@ -70,49 +79,42 @@ async function bulkDelete() {
     clearPicked()
     await load()
   } catch (e) {
-    showToast(e.message, 'error')
+    showToast(messageOf(e), 'error')
   } finally {
     busy.value = false
   }
 }
 
-function params(offset) {
-  return {
-    offset,
-    limit: PAGE,
-    q: q.value || undefined,
-    kind: kind.value === 'all' ? undefined : kind.value,
-    source: source.value === 'all' ? undefined : source.value,
-    origin: origin.value === 'all' ? undefined : origin.value,
-  }
+function params(offset: number): MediaFilters & { offset: number; limit: number } {
+  return { offset, limit: PAGE, q: q.value, kind: kind.value, source: source.value, origin: origin.value }
 }
-async function load() {
+async function load(): Promise<void> {
   loading.value = true
   try {
-    const { items: page, total: t } = await fetchMediaPage(params(0))
+    const { items: page, total: count } = await fetchMediaPage(params(0))
     items.value = page
-    total.value = t
+    total.value = count
   } finally {
     loading.value = false
   }
 }
-async function loadMore() {
+async function loadMore(): Promise<void> {
   if (items.value.length >= total.value) return
   const { items: page } = await fetchMediaPage(params(items.value.length))
   items.value = [...items.value, ...page]
 }
-function setKind(k) {
+function setKind(k: string): void {
   kind.value = k
-  load()
+  void load()
 }
-function setSource(s) {
+function setSource(s: string): void {
   source.value = s
-  load()
+  void load()
 }
 
-function setOrigin(o) {
+function setOrigin(o: string): void {
   origin.value = o
-  load()
+  void load()
 }
 
 onMounted(load)

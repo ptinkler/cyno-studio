@@ -1,35 +1,40 @@
-<!-- Settings: the user's own provider keys. Write-only — a set key shows a
-     masked hint and can be replaced or cleared, never read back. -->
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { fetchUserKeys, saveUserKeys, KEY_PROVIDERS } from '../../composables/useAccount'
 
-const keys = ref({}) // { provider: { set, hint } }
-const drafts = reactive({}) // provider -> new value typed (or '' to clear)
+type KeyStatus = Awaited<ReturnType<typeof fetchUserKeys>>['keys']
+
+const keys = ref<KeyStatus>({}) // provider -> { set, hint }
+const drafts = reactive<Record<string, string>>({}) // provider -> new value typed (or '' to clear)
 const saving = ref(false)
 const message = ref('')
 
-async function load() {
+async function load(): Promise<void> {
   try {
-    keys.value = (await fetchUserKeys()).keys || {}
+    keys.value = (await fetchUserKeys()).keys
   } catch {
     keys.value = {}
   }
 }
 
-async function save() {
+function onType(provider: string, event: Event): void {
+  if (event.target instanceof HTMLInputElement) drafts[provider] = event.target.value
+}
+
+async function save(): Promise<void> {
   saving.value = true
   message.value = ''
-  const payload = {}
+  const payload: Record<string, string | null> = {}
   for (const p of KEY_PROVIDERS) {
-    if (p.id in drafts) payload[p.id] = drafts[p.id] // only what changed
+    const draft = drafts[p.id]
+    if (draft !== undefined) payload[p.id] = draft // only what changed
   }
   try {
-    keys.value = (await saveUserKeys(payload)).keys || keys.value
-    for (const k of Object.keys(drafts)) delete drafts[k]
+    keys.value = (await saveUserKeys(payload)).keys
+    for (const k of Object.keys(drafts)) Reflect.deleteProperty(drafts, k)
     message.value = 'Saved'
   } catch (e) {
-    message.value = e.message
+    message.value = e instanceof Error ? e.message : String(e)
   } finally {
     saving.value = false
   }
@@ -46,14 +51,14 @@ onMounted(load)
       <div v-for="p in KEY_PROVIDERS" :key="p.id" class="krow">
         <div class="kl">
           {{ p.label }}
-          <span v-if="keys[p.id]?.set" class="kset">{{ keys[p.id].hint }}</span>
+          <span v-if="keys[p.id]?.set" class="kset">{{ keys[p.id]?.hint }}</span>
         </div>
         <input
           :value="drafts[p.id] ?? ''"
           type="password"
           autocomplete="off"
           :placeholder="keys[p.id]?.set ? 'Enter a new key to replace' : 'Paste key'"
-          @input="drafts[p.id] = $event.target.value"
+          @input="onType(p.id, $event)"
         />
         <button v-if="keys[p.id]?.set" class="btn btn-sm" title="Clear this key" @click="drafts[p.id] = ''">
           Clear

@@ -27,6 +27,14 @@ export function mediaOrigin(item: Pick<LibraryEntry, 'origin' | 'conversation_ti
   return 'Library'
 }
 
+/** The media filters' state: kind, source and origin ('all' = any), and the search text. */
+export interface MediaFilterState {
+  kind: string
+  source: string
+  origin: string
+  q: string
+}
+
 /**
  * Filters over a list of media items (a ref): kind, source, origin and a
  * text search over prompt / name / where it's from.
@@ -35,7 +43,7 @@ export function useMediaFilters(
   items: Ref<readonly LibraryEntry[]>,
   { kind = 'all', origin = 'all' }: { kind?: string; origin?: string } = {},
 ) {
-  const filters = reactive({ kind, source: 'all', origin, q: '' })
+  const filters = reactive<MediaFilterState>({ kind, source: 'all', origin, q: '' })
   const filtered = computed(() => {
     const q = filters.q.trim().toLowerCase()
     return items.value.filter(

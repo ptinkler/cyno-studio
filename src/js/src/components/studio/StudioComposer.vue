@@ -1,51 +1,81 @@
-<!-- Studio compose bar: attachments + mode pills + prompt box + send.
-     Presentational — attachment list/upload state come from props.
-     The prompt is a contenteditable so reference mentions ([@name]) show as
-     inline pills; the [@name] text remains the source of truth. -->
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from 'vue'
+import type { CreditEstimate } from '../../composables/useStudioPrompt'
+import type { Attachment } from '../../composables/useChatAttachments'
+import type { Mode } from '../../composables/composerPrefs'
 import { fmtCost, creditsToUsd } from '../../utils/format'
+import { takeFiles } from '../../utils/files'
 import { buildRefItems } from '../../utils/refItems'
+import type { RefItem, RefMode } from '../../utils/refItems'
 import { useMentionEditor } from '../../composables/useMentionEditor'
 import ComposerAttachments from './ComposerAttachments.vue'
 
-const props = defineProps({
-  modes: { type: Array, default: () => [] },
-  mode: { type: String, default: 'auto' },
-  draft: { type: String, default: '' },
-  sending: { type: Boolean, default: false },
-  canSend: { type: Boolean, default: false },
-  attachments: { type: Array, default: () => [] },
-  uploading: { type: Boolean, default: false },
-  enhancing: { type: Boolean, default: false },
-  // Pollo's price for the current setup: { credits, full_credits } or null
-  estimate: { type: Object, default: null },
-  // Keys of attachments the selected model can't use (dimmed, not sent)
-  unused: { type: Object, default: () => new Set() },
-  // The selected video model takes a source video (Recast / motion models)
-  videoInput: { type: Boolean, default: false },
-  // The selected video model takes an audio track (lip-sync models)
-  audioInput: { type: Boolean, default: false },
-  // The selected video model's reference-to-video config (image/video/audio
-  // refs the prompt mentions as [@name]): { types, max, limits } or null.
-  refMode: { type: Object, default: null },
-})
-const emit = defineEmits(['update:draft', 'update:mode', 'send', 'files', 'remove', 'clear', 'library', 'enhance'])
+const props = withDefaults(
+  defineProps<{
+    modes?: readonly { id: Mode; label: string; icon: string }[] | undefined
+    mode?: Mode | undefined
+    draft?: string | undefined
+    sending?: boolean | undefined
+    canSend?: boolean | undefined
+    attachments?: readonly Attachment[] | undefined
+    uploading?: boolean | undefined
+    enhancing?: boolean | undefined
+    /** Pollo's price for the current setup, or null. */
+    estimate?: CreditEstimate | null | undefined
+    /** Keys of attachments the selected model can't use (dimmed, not sent). */
+    unused?: ReadonlySet<string> | undefined
+    /** The selected video model takes a source video (Recast / motion models). */
+    videoInput?: boolean | undefined
+    /** The selected video model takes an audio track (lip-sync models). */
+    audioInput?: boolean | undefined
+    /** The selected video model's reference-to-video config (image/video/audio refs the prompt mentions as [@name]), or null. */
+    refMode?: RefMode | null | undefined
+  }>(),
+  {
+    modes: () => [],
+    mode: 'auto',
+    draft: '',
+    sending: false,
+    canSend: false,
+    attachments: () => [],
+    uploading: false,
+    enhancing: false,
+    estimate: null,
+    unused: () => new Set<string>(),
+    videoInput: false,
+    audioInput: false,
+    refMode: null,
+  },
+)
+const emit = defineEmits<{
+  'update:draft': [text: string]
+  'update:mode': [mode: Mode]
+  send: []
+  files: [files: File[]]
+  remove: [attachment: Attachment]
+  clear: []
+  library: []
+  enhance: []
+}>()
 
 const drag = ref(false)
-const aud = ref(null) // hidden audio-clip file input (audio mode)
+const aud = ref<HTMLInputElement | null>(null) // hidden audio-clip file input (audio mode)
 // Audio mode with a voice-clone model: the only attachment is the reference clip
 const audioClip = computed(() => props.mode === 'audio' && props.audioInput)
 const mediaMode = computed(() => props.mode === 'image' || props.mode === 'video')
 const refsActive = computed(() => !!props.refMode && props.mode === 'video')
-const refItems = computed(() => (refsActive.value ? buildRefItems(props.attachments, props.refMode) : []))
+const refItems = computed(() =>
+  refsActive.value && props.refMode ? buildRefItems(props.attachments, props.refMode) : [],
+)
 const placeholder = computed(() =>
   refsActive.value && refItems.value.length
     ? 'Describe what to change… Type @ to add a reference'
     : 'Describe what you want to create…',
 )
-function removeUnused() {
-  props.attachments.filter(a => props.unused.has(a.key)).forEach(a => emit('remove', a))
+function removeUnused(): void {
+  for (const attachment of props.attachments) {
+    if (props.unused.has(attachment.key)) emit('remove', attachment)
+  }
 }
 
 const { ed, atMenu, insertMention, toggleMentionMenu, syncDraft, onKey, onCopy, onCut, onPaste, focusPrompt } =
@@ -53,26 +83,31 @@ const { ed, atMenu, insertMention, toggleMentionMenu, syncDraft, onKey, onCopy, 
     draft: () => props.draft,
     refItems,
     canMention: () => refsActive.value && refItems.value.length > 0,
-    onUpdate: text => emit('update:draft', text),
-    onFiles: files => emit('files', files),
-    onSend: () => emit('send'),
+    onUpdate: text => {
+      emit('update:draft', text)
+    },
+    onFiles: files => {
+      emit('files', files)
+    },
+    onSend: () => {
+      emit('send')
+    },
   })
 
 // Click-to-insert: map each attachment to its ref so clicking its thumbnail
 // drops the [@name] pill into the prompt.
-const refByKey = computed(() => Object.fromEntries(refItems.value.map(r => [r.key, r])))
-function insertAtt(a) {
-  const r = refByKey.value[a.key]
-  if (r) insertMention(r)
+const refByKey = computed<Record<string, RefItem>>(() => Object.fromEntries(refItems.value.map(r => [r.key, r])))
+function insertAtt(attachment: Attachment): void {
+  const item = refByKey.value[attachment.key]
+  if (item) insertMention(item)
 }
 
-function onVideo(e) {
-  emit('files', e.target.files)
-  e.target.value = ''
+function onVideo(event: Event): void {
+  emit('files', takeFiles(event))
 }
-function onDrop(e) {
+function onDrop(event: DragEvent): void {
   drag.value = false
-  emit('files', e.dataTransfer?.files)
+  emit('files', [...(event.dataTransfer?.files ?? [])])
 }
 defineExpose({ focusPrompt })
 </script>
@@ -131,7 +166,7 @@ defineExpose({ focusPrompt })
           </button>
           <div v-if="atMenu" class="atmenu" @mouseleave="atMenu = false">
             <button v-for="r in refItems" :key="r.key" @click="insertMention(r)">
-              <img v-if="r.type === 'image'" :src="r.preview" alt="" />
+              <img v-if="r.type === 'image'" :src="r.preview ?? undefined" alt="" />
               <span v-else class="pill-ic">{{ r.type === 'audio' ? '🔊' : '🎞' }}</span
               >{{ r.label }}
             </button>
@@ -149,7 +184,7 @@ defineExpose({ focusPrompt })
         <button
           v-if="mode === 'image' || mode === 'video'"
           class="clip enh"
-          :disabled="!draft.trim() || enhancing"
+          :disabled="!props.draft.trim() || enhancing"
           title="Enhance the prompt with the text model (optional — sending uses the prompt exactly as written)"
           @click="emit('enhance')"
         >

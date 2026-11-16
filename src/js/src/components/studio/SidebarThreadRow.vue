@@ -1,29 +1,30 @@
-<!-- One thread in the sidebar list: its name (or the rename box), and the
-     pin / rename / delete actions that appear on hover. The three places
-     that list threads — pinned, inside a space, and unfiled — differ only in
-     the row wrapper (drag handlers, pinned state), which stays with them. -->
-<script setup>
-defineProps({
-  thread: { type: Object, required: true },
-  renaming: { type: Boolean, default: false },
-  renameText: { type: String, default: '' },
-  // The pinned list shows "Unpin" and is always lit; elsewhere it toggles
-  pinned: { type: Boolean, default: false },
-  alwaysPinned: { type: Boolean, default: false },
-})
-const emit = defineEmits([
-  'open',
-  'pin',
-  'start-rename',
-  'commit-rename',
-  'cancel-rename',
-  'delete',
-  'update:renameText',
-])
+<script setup lang="ts">
+import type { ConversationSummary } from '../../composables/chatConversationsApi'
+import { typedValue, vFocusSelect } from '../../utils/focusSelect'
 
-const vFocusSelect = { mounted: el => (el.focus(), el.select()) }
+withDefaults(
+  defineProps<{
+    thread: ConversationSummary
+    renaming?: boolean | undefined
+    renameText?: string | undefined
+    /** The pinned list shows "Unpin" and is always lit; elsewhere it toggles. */
+    pinned?: boolean | undefined
+    alwaysPinned?: boolean | undefined
+  }>(),
+  { renaming: false, renameText: '', pinned: false, alwaysPinned: false },
+)
+const emit = defineEmits<{
+  open: []
+  pin: []
+  'start-rename': []
+  'commit-rename': []
+  'cancel-rename': []
+  delete: []
+  'update:renameText': [text: string]
+}>()
+
 // Icon per thread kind: the gallery icon (same as "New gallery") vs the chat icon.
-const threadIcon = t => (t.kind === 'gallery' ? '#s-image' : '#s-chat')
+const threadIcon = (thread: ConversationSummary): string => (thread.kind === 'gallery' ? '#s-image' : '#s-chat')
 </script>
 
 <template>
@@ -32,7 +33,7 @@ const threadIcon = t => (t.kind === 'gallery' ? '#s-image' : '#s-chat')
     v-focus-select
     class="nrename"
     :value="renameText"
-    @input="emit('update:renameText', $event.target.value)"
+    @input="emit('update:renameText', typedValue($event))"
     @keydown.enter.prevent="emit('commit-rename')"
     @keydown.esc="emit('cancel-rename')"
     @blur="emit('cancel-rename')"

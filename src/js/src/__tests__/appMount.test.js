@@ -35,8 +35,20 @@ const ANSWERS = [
   [/\/api\/chat\/request-log/, { entries: [] }],
   [/\/api\/characters/, { characters: [] }],
   [/\/api\/media/, { items: [], total: 0 }],
+  [/\/api\/auth\/providers/, { providers: [], open_signup: false, dev_login: false, user: null }],
   [/\/api\/keys/, { keys: {} }],
-  [/\/api\/settings\/uploads/, { prefs: {}, hosts: [], expiry_options: [] }],
+  [
+    /\/api\/settings\/uploads/,
+    {
+      prefs: { primary: 'litterbox', backup: null, expiry_minutes: 60, selfhost_base: '' },
+      hosts: ['litterbox'],
+      expiry_options: [60],
+      expiry_configurable: ['litterbox'],
+      public_base_url_set: false,
+      selfhost_base_default: '',
+    },
+  ],
+  [/\/api\/chat\/credits/, { remaining: 0, total_credits: 0, total_usage: 0 }],
 ]
 const answer = url => ANSWERS.find(([re]) => re.test(url))?.[1] ?? {}
 

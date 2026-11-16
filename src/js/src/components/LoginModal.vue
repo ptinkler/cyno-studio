@@ -1,33 +1,34 @@
-<script setup>
+<script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import { useAuth } from '../composables/useAuth'
 import { fetchAuthProviders, authLoginUrl } from '../composables/useAccount'
+import { messageOf } from '../utils/errors'
 
 const { showLogin, login, devLogin } = useAuth()
 const email = ref('')
 const password = ref('')
 const error = ref('')
 const busy = ref(false)
-const providers = ref([])
+const providers = ref<string[]>([])
 const devAvailable = ref(false)
 
 onMounted(async () => {
   try {
     const info = await fetchAuthProviders()
-    providers.value = info.providers || []
-    devAvailable.value = !!info.dev_login
+    providers.value = info.providers
+    devAvailable.value = info.dev_login
   } catch {
     providers.value = []
   }
 })
 
-async function devSignIn() {
+async function devSignIn(): Promise<void> {
   busy.value = true
   error.value = ''
   try {
     await devLogin()
   } catch (err) {
-    error.value = err.message
+    error.value = messageOf(err)
   } finally {
     busy.value = false
   }
@@ -40,20 +41,20 @@ watch(showLogin, open => {
   }
 })
 
-async function submit() {
+async function submit(): Promise<void> {
   if (!email.value.trim() || !password.value) return
   busy.value = true
   error.value = ''
   try {
     await login(email.value.trim(), password.value)
   } catch (err) {
-    error.value = err.message
+    error.value = messageOf(err)
   } finally {
     busy.value = false
   }
 }
 
-const providerLabels = { google: 'Google', microsoft: 'Microsoft', x: 'X' }
+const providerLabels: Readonly<Record<string, string>> = { google: 'Google', microsoft: 'Microsoft', x: 'X' }
 </script>
 
 <template>

@@ -1,11 +1,11 @@
-<script setup>
-defineProps({
-  toasts: { type: Array, required: true },
-})
+<script setup lang="ts">
+import type { Toast, ToastType } from '../composables/useToast'
 
-defineEmits(['remove'])
+defineProps<{ toasts: readonly Toast[] }>()
 
-function getIcon(type) {
+defineEmits<{ remove: [id: number] }>()
+
+function getIcon(type: ToastType): string {
   return type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ'
 }
 </script>

@@ -8,6 +8,9 @@ import type { ShowToast } from './useToast'
 import { messageOf } from '../utils/errors'
 
 type Schemas = components['schemas']
+
+/** Pollo's price for the current setup, in credits (with and without its discount). */
+export type CreditEstimate = Schemas['CreditEstimate']
 type MediaKind = 'image' | 'video' | 'audio'
 
 const ESTIMATE_DELAY_MS = 400
@@ -37,7 +40,7 @@ function priceInputs(kind: MediaKind, settings: TurnSettingsBody, draft: string)
 
 // Pollo's own price for what's set up in the composer (Pollo models only), refreshed shortly after each change
 export function useStudioEstimate({ mode, selected, turnSettings, attachments, draft }: EstimateHooks) {
-  const estimate = ref<Schemas['CreditEstimate'] | null>(null)
+  const estimate = ref<CreditEstimate | null>(null)
   let timer: ReturnType<typeof setTimeout> | undefined
   let seq = 0
 

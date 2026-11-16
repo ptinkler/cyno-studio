@@ -1,9 +1,13 @@
-<script setup>
+<script setup lang="ts">
 import { ref, computed, watch, nextTick, inject } from 'vue'
+import { showToastKey, noToast } from '../../injection'
 import MediaPicker from '../media/MediaPicker.vue'
-import { confirmDialog } from '../../composables/useDialog'
 import BaseDialog from '../BaseDialog.vue'
 import DefaultToggles from '../chat/DefaultToggles.vue'
+import type { Character } from '../../composables/charactersApi'
+import type { CharacterSeed } from '../../composables/useChatCharacters'
+import { confirmDialog } from '../../composables/useDialog'
+import type { LibraryEntry } from '../../composables/mediaApi'
 import { importMediaToCharacter } from '../../composables/useMedia'
 import {
   createCharacter,
@@ -15,31 +19,43 @@ import {
   characterImageUrl,
 } from '../../composables/useCharacters'
 import { takeFiles } from '../../utils/files'
+import { messageOf } from '../../utils/errors'
 
-const props = defineProps({
-  open: { type: Boolean, default: false },
-  character: { type: Object, default: null }, // edit this one; null = create
-  conversationId: { type: String, default: null }, // create as ad hoc in this chat
-  // Images to start a new character with: { kind: 'chat', conversationId, file, preview },
-  // { kind: 'chat', conversationId, file } or { kind: 'media', mediaId, preview }
-  seed: { type: Array, default: () => [] },
-  // Show the "add to chat defaults" toggles (chat view only)
-  showDefaults: { type: Boolean, default: false },
-})
-const emit = defineEmits(['close', 'saved', 'deleted'])
+const props = withDefaults(
+  defineProps<{
+    open?: boolean | undefined
+    /** Edit this one; null = create. */
+    character?: Character | null | undefined
+    /** Create as ad hoc in this chat. */
+    conversationId?: string | null | undefined
+    /** Images to start a new character with. */
+    seed?: readonly CharacterSeed[] | undefined
+    /** Show the "add to chat defaults" toggles (chat view only). */
+    showDefaults?: boolean | undefined
+  }>(),
+  { open: false, character: null, conversationId: null, seed: () => [], showDefaults: false },
+)
+const emit = defineEmits<{ close: []; saved: [character: Character]; deleted: [id: number] }>()
 
 const MAX_IMAGES = 6 // mirrors MAX_IMAGES in web/characters.py
-const showToast = inject('showToast', () => {})
+const showToast = inject(showToastKey, noToast)
+
+/** An image in the editor, main first: one already saved, or one to add when the character is saved. */
+type EditorImage =
+  | { kind: 'saved'; saved: string; key: string }
+  | { kind: 'file'; file: File; preview: string; key: number }
+  | { kind: 'media'; mediaId: string; preview: string; key: number }
+  | (CharacterSeed & { key: number })
+type NewImage = Exclude<EditorImage, { kind: 'saved' }>
 
 const name = ref('')
 const description = ref('')
-// The images in order, main first: saved ones { file } and ones to add on save
-// ({ kind, preview, … } as in `seed`, or { kind: 'file', file: File })
-const images = ref([])
-const dragFrom = ref(null) // index of the image being dragged
+const images = ref<EditorImage[]>([])
+const dragFrom = ref<number | null>(null) // index of the image being dragged
 const saving = ref(false)
 const pickerOpen = ref(false)
-const nameInput = ref(null)
+const nameInput = ref<HTMLInputElement | null>(null)
+const toggles = ref<{ commit: (id: number) => Promise<void> } | null>(null) // the "Default for" pills, saved along with the rest
 let keySeq = 0
 
 const isNew = computed(() => !props.character)
@@ -52,111 +68,140 @@ watch(
     name.value = props.character?.name ?? ''
     description.value = props.character?.description ?? ''
     images.value = [
-      ...(props.character?.images ?? []).map(f => ({ kind: 'saved', saved: f, key: f })),
-      ...props.seed.map(s => ({ ...s, key: ++keySeq })),
+      ...(props.character?.images ?? []).map((saved): EditorImage => ({ kind: 'saved', saved, key: saved })),
+      ...props.seed.map((seed): EditorImage => ({ ...seed, key: ++keySeq })),
     ]
-    nextTick(() => nameInput.value?.focus())
+    void nextTick(() => nameInput.value?.focus())
   },
 )
 
-function addFiles(files) {
+function addFiles(files: Iterable<File>): void {
   for (const file of [...files].filter(f => f.type.startsWith('image/'))) {
-    if (total.value >= MAX_IMAGES) return showToast(`Up to ${MAX_IMAGES} images per character`, 'error')
+    if (total.value >= MAX_IMAGES) {
+      showToast(`Up to ${String(MAX_IMAGES)} images per character`, 'error')
+      return
+    }
     images.value.push({ kind: 'file', file, preview: URL.createObjectURL(file), key: ++keySeq })
   }
 }
 
-function addFromLibrary(items) {
-  for (const i of items.slice(0, MAX_IMAGES - total.value)) {
-    images.value.push({ kind: 'media', mediaId: i.id, preview: i.thumb_url || i.url, key: ++keySeq })
+function addFromLibrary(items: readonly LibraryEntry[]): void {
+  for (const item of items.slice(0, MAX_IMAGES - total.value)) {
+    images.value.push({ kind: 'media', mediaId: item.id, preview: item.thumb_url || item.url, key: ++keySeq })
   }
 }
 
-const imageUrl = img => (img.kind === 'saved' ? characterImageUrl(props.character.id, img.saved) : img.preview)
+function imageUrl(img: EditorImage): string {
+  if (img.kind !== 'saved') return img.preview
+  return props.character ? characterImageUrl(props.character.id, img.saved) : ''
+}
 
-function removeImage(img) {
+function removeImage(img: EditorImage): void {
   if (img.kind === 'file') URL.revokeObjectURL(img.preview)
   images.value = images.value.filter(x => x !== img)
 }
 
-function moveImage(from, to) {
-  if (from === to || from == null) return
+function moveImage(from: number | null, to: number): void {
+  if (from === null || from === to) return
   const list = [...images.value]
   list.splice(to, 0, ...list.splice(from, 1))
   images.value = list
 }
 
 // Drag a thumbnail onto another to put it there (images dropped from outside are added)
-function onDragStart(e, i) {
+function onDragStart(event: DragEvent, i: number): void {
   dragFrom.value = i
-  e.dataTransfer.effectAllowed = 'move'
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
 }
 
-function onDropOn(e, i) {
-  if (dragFrom.value == null) return addFiles(e.dataTransfer?.files || [])
+function onDropOn(event: DragEvent, i: number): void {
+  if (dragFrom.value === null) {
+    addFiles(event.dataTransfer?.files ?? [])
+    return
+  }
   moveImage(dragFrom.value, i)
   dragFrom.value = null
 }
 
-function addImage(id, p) {
-  if (p.kind === 'chat') return copyChatImageToCharacter(id, p.conversationId, p.file)
-  if (p.kind === 'media') return importMediaToCharacter(p.mediaId, id)
-  return uploadCharacterImage(id, p.file)
+function addImage(id: number, img: NewImage): Promise<Character> {
+  switch (img.kind) {
+    case 'chat':
+      return copyChatImageToCharacter(id, img.conversationId, img.file)
+    case 'media':
+      return importMediaToCharacter(img.mediaId, id)
+    case 'file':
+      return uploadCharacterImage(id, img.file)
+  }
 }
 
-const toggles = ref(null) // the "Default for" pills, saved along with the rest
+/** The character as saved, with all of the editor's new images added and in the order shown. */
+async function saveImages(start: Character): Promise<Character> {
+  let saved = start
+  // New images are added at the end; then put everything in the order shown
+  const order: string[] = []
+  for (const img of images.value) {
+    if (img.kind === 'saved') {
+      order.push(img.saved)
+      continue
+    }
+    saved = await addImage(saved.id, img)
+    const added = saved.images.at(-1)
+    if (added !== undefined) order.push(added)
+  }
+  return order.join('/') === saved.images.join('/') ? saved : updateCharacter(saved.id, { images: order })
+}
 
-async function save() {
-  if (!name.value.trim()) return showToast('Give the character a name', 'error')
+async function save(): Promise<void> {
+  if (!name.value.trim()) {
+    showToast('Give the character a name', 'error')
+    return
+  }
   saving.value = true
   try {
     const fields = { name: name.value.trim(), description: description.value.trim() }
-    const saved = images.value.filter(img => img.kind === 'saved').map(img => img.saved)
-    let c = isNew.value
-      ? await createCharacter({ ...fields, conversation_id: props.conversationId })
-      : await updateCharacter(props.character.id, { ...fields, images: saved })
-    // New images are added at the end; then put everything in the order shown
-    const order = []
-    for (const img of images.value) {
-      if (img.kind !== 'saved') c = await addImage(c.id, img)
-      order.push(img.kind === 'saved' ? img.saved : c.images[c.images.length - 1])
-    }
-    if (order.join('/') !== c.images.join('/')) c = await updateCharacter(c.id, { images: order })
-    await toggles.value?.commit(c.id)
-    emit('saved', c)
+    const kept = images.value.flatMap(img => (img.kind === 'saved' ? img.saved : []))
+    const existing = props.character
+    const first = existing
+      ? await updateCharacter(existing.id, { ...fields, images: kept })
+      : await createCharacter({ ...fields, conversation_id: props.conversationId })
+    const saved = await saveImages(first)
+    await toggles.value?.commit(saved.id)
+    emit('saved', saved)
     emit('close')
   } catch (e) {
-    showToast(`Save failed: ${e.message}`, 'error')
+    showToast(`Save failed: ${messageOf(e)}`, 'error')
   } finally {
     saving.value = false
   }
 }
 
-async function promote() {
+async function promote(): Promise<void> {
+  const character = props.character
+  if (!character) return
   try {
-    emit('saved', await promoteCharacter(props.character.id))
-    showToast(`${props.character.name} saved — attach it to any chat or generation`, 'success')
+    emit('saved', await promoteCharacter(character.id))
+    showToast(`${character.name} saved — attach it to any chat or generation`, 'success')
   } catch (e) {
-    showToast(`Couldn't save: ${e.message}`, 'error')
+    showToast(`Couldn't save: ${messageOf(e)}`, 'error')
   }
 }
 
-async function remove() {
-  if (
-    !(await confirmDialog({
-      title: `Delete “${props.character.name}”?`,
-      message: 'Its images are deleted too.',
-      confirmLabel: 'Delete',
-      danger: true,
-    }))
-  )
-    return
+async function remove(): Promise<void> {
+  const character = props.character
+  if (!character) return
+  const confirmed = await confirmDialog({
+    title: `Delete “${character.name}”?`,
+    message: 'Its images are deleted too.',
+    confirmLabel: 'Delete',
+    danger: true,
+  })
+  if (!confirmed) return
   try {
-    await deleteCharacter(props.character.id)
-    emit('deleted', props.character.id)
+    await deleteCharacter(character.id)
+    emit('deleted', character.id)
     emit('close')
   } catch (e) {
-    showToast(`Delete failed: ${e.message}`, 'error')
+    showToast(`Delete failed: ${messageOf(e)}`, 'error')
   }
 }
 </script>
@@ -164,7 +209,7 @@ async function remove() {
 <template>
   <BaseDialog
     :open="open"
-    :title="isNew ? 'New character' : character.name"
+    :title="character ? character.name : 'New character'"
     label="Character"
     width="560px"
     @close="emit('close')"
@@ -193,7 +238,7 @@ async function remove() {
     <label
       >Images <span class="count">{{ total }}/{{ MAX_IMAGES }}</span></label
     >
-    <div class="images" @dragover.prevent @drop.prevent="addFiles($event.dataTransfer?.files || [])">
+    <div class="images" @dragover.prevent @drop.prevent="addFiles($event.dataTransfer?.files ?? [])">
       <div
         v-for="(img, i) in images"
         :key="img.key"

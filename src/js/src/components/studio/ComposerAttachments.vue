@@ -1,20 +1,42 @@
-<!-- The strip of attachments above the prompt: an add tile, each attachment (dimmed when the model
- can't use it, clickable to mention it in the prompt), and the "remove unused" / "clear all" notes. -->
-<script setup>
-defineProps({
-  attachments: { type: Array, default: () => [] },
-  unused: { type: Object, default: () => new Set() }, // keys of attachments the selected model can't use
-  insertable: { type: Object, default: () => ({}) }, // attachment key -> the ref it can be mentioned as
-  mediaMode: { type: Boolean, default: false }, // image / video mode: references can be added
-  audioClip: { type: Boolean, default: false }, // audio mode with a voice-clone model: one reference clip
-})
-defineEmits(['add-clip', 'library', 'insert', 'remove', 'clear', 'remove-unused'])
+<script setup lang="ts">
+import type { Attachment } from '../../composables/useChatAttachments'
+import type { RefItem } from '../../utils/refItems'
 
-const canInsert = (a, insertable) => !a.uploading && !!insertable[a.key]
+const props = withDefaults(
+  defineProps<{
+    attachments?: readonly Attachment[] | undefined
+    /** Keys of attachments the selected model can't use. */
+    unused?: ReadonlySet<string> | undefined
+    /** Attachment key -> the ref it can be mentioned as. */
+    insertable?: Readonly<Record<string, RefItem>> | undefined
+    /** Image / video mode: references can be added. */
+    mediaMode?: boolean | undefined
+    /** Audio mode with a voice-clone model: one reference clip. */
+    audioClip?: boolean | undefined
+  }>(),
+  {
+    attachments: () => [],
+    unused: () => new Set<string>(),
+    insertable: () => ({}),
+    mediaMode: false,
+    audioClip: false,
+  },
+)
+defineEmits<{
+  'add-clip': []
+  library: []
+  insert: [attachment: Attachment]
+  remove: [attachment: Attachment]
+  clear: []
+  'remove-unused': []
+}>()
+
+const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, RefItem>>): boolean =>
+  !attachment.uploading && !!insertable[attachment.key]
 </script>
 
 <template>
-  <div v-if="attachments.length || mediaMode || audioClip" class="atts">
+  <div v-if="props.attachments.length || mediaMode || audioClip" class="atts">
     <div v-if="mediaMode || audioClip" class="plus">
       <button
         class="addtile"
@@ -25,14 +47,14 @@ const canInsert = (a, insertable) => !a.uploading && !!insertable[a.key]
       </button>
     </div>
     <div
-      v-for="a in attachments"
+      v-for="a in props.attachments"
       :key="a.key"
       class="att"
-      :class="{ uploading: a.uploading, ins: canInsert(a, insertable), unused: unused.has(a.key) }"
+      :class="{ uploading: a.uploading, ins: canInsert(a, props.insertable), unused: props.unused.has(a.key) }"
       :title="
-        unused.has(a.key)
+        props.unused.has(a.key)
           ? 'This model can\'t use this — it won\'t be sent'
-          : canInsert(a, insertable)
+          : canInsert(a, props.insertable)
             ? 'Click to add this reference to the prompt'
             : ''
       "
@@ -42,29 +64,36 @@ const canInsert = (a, insertable) => !a.uploading && !!insertable[a.key]
         <div v-if="a.audio" class="att-audio" title="Audio reference">🔊</div>
         <video
           v-else-if="a.video"
-          :src="a.preview"
+          :src="a.preview ?? undefined"
           muted
           playsinline
           disablepictureinpicture
           preload="metadata"
         ></video>
-        <img v-else :src="a.preview" alt="attachment" />
+        <img v-else :src="a.preview ?? undefined" alt="attachment" />
       </div>
       <button class="attx" title="Remove" @click.stop="$emit('remove', a)">×</button>
       <!-- Hover: a slightly larger still preview (no playback / PiP) -->
       <div class="att-zoom">
-        <video v-if="a.video" :src="a.preview" muted playsinline disablepictureinpicture preload="metadata"></video>
+        <video
+          v-if="a.video"
+          :src="a.preview ?? undefined"
+          muted
+          playsinline
+          disablepictureinpicture
+          preload="metadata"
+        ></video>
         <span v-else-if="a.audio" class="zoom-audio">🔊</span>
-        <img v-else :src="a.preview" alt="" />
+        <img v-else :src="a.preview ?? undefined" alt="" />
       </div>
     </div>
   </div>
-  <div v-if="unused.size" class="unused-note">
-    {{ unused.size }} attachment{{ unused.size === 1 ? '' : 's' }} won't be sent — this model can't use
-    {{ unused.size === 1 ? 'it' : 'them' }}.
+  <div v-if="props.unused.size" class="unused-note">
+    {{ props.unused.size }} attachment{{ props.unused.size === 1 ? '' : 's' }} won't be sent — this model can't use
+    {{ props.unused.size === 1 ? 'it' : 'them' }}.
     <button class="clearall" @click="$emit('remove-unused')">Remove</button>
   </div>
-  <div v-if="attachments.length" class="clearrow">
+  <div v-if="props.attachments.length" class="clearrow">
     <button class="clearall" title="Remove every attached image and video" @click="$emit('clear')">Clear all</button>
   </div>
 </template>

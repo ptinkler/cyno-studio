@@ -1,15 +1,20 @@
-<!-- A small prompt box under a picture or reply: one text, a hint, Cancel and a submit button.
-     Enter submits, Esc cancels. -->
-<script setup>
-defineProps({
-  placeholder: { type: String, default: '' },
-  hint: { type: String, default: '' },
-  submitLabel: { type: String, default: 'Redo' },
-})
-defineEmits(['submit', 'cancel'])
-const text = defineModel({ type: String, default: '' })
+<script setup lang="ts">
+import type { Directive } from 'vue'
 
-const vFocusSelect = { mounted: el => (el.focus(), el.select()) }
+withDefaults(defineProps<{ placeholder?: string; hint?: string; submitLabel?: string }>(), {
+  placeholder: '',
+  hint: '',
+  submitLabel: 'Redo',
+})
+defineEmits<{ submit: []; cancel: [] }>()
+const text = defineModel<string>({ default: '' })
+
+const vFocusSelect: Directive<HTMLInputElement | HTMLTextAreaElement> = {
+  mounted: el => {
+    el.focus()
+    el.select()
+  },
+}
 </script>
 
 <template>

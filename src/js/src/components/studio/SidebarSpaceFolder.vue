@@ -1,28 +1,31 @@
-<!-- A space as a folder row in the sidebar: open/close arrow, name (renamable in place), thread count, and
-     its actions. A drop target for threads dragged onto it. The threads inside are the parent's. -->
-<script setup>
-defineProps({
-  space: { type: Object, required: true },
-  count: { type: Number, default: 0 },
-  open: { type: Boolean, default: false },
-  drop: { type: Boolean, default: false }, // a thread is being dragged over it
-  renaming: { type: Boolean, default: false },
-})
-defineEmits([
-  'toggle',
-  'open',
-  'start-rename',
-  'commit-rename',
-  'cancel-rename',
-  'settings',
-  'delete',
-  'dragover',
-  'dragleave',
-  'drop',
-])
-const renameText = defineModel('renameText', { type: String, default: '' })
+<script setup lang="ts">
+import type { Space } from '../../composables/studioTypes'
+import { typedValue, vFocusSelect } from '../../utils/focusSelect'
 
-const vFocusSelect = { mounted: el => (el.focus(), el.select()) }
+withDefaults(
+  defineProps<{
+    space: Space
+    count?: number | undefined
+    open?: boolean | undefined
+    /** A thread is being dragged over it. */
+    drop?: boolean | undefined
+    renaming?: boolean | undefined
+  }>(),
+  { count: 0, open: false, drop: false, renaming: false },
+)
+defineEmits<{
+  toggle: []
+  open: []
+  'start-rename': []
+  'commit-rename': []
+  'cancel-rename': []
+  settings: []
+  delete: []
+  dragover: []
+  dragleave: []
+  drop: []
+}>()
+const renameText = defineModel<string>('renameText', { default: '' })
 </script>
 
 <template>
@@ -41,7 +44,7 @@ const vFocusSelect = { mounted: el => (el.focus(), el.select()) }
       v-focus-select
       class="nrename"
       :value="renameText"
-      @input="renameText = $event.target.value"
+      @input="renameText = typedValue($event)"
       @keydown.enter.prevent="$emit('commit-rename')"
       @keydown.esc="$emit('cancel-rename')"
       @blur="$emit('cancel-rename')"

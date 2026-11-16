@@ -1,54 +1,58 @@
-<!-- Instructions library (snippets + groups), shown in the Studio center pane
-     (replaces the old /instructions page). Reuses InstructionEditor. -->
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted, inject } from 'vue'
+import { showToastKey, noToast } from '../../injection'
 import InstructionEditor from '../chat/InstructionEditor.vue'
+import type { Instruction, InstructionGroup } from '../../composables/chatSettingsApi'
 import { fetchInstructions } from '../../composables/useChat'
 import { useChatDefaults } from '../../composables/useChatDefaults'
+import type { DefaultKind } from '../../composables/useChatDefaults'
 import { instructionColor } from '../../utils/format'
 import { ALL_CHATS, defaultIcon } from '../../utils/defaults'
+import { messageOf } from '../../utils/errors'
 
-const emit = defineEmits(['close'])
-const showToast = inject('showToast', () => {})
+const emit = defineEmits<{ close: [] }>()
+const showToast = inject(showToastKey, noToast)
 const { globalSettings, spaces, loadDefaults, setCurrentSpace } = useChatDefaults()
 
-const snippets = ref([])
-const groups = ref([])
+const snippets = ref<Instruction[]>([])
+const groups = ref<InstructionGroup[]>([])
 const loading = ref(true)
 const query = ref('')
-const editing = ref(null)
+const editing = ref<{ kind: 'snippet' | 'group'; id: number | null } | null>(null)
 
-const matches = item => item.name.toLowerCase().includes(query.value.trim().toLowerCase())
+const matches = (item: { name: string }): boolean => item.name.toLowerCase().includes(query.value.trim().toLowerCase())
 const shownGroups = computed(() => groups.value.filter(matches))
 const shownSnippets = computed(() => snippets.value.filter(matches))
 const snippetById = computed(() => new Map(snippets.value.map(s => [s.id, s])))
 
-function defaultFor(kind, id) {
-  const field = `default_${kind}_ids`
+const membersOf = (group: InstructionGroup): Instruction[] =>
+  group.snippet_ids.flatMap(id => snippetById.value.get(id) ?? [])
+
+function defaultFor(kind: Extract<DefaultKind, 'instruction' | 'instruction_group'>, id: number): string[] {
+  const field = `default_${kind}_ids` as const
   return [
     ...(globalSettings.value[field].includes(id) ? [ALL_CHATS] : []),
     ...spaces.value.filter(s => s[field].includes(id)).map(s => s.name),
   ]
 }
-async function load() {
+async function load(): Promise<void> {
   try {
     const data = await fetchInstructions()
     snippets.value = data.instructions
-    groups.value = data.groups || []
+    groups.value = data.groups
   } catch (e) {
-    showToast(`Couldn't load instructions: ${e.message}`, 'error')
+    showToast(`Couldn't load instructions: ${messageOf(e)}`, 'error')
   } finally {
     loading.value = false
   }
 }
-function onChanged() {
-  load()
-  loadDefaults()
+function onChanged(): void {
+  void load()
+  void loadDefaults()
 }
 onMounted(() => {
   setCurrentSpace(null)
-  load()
-  loadDefaults()
+  onChanged()
 })
 </script>
 
@@ -98,14 +102,10 @@ onMounted(() => {
             >
               <h3>📦 {{ g.name }}</h3>
               <div class="members">
-                <span
-                  v-for="s in (g.snippet_ids || []).map(id => snippetById.get(id)).filter(Boolean)"
-                  :key="s.id"
-                  class="member"
-                >
+                <span v-for="s in membersOf(g)" :key="s.id" class="member">
                   <span class="dot" :style="{ background: instructionColor(s.name) }"></span>{{ s.name }}
                 </span>
-                <span v-if="!g.snippet_ids?.length" class="muted">No snippets</span>
+                <span v-if="!g.snippet_ids.length" class="muted">No snippets</span>
               </div>
               <div v-if="defaultFor('instruction_group', g.id).length" class="badges">
                 <span v-for="b in defaultFor('instruction_group', g.id)" :key="b" class="badge">

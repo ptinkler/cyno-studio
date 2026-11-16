@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import StudioSidebar from '../components/studio/StudioSidebar.vue'
 import StudioBalances from '../components/studio/StudioBalances.vue'
+import { uiMessage } from './models'
 
 const sidebar = (threads = [{ id: 't1', title: 'A thread', kind: 'chat' }]) =>
   mount(StudioSidebar, {
@@ -156,13 +157,13 @@ describe('action buttons use the icon sprite', () => {
     const w = mount(ChatMessage, {
       props: {
         convId: 'c1',
-        message: {
+        message: uiMessage({
           id: 5,
           role: 'assistant',
           content: '',
           status: 'done',
           media: [{ id: 'm1', kind: 'image', source: 'generated', status: 'done', file: 'a.png', prompt: 'a fox' }],
-        },
+        }),
       },
     })
     const labels = w.findAll('button, a.media-btn').map(b => b.text())
@@ -173,13 +174,13 @@ describe('action buttons use the icon sprite', () => {
     const w = mount(ChatMessage, {
       props: {
         convId: 'c1',
-        message: {
+        message: uiMessage({
           id: 6,
           role: 'assistant',
           content: '',
           status: 'done',
           media: [{ id: 'm2', kind: 'image', source: 'generated', status: 'done', file: 'b.png' }],
-        },
+        }),
       },
     })
     const used = w.findAll('.media-overlay use').map(u => u.attributes('href'))
@@ -191,13 +192,13 @@ describe('a failed card suggests one action, not three', () => {
   const failed = {
     props: {
       convId: 'c1',
-      message: {
+      message: uiMessage({
         id: 70,
         role: 'assistant',
         content: '',
         status: 'done',
         media: [{ id: 'm1', kind: 'image', source: 'generated', status: 'error', error: 'nope', prompt: 'a fox' }],
-      },
+      }),
     },
   }
 

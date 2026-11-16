@@ -1,20 +1,23 @@
-<!-- One model badge as a pill (or, folded, as a coloured dot). Every badge is the same
-     shape: its hue comes from --b alone (text colour, tinted fill, and the dot), so
-     they stay consistent whatever they say. `badge` is { t, title, cls, color? }. -->
-<script setup>
-defineProps({
-  badge: { type: Object, required: true },
-  dot: { type: Boolean, default: false },
-  picked: { type: Boolean, default: false }, // beside the picked model in the closed picker
-})
+<script setup lang="ts">
+import type { Badge } from '../../utils/modelBadges'
+
+withDefaults(
+  defineProps<{
+    badge: Badge
+    dot?: boolean | undefined
+    /** Beside the picked model in the closed picker. */
+    picked?: boolean | undefined
+  }>(),
+  { dot: false, picked: false },
+)
 </script>
 
 <template>
   <span
     :class="[dot ? 'dot' : 'item-badge', badge.cls, { picked }]"
-    :style="badge.color ? { '--b': badge.color } : null"
-    :title="dot ? null : badge.title"
-    :aria-hidden="dot ? 'true' : null"
+    :style="badge.color ? { '--b': badge.color } : undefined"
+    :title="dot ? undefined : badge.title"
+    :aria-hidden="dot ? 'true' : undefined"
     >{{ dot ? '' : badge.t }}</span
   >
 </template>

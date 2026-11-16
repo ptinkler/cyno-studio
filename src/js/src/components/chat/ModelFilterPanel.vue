@@ -1,26 +1,38 @@
-<!-- The model picker's filter menu: tick as many providers / capabilities as
-     you like (they narrow the list live). Sits inside the picker's own pop-up. -->
-<script setup>
-defineProps({
-  providers: { type: Array, default: () => [] }, // [{ id, label, n, title, color }]
-  tags: { type: Array, default: () => [] }, // [{ slug, label, n, color }]
-  selProviders: { type: Array, default: () => [] },
-  selTags: { type: Array, default: () => [] },
-  uncensoredCount: { type: Number, default: 0 },
-  hiddenCount: { type: Number, default: 0 },
-  anyFilter: { type: Boolean, default: false },
-})
-defineEmits(['toggle-provider', 'toggle-tag', 'clear'])
-const uncensoredOnly = defineModel('uncensoredOnly', { type: Boolean, default: false })
-const showHidden = defineModel('showHidden', { type: Boolean, default: false })
+<script setup lang="ts">
+import type { ProviderFacet, TagFacet } from '../../composables/useModelList'
+import type { Provider } from '../../composables/modelTags'
+
+const props = withDefaults(
+  defineProps<{
+    providers?: readonly ProviderFacet[] | undefined
+    tags?: readonly TagFacet[] | undefined
+    selProviders?: readonly Provider[] | undefined
+    selTags?: readonly string[] | undefined
+    uncensoredCount?: number | undefined
+    hiddenCount?: number | undefined
+    anyFilter?: boolean | undefined
+  }>(),
+  {
+    providers: () => [],
+    tags: () => [],
+    selProviders: () => [],
+    selTags: () => [],
+    uncensoredCount: 0,
+    hiddenCount: 0,
+    anyFilter: false,
+  },
+)
+defineEmits<{ 'toggle-provider': [id: Provider]; 'toggle-tag': [slug: string]; clear: [] }>()
+const uncensoredOnly = defineModel<boolean>('uncensoredOnly', { default: false })
+const showHidden = defineModel<boolean>('showHidden', { default: false })
 </script>
 
 <template>
   <div class="fpanel" role="group" aria-label="Filters" @mousedown.stop>
-    <template v-if="providers.length">
+    <template v-if="props.providers.length">
       <div class="fhead">Provider</div>
-      <label v-for="p in providers" :key="p.id" class="frow provider" :title="p.title">
-        <input type="checkbox" :checked="selProviders.includes(p.id)" @change="$emit('toggle-provider', p.id)" />
+      <label v-for="p in props.providers" :key="p.id" class="frow provider" :title="p.title">
+        <input type="checkbox" :checked="props.selProviders.includes(p.id)" @change="$emit('toggle-provider', p.id)" />
         <span class="flabel"
           ><span class="fpill" :style="{ '--b': p.color }">{{ p.label }}</span></span
         >
@@ -28,11 +40,11 @@ const showHidden = defineModel('showHidden', { type: Boolean, default: false })
       </label>
     </template>
 
-    <template v-if="tags.length">
-      <div v-if="providers.length" class="fsep"></div>
+    <template v-if="props.tags.length">
+      <div v-if="props.providers.length" class="fsep"></div>
       <div class="fhead">Capability</div>
-      <label v-for="t in tags" :key="t.slug" class="frow tag">
-        <input type="checkbox" :checked="selTags.includes(t.slug)" @change="$emit('toggle-tag', t.slug)" />
+      <label v-for="t in props.tags" :key="t.slug" class="frow tag">
+        <input type="checkbox" :checked="props.selTags.includes(t.slug)" @change="$emit('toggle-tag', t.slug)" />
         <span class="flabel"
           ><span class="fpill" :style="{ '--b': t.color }">{{ t.label }}</span></span
         >

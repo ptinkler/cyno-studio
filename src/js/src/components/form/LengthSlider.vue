@@ -1,12 +1,9 @@
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 
-const props = defineProps({
-  modelValue: { type: Number, default: 10 },
-  lengths: { type: Array, required: true },
-})
+const props = withDefaults(defineProps<{ modelValue?: number; lengths: readonly number[] }>(), { modelValue: 10 })
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits<{ 'update:modelValue': [seconds: number] }>()
 
 // Unique id so multiple sliders on one page don't share tick marks.
 const ticksId = `length-ticks-${Math.random().toString(36).slice(2)}`
@@ -21,8 +18,10 @@ const currentIndex = computed(() => {
   return i === -1 ? 0 : i
 })
 
-function onSlide(event) {
-  emit('update:modelValue', props.lengths[Number(event.target.value)])
+function onSlide(event: Event): void {
+  if (!(event.target instanceof HTMLInputElement)) return
+  const seconds = props.lengths[Number(event.target.value)]
+  if (seconds !== undefined) emit('update:modelValue', seconds)
 }
 </script>
 

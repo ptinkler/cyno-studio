@@ -1,82 +1,81 @@
-<!-- Create / edit a preset (same modal pattern as characters): a name plus the
-     mode, models and media options it holds — all editable. A new one starts
-     from the current setup. -->
-<script setup>
-import { computed, inject, nextTick, reactive, ref, watch } from 'vue'
+<script setup lang="ts">
+import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { composerSettingsKey, chatModelsKey, injectRequired } from '../../injection'
+import type { Snapshot, StoredPreset } from '../../composables/composerPresets'
 import BaseDialog from '../BaseDialog.vue'
 import ModelPicker from '../chat/ModelPicker.vue'
 import { confirmDialog } from '../../composables/useDialog'
 import { MODES } from '../../composables/useComposerSettings'
 
-const props = defineProps({
-  open: { type: Boolean, default: false },
-  preset: { type: Object, default: null }, // null = a new one
-})
-const emit = defineEmits(['close'])
-const { snapshot, savePreset, updatePreset, deletePreset, loadPreset } = inject('composerSettings')
-const models = inject('chatModels')
+const props = withDefaults(
+  defineProps<{
+    open?: boolean | undefined
+    /** null = a new one. */
+    preset?: StoredPreset | null | undefined
+  }>(),
+  { open: false, preset: null },
+)
+const emit = defineEmits<{ close: [] }>()
+const { snapshot, savePreset, updatePreset, deletePreset, loadPreset } = injectRequired(composerSettingsKey)
+const models = injectRequired(chatModelsKey)
 
-const clone = o => JSON.parse(JSON.stringify(o))
+// Reactive state can't go through structuredClone, so a plain JSON round trip copies the settings
+const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T
+const settingsOf = (src: Snapshot): Snapshot =>
+  clone({
+    mode: src.mode,
+    models: src.models,
+    imageOpts: src.imageOpts,
+    videoOpts: src.videoOpts,
+    audioOpts: src.audioOpts,
+  })
+
 const name = ref('')
-const d = reactive(clone(snapshot()))
-const nameInput = ref(null)
+const d = reactive<Snapshot>(settingsOf(snapshot()))
+const nameInput = ref<HTMLInputElement | null>(null)
 const isNew = computed(() => !props.preset)
 
-function fill(src) {
-  Object.assign(
-    d,
-    clone({
-      mode: src.mode,
-      models: src.models,
-      imageOpts: src.imageOpts,
-      videoOpts: src.videoOpts,
-      audioOpts: src.audioOpts,
-    }),
-  )
+function fill(src: Snapshot): void {
+  Object.assign(d, settingsOf(src))
 }
 watch(
   () => props.open,
   async open => {
     if (!open) return
-    name.value = props.preset?.name || ''
-    fill(props.preset || snapshot())
+    name.value = props.preset?.name ?? ''
+    fill(props.preset ?? snapshot())
     await nextTick()
     nameInput.value?.focus()
   },
 )
 
 // What the picked image / video model offers
-const info = kind => models[kind]?.find(m => m.id === d.models[kind]) || null
-const imageInfo = computed(() => info('image'))
-const videoInfo = computed(() => info('video'))
-const imageRatios = computed(() => imageInfo.value?.aspect_ratios || [])
-const imageResolutions = computed(() => imageInfo.value?.resolutions || [])
-const videoRatios = computed(() => videoInfo.value?.aspect_ratios || [])
-const videoResolutions = computed(() => videoInfo.value?.resolutions || [])
-const videoLengths = computed(() => videoInfo.value?.durations || [])
+const imageInfo = computed(() => models.image.find(m => m.id === d.models.image))
+const videoInfo = computed(() => models.video.find(m => m.id === d.models.video))
+const imageRatios = computed(() => imageInfo.value?.aspect_ratios ?? [])
+const imageResolutions = computed(() => imageInfo.value?.resolutions ?? [])
+const videoRatios = computed(() => videoInfo.value?.aspect_ratios ?? [])
+const videoResolutions = computed(() => videoInfo.value?.resolutions ?? [])
+const videoLengths = computed(() => videoInfo.value?.durations ?? [])
 
-function save() {
-  const n = name.value.trim()
-  if (!n) return
-  const data = clone({
-    mode: d.mode,
-    models: d.models,
-    imageOpts: d.imageOpts,
-    videoOpts: d.videoOpts,
-    audioOpts: d.audioOpts,
-  })
-  if (isNew.value) savePreset(n, data)
-  else updatePreset(props.preset.id, { name: n, ...data })
+function save(): void {
+  const trimmed = name.value.trim()
+  if (!trimmed) return
+  const data = settingsOf(d)
+  if (props.preset) updatePreset(props.preset.id, { name: trimmed, ...data })
+  else savePreset(trimmed, data)
   emit('close')
 }
-async function remove() {
-  const ok = await confirmDialog({ title: `Delete “${props.preset.name}”?`, confirmLabel: 'Delete', danger: true })
+async function remove(): Promise<void> {
+  const { preset } = props
+  if (!preset) return
+  const ok = await confirmDialog({ title: `Delete “${preset.name}”?`, confirmLabel: 'Delete', danger: true })
   if (!ok) return
-  deletePreset(props.preset.id)
+  deletePreset(preset.id)
   emit('close')
 }
-function load() {
-  loadPreset(props.preset)
+async function load(): Promise<void> {
+  if (props.preset) await loadPreset(props.preset)
   emit('close')
 }
 </script>
@@ -84,7 +83,7 @@ function load() {
 <template>
   <BaseDialog
     :open="open"
-    :title="isNew ? 'New preset' : preset.name"
+    :title="props.preset ? props.preset.name : 'New preset'"
     label="Preset"
     width="520px"
     @close="emit('close')"

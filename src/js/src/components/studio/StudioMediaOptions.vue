@@ -1,6 +1,6 @@
-<!-- Inspector section: image/video media options, shown by mode + model. -->
-<script setup>
-import { computed, inject } from 'vue'
+<script setup lang="ts">
+import { computed } from 'vue'
+import { composerSettingsKey, injectRequired } from '../../injection'
 
 const {
   imageOpts,
@@ -17,25 +17,26 @@ const {
   videoShowsRatio,
   videoShowsDuration,
   clipDuration,
-} = inject('composerSettings')
+} = injectRequired(composerSettingsKey)
 
 // Duration: Auto ('' — the clip's length for reference-to-video, else the
 // model's default) or a hand-picked length on the slider. The slider row is
 // always there (dimmed on Auto) so the panel never changes height.
-const isAuto = computed(() => videoOpts.duration === '' || videoOpts.duration == null)
+const isAuto = computed(() => videoOpts.duration === '')
 const lastIndex = computed(() => durationOptions.value.length - 1)
 const durIndex = computed(() => Math.max(durationOptions.value.indexOf(Number(videoOpts.duration)), 0))
 const fillPct = computed(() => (lastIndex.value > 0 ? (durIndex.value / lastIndex.value) * 100 : 0))
 const durText = computed(() => {
-  if (!isAuto.value) return `${videoOpts.duration}s`
-  return clipDuration.value ? `${clipDuration.value}s from clip` : 'default'
+  if (!isAuto.value) return `${String(videoOpts.duration)}s`
+  return clipDuration.value ? `${String(clipDuration.value)}s from clip` : 'default'
 })
-function setAuto(auto) {
+function setAuto(auto: boolean): void {
   if (auto === isAuto.value) return
-  videoOpts.duration = auto ? '' : (clipDuration.value ?? durationOptions.value[0])
+  videoOpts.duration = auto ? '' : (clipDuration.value ?? durationOptions.value[0] ?? '')
 }
-function onDuration(e) {
-  videoOpts.duration = durationOptions.value[Number(e.target.value)]
+function onDuration(event: Event): void {
+  if (!(event.target instanceof HTMLInputElement)) return
+  videoOpts.duration = durationOptions.value[Number(event.target.value)] ?? ''
 }
 </script>
 

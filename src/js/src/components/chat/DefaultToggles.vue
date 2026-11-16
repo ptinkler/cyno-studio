@@ -1,6 +1,7 @@
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useChatDefaults } from '../../composables/useChatDefaults'
+import type { DefaultKind } from '../../composables/useChatDefaults'
 import { useDropdown } from '../../composables/useDropdown'
 import { ALL_CHATS, defaultIcon } from '../../utils/defaults'
 
@@ -9,28 +10,42 @@ import { ALL_CHATS, defaultIcon } from '../../utils/defaults'
 // dropdown of them all (click to tick or untick). Part of the editor's form: picks are kept here (`dirty` reports
 // them) until the editor saves and calls `commit(id)` with the saved item's
 // id, so they work for new items too.
-const props = defineProps({
-  kind: { type: String, required: true }, // 'character' | 'instruction' | 'instruction_group'
-  itemId: { type: Number, default: null }, // null = not saved yet
-})
-const emit = defineEmits(['update:dirty'])
+const props = defineProps<{
+  kind: DefaultKind
+  /** null = not saved yet. */
+  itemId: number | null
+}>()
+const emit = defineEmits<{ 'update:dirty': [dirty: boolean] }>()
 
 const GLOBAL = 'global'
+type PickKey = typeof GLOBAL | number
 
 const { spaces, membership, setMembership, ensureLoaded } = useChatDefaults()
-const picked = ref(new Set()) // GLOBAL and/or space ids
+const picked = ref(new Set<PickKey>()) // GLOBAL and/or space ids
 const query = ref('')
-const searchInput = ref(null)
-const { open, root, toggle: openMenu, close } = useDropdown({ focus: searchInput, onOpen: () => (query.value = '') })
+const searchInput = ref<HTMLInputElement | null>(null)
+const {
+  open,
+  root,
+  toggle: openMenu,
+  close,
+} = useDropdown({
+  focus: searchInput,
+  onOpen: () => {
+    query.value = ''
+  },
+})
 
 const saved = computed(() => {
-  if (props.itemId == null) return new Set()
+  if (props.itemId === null) return new Set<PickKey>()
   const m = membership(props.kind, props.itemId)
-  return new Set([...(m.global ? [GLOBAL] : []), ...m.spaceIds])
+  const keys: PickKey[] = [...m.spaceIds]
+  if (m.global) keys.unshift(GLOBAL)
+  return new Set(keys)
 })
 const dirty = computed(() => picked.value.size !== saved.value.size || [...picked.value].some(k => !saved.value.has(k)))
 
-const options = computed(() => [
+const options = computed<{ key: PickKey; icon: string; name: string }[]>(() => [
   { key: GLOBAL, icon: defaultIcon(ALL_CHATS), name: ALL_CHATS },
   ...spaces.value.map(s => ({ key: s.id, icon: defaultIcon(s.name), name: s.name })),
 ])
@@ -40,14 +55,19 @@ const shown = computed(() => {
 })
 const pills = computed(() => options.value.filter(o => picked.value.has(o.key)))
 
-function reset() {
+function reset(): void {
   picked.value = new Set(saved.value)
 }
 
-function toggle(key) {
+function toggle(key: PickKey): void {
   const next = new Set(picked.value)
   if (!next.delete(key)) next.add(key)
   picked.value = next
+}
+
+function pickFirst(): void {
+  const [first] = shown.value
+  if (first) toggle(first.key)
 }
 
 onMounted(async () => {
@@ -55,14 +75,20 @@ onMounted(async () => {
   reset()
 })
 watch(() => [props.kind, props.itemId], reset)
-watch(dirty, d => emit('update:dirty', d), { immediate: true })
+watch(
+  dirty,
+  d => {
+    emit('update:dirty', d)
+  },
+  { immediate: true },
+)
 
 // Write the picks for the saved item (the id it was saved under)
-async function commit(id) {
+async function commit(id: number): Promise<void> {
   if (!dirty.value && id === props.itemId) return
   await setMembership(props.kind, id, {
     global: picked.value.has(GLOBAL),
-    spaceIds: [...picked.value].filter(k => k !== GLOBAL),
+    spaceIds: [...picked.value].filter((k): k is number => k !== GLOBAL),
   })
 }
 
@@ -95,7 +121,7 @@ defineExpose({ commit, dirty })
           placeholder="Search spaces"
           aria-label="Search spaces"
           @keydown.esc.stop="close"
-          @keydown.enter.prevent="shown[0] && toggle(shown[0].key)"
+          @keydown.enter.prevent="pickFirst"
         />
         <button
           v-for="o in shown"

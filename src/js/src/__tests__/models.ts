@@ -3,6 +3,7 @@
  * about spelled out. Checked against the generated types, so a fixture can't drift from the real shape.
  */
 import type { Conversation } from '../composables/chatConversationsApi'
+import type { UiMessage } from '../composables/studioTypes'
 import type { AudioModel, ImageModel, TextModel, VideoModel } from '../composables/chatModelsApi'
 
 type Given<M> = Partial<M> & { id: string; name: string }
@@ -70,5 +71,26 @@ export const conversation = (given: Partial<Conversation> = {}): Conversation =>
   import_source: null,
   created_at: null,
   updated_at: null,
+  ...given,
+})
+
+/** A message in the shown chat, complete as the server sends it; only what a test cares about needs spelling out. */
+export const uiMessage = (given: Partial<UiMessage> = {}): UiMessage => ({
+  id: 1,
+  conversation_id: 'c1',
+  parent_id: null,
+  role: 'assistant',
+  content: '',
+  media: [],
+  model: null,
+  mode: null,
+  lane: null,
+  status: 'done',
+  error: null,
+  cost: null,
+  text_versions: 0,
+  text_shown: 0,
+  created_at: null,
+  siblings: [],
   ...given,
 })

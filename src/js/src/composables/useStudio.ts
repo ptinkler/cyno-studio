@@ -1,10 +1,9 @@
 import { ref, reactive, computed, watch, onScopeDispose } from 'vue'
 import type { ShownMessage } from './chatConversationsApi'
 import type { LibraryCard } from './chatFilesApi'
-import type { Mode } from './composerPrefs'
 import type { Catalogues, ComposerSettings } from './useComposerSettings'
 import type { Conversation, ConversationSummary } from './chatConversationsApi'
-import type { Space, Spend, ThreadKind, UiMessage } from './studioTypes'
+import type { ImagePick, InstructionEditEvent, Space, Spend, ThreadKind, UiMessage } from './studioTypes'
 import { fetchChatStatus, fetchChatModels } from './useChat'
 import { useChatBalances } from './useChatBalances'
 import { useChatCharacters } from './useChatCharacters'
@@ -21,13 +20,6 @@ import { useStudioTurns } from './useStudioTurns'
 import type { ShowToast } from './useToast'
 
 const BALANCE_REFRESH_MS = 2 * 60 * 1000
-
-/** "Edit this image" / "animate this image": which file to attach, and the mode to switch to. */
-interface ImagePick {
-  file?: string
-  mode?: Mode
-  conversation_id?: string
-}
 
 // All of Studio's state + behaviour, kept out of the view so the components
 // stay presentational. `settings` is a useComposerSettings() instance (shared
@@ -146,7 +138,7 @@ export function useStudio({
     onCharacterSaved,
     onCharacterDeleted,
   } = chars
-  const editingInstruction = ref(null)
+  const editingInstruction = ref<InstructionEditEvent | null>(null)
   // Tell the defaults singleton which space is in context (for editors' add-to toggles)
   watch(
     () => activeThread.value?.space_id ?? null,

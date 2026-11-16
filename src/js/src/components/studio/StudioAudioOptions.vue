@@ -1,13 +1,16 @@
-<!-- Inspector section: speech / music options, shown in Audio mode by what the model takes. -->
-<script setup>
-import { inject, ref, computed, watch } from 'vue'
+<script setup lang="ts">
+import { ref, computed, watch } from 'vue'
+import { composerSettingsKey, injectRequired } from '../../injection'
 import { fetchAudioVoices } from '../../composables/useChat'
 
-const { audioOpts, audioInfo, showAudioOpts } = inject('composerSettings')
-const has = opt => !!audioInfo.value?.options?.includes(opt)
+type Voice = Awaited<ReturnType<typeof fetchAudioVoices>>['voices'][number]
+
+const VOICE_PAGE = 100
+const { audioOpts, audioInfo, showAudioOpts } = injectRequired(composerSettingsKey)
+const has = (opt: string): boolean => !!audioInfo.value?.options.includes(opt)
 
 // Pollo's voice list, loaded once the first time a voice-picking model is shown
-const voices = ref([])
+const voices = ref<Voice[]>([])
 const voicesError = ref('')
 const wantVoices = computed(() => showAudioOpts.value && has('voice'))
 watch(
@@ -15,15 +18,15 @@ watch(
   async want => {
     if (!want || voices.value.length) return
     try {
-      voices.value = (await fetchAudioVoices(100)).voices
+      voices.value = (await fetchAudioVoices(VOICE_PAGE)).voices
       voicesError.value = ''
     } catch (e) {
-      voicesError.value = e.message || 'Could not load voices'
+      voicesError.value = (e instanceof Error && e.message) || 'Could not load voices'
     }
   },
   { immediate: true },
 )
-const voiceLabel = v => [v.voiceName, v.language, v.gender].filter(Boolean).join(' · ')
+const voiceLabel = (voice: Voice): string => [voice.voiceName, voice.language, voice.gender].filter(Boolean).join(' · ')
 </script>
 
 <template>
@@ -35,7 +38,9 @@ const voiceLabel = v => [v.voiceName, v.language, v.gender].filter(Boolean).join
         <span class="fcap">Voice</span>
         <select v-model="audioOpts.voice">
           <option value="">Pick one…</option>
-          <option v-for="v in voices" :key="v.voiceId" :value="v.voiceId">{{ voiceLabel(v) }}</option>
+          <option v-for="v in voices" :key="v.voiceId ?? v.voiceName ?? ''" :value="v.voiceId ?? ''">
+            {{ voiceLabel(v) }}
+          </option>
         </select>
       </label>
     </div>

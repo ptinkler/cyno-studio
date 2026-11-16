@@ -1,22 +1,17 @@
-<script setup>
-defineProps({
-  modelValue: { type: Boolean, default: false },
-  label: { type: String, required: true },
-  id: { type: String, required: true },
-})
+<script setup lang="ts">
+withDefaults(defineProps<{ modelValue?: boolean; label: string; id: string }>(), { modelValue: false })
 
-defineEmits(['update:modelValue'])
+const emit = defineEmits<{ 'update:modelValue': [checked: boolean] }>()
+
+function onChange(event: Event): void {
+  if (event.target instanceof HTMLInputElement) emit('update:modelValue', event.target.checked)
+}
 </script>
 
 <template>
   <div class="toggle-row">
     <label class="toggle">
-      <input
-        :id="id"
-        type="checkbox"
-        :checked="modelValue"
-        @change="$emit('update:modelValue', $event.target.checked)"
-      />
+      <input :id="id" type="checkbox" :checked="modelValue" @change="onChange" />
       <span class="track">
         <span class="thumb"></span>
       </span>

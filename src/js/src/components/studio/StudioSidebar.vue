@@ -1,110 +1,113 @@
-<!-- Studio left pane: thread navigator (search, favourites, pinned, spaces as
-     folders, recents) with per-thread hover actions. Presentational — all
-     state/actions come from props/emits. -->
-<script setup>
+<script setup lang="ts">
 import SidebarSpaceFolder from './SidebarSpaceFolder.vue'
 import SidebarThreadRow from './SidebarThreadRow.vue'
 import { ref, computed } from 'vue'
+import type { ConversationSummary } from '../../composables/chatConversationsApi'
+import type { Space, ThreadKind } from '../../composables/studioTypes'
+import type { NavFilter } from '../../composables/useStudioRoutes'
+import { typedValue } from '../../utils/focusSelect'
 
-const props = defineProps({
-  threads: { type: Array, default: () => [] },
-  spaces: { type: Array, default: () => [] },
-  active: { type: String, default: null },
-  collapsed: { type: Boolean, default: false },
-  search: { type: String, default: '' },
-  filter: { type: String, default: 'all' }, // 'all' | 'chat' | 'gallery' | 'favourites'
-})
-const emit = defineEmits([
-  'update:collapsed',
-  'update:search',
-  'update:filter',
-  'open',
-  'new',
-  'pin',
-  'rename',
-  'delete',
-  'settings',
-  'open-space',
-  'add-space',
-  'rename-space',
-  'delete-space',
-  'space-settings',
-  'move',
-  'media',
-  'tools',
-])
+const props = withDefaults(
+  defineProps<{
+    threads?: readonly ConversationSummary[] | undefined
+    spaces?: readonly Space[] | undefined
+    active?: string | null | undefined
+    collapsed?: boolean | undefined
+    search?: string | undefined
+    filter?: NavFilter | 'favourites' | undefined
+  }>(),
+  { threads: () => [], spaces: () => [], active: null, collapsed: false, search: '', filter: 'all' },
+)
+const emit = defineEmits<{
+  'update:collapsed': [collapsed: boolean]
+  'update:search': [search: string]
+  'update:filter': [filter: NavFilter | 'favourites']
+  open: [id: string]
+  new: [kind: ThreadKind]
+  pin: [thread: ConversationSummary]
+  rename: [thread: ConversationSummary, name: string]
+  delete: [thread: ConversationSummary]
+  settings: []
+  'open-space': [space: Space]
+  'add-space': []
+  'rename-space': [space: Space, name: string]
+  'delete-space': [space: Space]
+  'space-settings': [space: Space]
+  move: [thread: ConversationSummary, spaceId: number | null]
+  media: []
+  tools: []
+}>()
 
-const openSpaces = ref(new Set())
+const openSpaces = ref<ReadonlySet<number>>(new Set())
 const pinnedSectionOpen = ref(true)
 const spacesSectionOpen = ref(true)
 const recentSectionOpen = ref(true)
-function toggleSpace(id) {
-  const s = openSpaces.value
-  s.has(id) ? s.delete(id) : s.add(id)
-  openSpaces.value = new Set(s)
+function toggleSpace(id: number): void {
+  const next = new Set(openSpaces.value)
+  if (!next.delete(id)) next.add(id)
+  openSpaces.value = next
 }
 
 // Inline rename (no modal / prompt)
-const renamingId = ref(null)
+const renamingId = ref<string | null>(null)
 const renameText = ref('')
-function startRename(t) {
-  renamingId.value = t.id
-  renameText.value = t.title || ''
+function startRename(thread: ConversationSummary): void {
+  renamingId.value = thread.id
+  renameText.value = thread.title
 }
-function commitRename(t) {
-  if (renamingId.value !== t.id) return // already committed (e.g. Enter then blur)
+function commitRename(thread: ConversationSummary): void {
+  if (renamingId.value !== thread.id) return // already committed (e.g. Enter then blur)
   const name = renameText.value.trim()
   renamingId.value = null
-  if (name && name !== (t.title || '')) emit('rename', t, name)
+  if (name && name !== thread.title) emit('rename', thread, name)
 }
-function cancelRename() {
+function cancelRename(): void {
   renamingId.value = null
 }
-const spaceKey = s => `space:${s.id}`
-function startRenameSpace(s) {
-  renamingId.value = spaceKey(s)
-  renameText.value = s.name || ''
+const spaceKey = (space: Space): string => `space:${String(space.id)}`
+function startRenameSpace(space: Space): void {
+  renamingId.value = spaceKey(space)
+  renameText.value = space.name
 }
-function commitRenameSpace(s) {
-  if (renamingId.value !== spaceKey(s)) return
+function commitRenameSpace(space: Space): void {
+  if (renamingId.value !== spaceKey(space)) return
   const name = renameText.value.trim()
   renamingId.value = null
-  if (name && name !== (s.name || '')) emit('rename-space', s, name)
+  if (name && name !== space.name) emit('rename-space', space, name)
 }
 
 // Drag a thread onto a space folder (or Recent) to move it
-const dragId = ref(null)
-const dropOn = ref(null)
-function onDrop(spaceId) {
-  const t = props.threads.find(x => x.id === dragId.value)
-  if (t && t.space_id !== spaceId) emit('move', t, spaceId)
+const dragId = ref<string | null>(null)
+const dropOn = ref<number | 'unfiled' | null>(null)
+function onDrop(spaceId: number | null): void {
+  const thread = props.threads.find(t => t.id === dragId.value)
+  if (thread && thread.space_id !== spaceId) emit('move', thread, spaceId)
   dragId.value = null
   dropOn.value = null
 }
 
 // Chat/Gallery filter the list by a thread's kind; All and Favourites show
 // every thread (Favourites swaps the centre pane for the gallery, not the nav).
-function matchesKind(t) {
-  const k = t.kind || 'chat'
-  if (props.filter === 'chat') return k !== 'gallery'
-  if (props.filter === 'gallery') return k === 'gallery'
+function matchesKind(thread: ConversationSummary): boolean {
+  if (props.filter === 'chat') return thread.kind !== 'gallery'
+  if (props.filter === 'gallery') return thread.kind === 'gallery'
   return true
 }
 const filtered = computed(() => {
   const q = props.search.trim().toLowerCase()
-  return props.threads.filter(t => matchesKind(t) && (!q || (t.title || '').toLowerCase().includes(q)))
+  return props.threads.filter(t => matchesKind(t) && (!q || t.title.toLowerCase().includes(q)))
 })
 const pinned = computed(() => filtered.value.filter(t => t.pinned))
 const bySpace = computed(() => {
-  const map = {}
-  for (const s of props.spaces) map[s.id] = { space: s, items: [] }
-  const unfiled = []
-  for (const t of filtered.value) {
-    if (t.pinned) continue
-    if (t.space_id != null && map[t.space_id]) map[t.space_id].items.push(t)
-    else unfiled.push(t)
+  const groups = new Map(props.spaces.map(space => [space.id, { space, items: [] as ConversationSummary[] }]))
+  const unfiled: ConversationSummary[] = []
+  for (const thread of filtered.value) {
+    if (thread.pinned) continue
+    const group = thread.space_id === null ? undefined : groups.get(thread.space_id)
+    if (group) group.items.push(thread)
+    else unfiled.push(thread)
   }
-  return { groups: Object.values(map), unfiled }
+  return { groups: [...groups.values()], unfiled }
 })
 </script>
 
@@ -147,7 +150,7 @@ const bySpace = computed(() => {
             :value="search"
             type="search"
             placeholder="Search threads…"
-            @input="emit('update:search', $event.target.value)"
+            @input="emit('update:search', typedValue($event))"
           />
         </div>
         <div class="nfilter">

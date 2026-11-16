@@ -1,39 +1,32 @@
-<!-- Presentational card grid shared by the thread Generations gallery and the
-     cross-thread Favourites gallery. Items are pre-built (each: id, kind, url,
-     preview, file, favourite, status, prompt…). Renders in-progress (pending)
-     and failed tiles too, so the thread gallery doubles as a live queue. Card
-     size S/M/L is remembered; kind + favourites filters are applied locally. -->
-<script setup>
+<script setup lang="ts">
 import { computed, ref } from 'vue'
+import type { GenerationItem } from '../../composables/studioTypes'
 import { reloadImageLater } from '../../utils/imageRetry'
+import { readText, writeText } from '../../utils/storage'
 
-const props = defineProps({
-  items: { type: Array, default: () => [] },
-  empty: { type: String, default: 'Nothing here yet.' },
-  // The Favourites page is already favourites-only, so it hides the ★ filter.
-  favFilter: { type: Boolean, default: true },
-})
-const emit = defineEmits(['open', 'favourite'])
+const props = withDefaults(
+  defineProps<{
+    items?: readonly GenerationItem[] | undefined
+    empty?: string | undefined
+    /** The Favourites page is already favourites-only, so it hides the ★ filter. */
+    favFilter?: boolean | undefined
+  }>(),
+  { items: () => [], empty: 'Nothing here yet.', favFilter: true },
+)
+const emit = defineEmits<{ open: [item: GenerationItem]; favourite: [item: GenerationItem] }>()
 
+type Size = 's' | 'm' | 'l'
+const SIZES: readonly Size[] = ['s', 'm', 'l']
 const SIZE_KEY = 'studio.gallerySize'
-const MIN = { s: 100, m: 150, l: 230 }
-const readSize = () => {
-  try {
-    return localStorage.getItem(SIZE_KEY) || 'm'
-  } catch {
-    return 'm'
-  }
+const MIN_COLUMN_PX: Readonly<Record<Size, number>> = { s: 100, m: 150, l: 230 }
+const isSize = (value: string | null): value is Size => value === 's' || value === 'm' || value === 'l'
+const stored = readText(SIZE_KEY)
+const size = ref<Size>(isSize(stored) ? stored : 'm')
+function setSize(next: Size): void {
+  size.value = next
+  writeText(SIZE_KEY, next)
 }
-const size = ref(readSize())
-function setSize(s) {
-  size.value = s
-  try {
-    localStorage.setItem(SIZE_KEY, s)
-  } catch {
-    /* storage unavailable */
-  }
-}
-const minCol = computed(() => `${MIN[size.value] || MIN.m}px`)
+const minCol = computed(() => `${String(MIN_COLUMN_PX[size.value])}px`)
 
 const kind = ref('all') // all | image | video
 const favOnly = ref(false)
@@ -46,14 +39,16 @@ const shown = computed(() =>
 )
 // A preview that fails once falls back to the full file, then retries once
 // (a half-written file or a dropped connection), instead of staying blank
-function onImgError(e, item) {
-  const img = e.target
-  if (!img.dataset.fb && item.url && img.src !== new URL(item.url, location.href).href) {
-    img.dataset.fb = '1'
+const RETRY_MS = 1500
+function onImgError(event: Event, item: GenerationItem): void {
+  const img = event.target
+  if (!(img instanceof HTMLImageElement) || !item.url) return
+  if (!img.dataset['fb'] && img.src !== new URL(item.url, location.href).href) {
+    img.dataset['fb'] = '1'
     img.src = item.url
-  } else if (!img.dataset.retry) {
-    img.dataset.retry = '1'
-    reloadImageLater(img, item.url, 1500)
+  } else if (!img.dataset['retry']) {
+    img.dataset['retry'] = '1'
+    reloadImageLater(img, item.url, RETRY_MS)
   }
 }
 const inProgress = computed(() => props.items.filter(it => it.status === 'pending').length)
@@ -83,12 +78,12 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
         <slot name="filters"></slot>
       </div>
       <div class="seg" role="group" aria-label="Card size">
-        <button v-for="s in ['s', 'm', 'l']" :key="s" :class="{ on: size === s }" @click="setSize(s)">
+        <button v-for="s in SIZES" :key="s" :class="{ on: size === s }" @click="setSize(s)">
           {{ s.toUpperCase() }}
         </button>
       </div>
     </div>
-    <div v-if="!items.length" class="empty">{{ empty }}</div>
+    <div v-if="!props.items.length" class="empty">{{ empty }}</div>
     <div v-else-if="!shown.length" class="empty">Nothing matches these filters.</div>
     <div v-else class="grid" :style="{ '--min': minCol }">
       <div
@@ -96,7 +91,7 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
         :key="item.id + '-' + i"
         class="cell"
         :class="item.status"
-        :title="item.prompt || item.file"
+        :title="item.prompt || item.file || undefined"
       >
         <div v-if="item.status === 'pending'" class="thumb state pending">
           <div class="spinner"></div>

@@ -1,21 +1,47 @@
-<!-- Inspector section: instructions attached to the thread (own + inherited). -->
-<script setup>
+<script setup lang="ts">
+import type { Instruction, InstructionGroup } from '../../composables/chatSettingsApi'
+import type { InstructionEditEvent, InstructionTarget } from '../../composables/studioTypes'
+import type { InheritedDefault } from '../../composables/useChatDefaults'
 import InstructionPicker from '../chat/InstructionPicker.vue'
 
-defineProps({
-  instructions: { type: Array, default: () => [] },
-  groups: { type: Array, default: () => [] },
-  snippetIds: { type: Array, default: () => [] },
-  groupIds: { type: Array, default: () => [] },
-  summary: { type: String, default: '' },
-  inheritedSnippets: { type: Array, default: () => [] },
-  inheritedGroups: { type: Array, default: () => [] },
-  hiddenSnippets: { type: Array, default: () => [] },
-  hiddenGroups: { type: Array, default: () => [] },
-  pausedSnippets: { type: Array, default: () => [] },
-  pausedGroups: { type: Array, default: () => [] },
-})
-defineEmits(['update:snippetIds', 'update:groupIds', 'manage', 'edit', 'hide', 'unhide', 'pause', 'resume'])
+withDefaults(
+  defineProps<{
+    instructions?: readonly Instruction[] | undefined
+    groups?: readonly InstructionGroup[] | undefined
+    snippetIds?: readonly number[] | undefined
+    groupIds?: readonly number[] | undefined
+    summary?: string | undefined
+    inheritedSnippets?: readonly InheritedDefault[] | undefined
+    inheritedGroups?: readonly InheritedDefault[] | undefined
+    hiddenSnippets?: readonly InheritedDefault[] | undefined
+    hiddenGroups?: readonly InheritedDefault[] | undefined
+    pausedSnippets?: readonly number[] | undefined
+    pausedGroups?: readonly number[] | undefined
+  }>(),
+  {
+    instructions: () => [],
+    groups: () => [],
+    snippetIds: () => [],
+    groupIds: () => [],
+    summary: '',
+    inheritedSnippets: () => [],
+    inheritedGroups: () => [],
+    hiddenSnippets: () => [],
+    hiddenGroups: () => [],
+    pausedSnippets: () => [],
+    pausedGroups: () => [],
+  },
+)
+defineEmits<{
+  'update:snippetIds': [ids: number[]]
+  'update:groupIds': [ids: number[]]
+  manage: []
+  edit: [target: InstructionEditEvent]
+  hide: [target: InstructionTarget]
+  unhide: [target: InstructionTarget]
+  pause: [target: InstructionTarget]
+  resume: [target: InstructionTarget]
+}>()
 </script>
 
 <template>

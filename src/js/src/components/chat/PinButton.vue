@@ -1,8 +1,6 @@
-<!-- The pin on a picture: pins it as a reference sent with every new image in the chat. Top-left, shown on
-     hover (of the attachment or card holding it), always shown once pinned. -->
-<script setup>
-defineProps({ pinned: { type: Boolean, default: false } })
-defineEmits(['toggle'])
+<script setup lang="ts">
+withDefaults(defineProps<{ pinned?: boolean }>(), { pinned: false })
+defineEmits<{ toggle: [] }>()
 </script>
 
 <template>

@@ -1,82 +1,114 @@
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, computed, watch, inject, onBeforeUnmount } from 'vue'
-import MediaGrid from './MediaGrid.vue'
+import { showToastKey, noToast } from '../../injection'
 import MediaFilters from './MediaFilters.vue'
+import MediaGrid from './MediaGrid.vue'
+import type { LibraryEntry } from '../../composables/mediaApi'
 import { fetchMediaPage, uploadMedia } from '../../composables/useMedia'
+import type { MediaFilterState } from '../../composables/useMedia'
 import { takeFiles } from '../../utils/files'
+import { messageOf } from '../../utils/errors'
 
 // Pick media from the library, or upload new from this computer (they go into
 // the library and come back selected). Supports several kinds (image/video) at
 // once with per-kind caps, for reference-to-video. Emits 'pick' with the chosen
 // items; the caller imports them where they're used.
-const props = defineProps({
-  open: { type: Boolean, default: false },
-  title: { type: String, default: 'Choose images' },
-  multiple: { type: Boolean, default: true },
-  max: { type: Number, default: null }, // total that can be picked when no per-kind limits (null = no limit)
-  kinds: { type: Array, default: () => ['image'] }, // which media kinds to show / accept
-  limits: { type: Object, default: null }, // per-kind caps, e.g. { image: 10, video: 5 } (overrides `max`)
-  origin: { type: String, default: 'all' }, // where-from filter it opens on
-  source: { type: String, default: 'all' }, // source filter it opens on ('upload' = your uploads, not generated)
-})
-const emit = defineEmits(['pick', 'close'])
-const showToast = inject('showToast', () => {})
+const props = withDefaults(
+  defineProps<{
+    open?: boolean | undefined
+    title?: string | undefined
+    multiple?: boolean | undefined
+    /** Total that can be picked when no per-kind limits (null = no limit). */
+    max?: number | null | undefined
+    /** Which media kinds to show / accept. */
+    kinds?: readonly string[] | undefined
+    /** Per-kind caps, e.g. { image: 10, video: 5 } (overrides `max`). */
+    limits?: Readonly<Record<string, number>> | null | undefined
+    /** The where-from filter it opens on. */
+    origin?: string | undefined
+    /** The source filter it opens on ('upload' = your uploads, not generated). */
+    source?: string | undefined
+  }>(),
+  {
+    open: false,
+    title: 'Choose images',
+    multiple: true,
+    max: null,
+    kinds: () => ['image'],
+    limits: null,
+    origin: 'all',
+    source: 'all',
+  },
+)
+const emit = defineEmits<{ pick: [items: LibraryEntry[]]; close: [] }>()
+const showToast = inject(showToastKey, noToast)
 
 // A page at a time, filtered server-side: the whole library in one request is
 // a long wait before anything shows (and most of it is never scrolled to).
 const PAGE = 30
-const items = ref([])
+const SEARCH_DELAY_MS = 250
+const items = ref<LibraryEntry[]>([])
 const total = ref(0)
 const loading = ref(false)
 const uploading = ref(0)
-const filters = reactive({ kind: 'all', source: props.source, origin: props.origin, q: '' })
+const filters = reactive<MediaFilterState>({ kind: 'all', source: props.source, origin: props.origin, q: '' })
 const hasMore = computed(() => items.value.length < total.value)
 
 // What's ticked, by id — kept as the items themselves so a pick survives
 // scrolling on, searching, or changing a filter.
-const picked = ref(new Map())
+const picked = ref(new Map<string, LibraryEntry>())
 const selected = computed(() => new Set(picked.value.keys()))
-const kindCount = kind => [...picked.value.values()].filter(i => i.kind === kind).length
+const kindCount = (kind: string | null): number => [...picked.value.values()].filter(i => i.kind === kind).length
 // Per-kind tallies for the footer, e.g. "Images 2/10 · Videos 1/5"
-const tallies = computed(() => props.kinds.map(k => ({ kind: k, n: kindCount(k), cap: props.limits?.[k] ?? null })))
+const tallies = computed(() =>
+  props.kinds.map(kind => ({ kind, n: kindCount(kind), cap: props.limits?.[kind] ?? null })),
+)
 
-const ACCEPT = { image: 'image/png,image/jpeg,image/webp,image/gif', video: 'video/mp4' }
+const ACCEPT: Readonly<Record<string, string>> = {
+  image: 'image/png,image/jpeg,image/webp,image/gif',
+  video: 'video/mp4',
+}
 const accept = computed(() =>
   props.kinds
-    .map(k => ACCEPT[k])
+    .map(kind => ACCEPT[kind])
     .filter(Boolean)
     .join(','),
 )
-const kindOf = file => (file.type.startsWith('video/') ? 'video' : file.type.startsWith('image/') ? 'image' : null)
+const kindOf = (file: File): 'video' | 'image' | null =>
+  file.type.startsWith('video/') ? 'video' : file.type.startsWith('image/') ? 'image' : null
 
 // The dialog only ever offers `kinds`; one of them narrows the query, and both
 // is every kind the library holds, so it asks for all of them.
-const kindParam = () => (filters.kind !== 'all' ? filters.kind : props.kinds.length === 1 ? props.kinds[0] : undefined)
-const params = offset => ({
+function kindParam(): string | undefined {
+  if (filters.kind !== 'all') return filters.kind
+  return props.kinds.length === 1 ? props.kinds[0] : undefined
+}
+const params = (offset: number) => ({
   offset,
   limit: PAGE,
   kind: kindParam(),
   source: filters.source === 'all' ? undefined : filters.source,
   origin: filters.origin === 'all' ? undefined : filters.origin,
-  q: filters.q.trim() || undefined,
+  q: filters.q.trim() === '' ? undefined : filters.q.trim(),
 })
 
 let seq = 0
-async function load() {
+async function load(): Promise<void> {
   const mine = ++seq
   loading.value = true
   try {
-    const { items: page, total: t } = await fetchMediaPage(params(0))
+    const { items: page, total: count } = await fetchMediaPage(params(0))
     if (mine !== seq) return // a newer search already answered
     items.value = page
-    total.value = t
+    total.value = count
   } catch (e) {
-    if (mine === seq) showToast(`Couldn't load the library: ${e.message}`, 'error')
+    if (mine === seq) showToast(`Couldn't load the library: ${messageOf(e)}`, 'error')
   } finally {
     if (mine === seq) loading.value = false
   }
 }
-async function loadMore() {
+
+async function loadMore(): Promise<void> {
   if (!hasMore.value || loading.value) return
   const mine = seq
   const { items: page } = await fetchMediaPage(params(items.value.length))
@@ -84,16 +116,18 @@ async function loadMore() {
 }
 
 // Typing re-queries, but only once you pause
-let searchTimer = null
+let searchTimer: ReturnType<typeof setTimeout> | undefined
 watch(
   () => filters.q,
   () => {
     clearTimeout(searchTimer)
-    searchTimer = setTimeout(load, 250)
+    searchTimer = setTimeout(() => void load(), SEARCH_DELAY_MS)
   },
 )
-watch([() => filters.kind, () => filters.source, () => filters.origin], load)
-onBeforeUnmount(() => clearTimeout(searchTimer))
+watch([() => filters.kind, () => filters.source, () => filters.origin], () => void load())
+onBeforeUnmount(() => {
+  clearTimeout(searchTimer)
+})
 
 watch(
   () => props.open,
@@ -104,20 +138,35 @@ watch(
     filters.source = props.source
     filters.kind = 'all'
     filters.q = ''
-    load()
+    void load()
   },
 )
 
-function toggle(item) {
-  const next = new Map(picked.value)
-  if (next.delete(item.id)) return (picked.value = next)
-  if (!props.multiple) return (picked.value = new Map([[item.id, item]]))
+/** Why this item can't be added to the pick, or null when it can. */
+function refusal(item: LibraryEntry): string | null {
   if (props.limits) {
-    const cap = props.limits[item.kind]
-    if (cap != null && kindCount(item.kind) >= cap)
-      return showToast(`Up to ${cap} ${item.kind}${cap === 1 ? '' : 's'}`, 'error')
-  } else if (props.max != null && picked.value.size >= props.max) {
-    return showToast(`Pick up to ${props.max}`, 'error')
+    const cap = props.limits[item.kind ?? '']
+    if (cap === undefined || kindCount(item.kind) < cap) return null
+    return `Up to ${String(cap)} ${item.kind ?? 'item'}${cap === 1 ? '' : 's'}`
+  }
+  if (props.max !== null && picked.value.size >= props.max) return `Pick up to ${String(props.max)}`
+  return null
+}
+
+function toggle(item: LibraryEntry): void {
+  const next = new Map(picked.value)
+  if (next.delete(item.id)) {
+    picked.value = next
+    return
+  }
+  if (!props.multiple) {
+    picked.value = new Map([[item.id, item]])
+    return
+  }
+  const why = refusal(item)
+  if (why) {
+    showToast(why, 'error')
+    return
   }
   picked.value = next.set(item.id, item)
 }
@@ -125,7 +174,7 @@ function toggle(item) {
 // An upload lands in the library and the server drops its cached list, so a
 // reload brings it back at the top; the pick is held in `picked`, not in the
 // page, so it survives that reload.
-async function upload(files) {
+async function upload(files: Iterable<File>): Promise<void> {
   let widened = false
   for (const file of [...files]) {
     const kind = kindOf(file)
@@ -139,7 +188,7 @@ async function upload(files) {
         widened = true
       }
     } catch (e) {
-      showToast(`Upload failed: ${e.message}`, 'error')
+      showToast(`Upload failed: ${messageOf(e)}`, 'error')
     } finally {
       uploading.value--
     }
@@ -147,7 +196,7 @@ async function upload(files) {
   if (!widened) await load()
 }
 
-function confirm() {
+function confirm(): void {
   emit('pick', [...picked.value.values()])
   emit('close')
 }
@@ -161,7 +210,7 @@ function confirm() {
         role="dialog"
         :aria-label="title"
         @dragover.prevent
-        @drop.prevent="upload($event.dataTransfer?.files || [])"
+        @drop.prevent="upload($event.dataTransfer?.files ?? [])"
       >
         <div class="head">
           <h3>{{ title }}</h3>

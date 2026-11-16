@@ -1,22 +1,40 @@
-<!-- Inspector section: characters attached to the thread (own + inherited). -->
-<script setup>
+<script setup lang="ts">
+import type { Character } from '../../composables/charactersApi'
+import type { InheritedDefault } from '../../composables/useChatDefaults'
 import CharacterPicker from '../characters/CharacterPicker.vue'
 
-defineProps({
-  characters: { type: Array, default: () => [] },
-  characterIds: { type: Array, default: () => [] },
-  names: { type: String, default: '' },
-  support: { type: Object, default: () => ({ ok: true }) },
-  inherited: { type: Array, default: () => [] },
-  hidden: { type: Array, default: () => [] },
-})
-defineEmits(['update:characterIds', 'edit', 'create', 'hide', 'unhide'])
+const props = withDefaults(
+  defineProps<{
+    characters?: readonly Character[] | undefined
+    characterIds?: readonly number[] | undefined
+    names?: string | undefined
+    /** Whether the picked models can use characters, and if not why. */
+    support?: { ok: boolean; reason: string | null } | undefined
+    inherited?: readonly InheritedDefault[] | undefined
+    hidden?: readonly InheritedDefault[] | undefined
+  }>(),
+  {
+    characters: () => [],
+    characterIds: () => [],
+    names: '',
+    support: () => ({ ok: true, reason: null }),
+    inherited: () => [],
+    hidden: () => [],
+  },
+)
+defineEmits<{
+  'update:characterIds': [ids: number[]]
+  edit: [character: Character]
+  create: []
+  hide: [id: number]
+  unhide: [id: number]
+}>()
 </script>
 
 <template>
   <div class="isection">
     <div class="ilabel">Characters</div>
-    <p v-if="!support.ok" class="warn">{{ support.reason }}</p>
+    <p v-if="!props.support.ok" class="warn">{{ props.support.reason }}</p>
     <CharacterPicker
       v-else
       :model-value="characterIds"

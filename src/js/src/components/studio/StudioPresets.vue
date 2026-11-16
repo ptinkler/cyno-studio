@@ -1,21 +1,23 @@
-<!-- Models header: pick a saved preset to load it, or save the current setup. -->
-<script setup>
-import { inject, ref } from 'vue'
+<script setup lang="ts">
+import { ref } from 'vue'
+import { composerSettingsKey, injectRequired } from '../../injection'
 import { useRouter } from 'vue-router'
 import PresetEditor from './PresetEditor.vue'
 
-const { presets, loadPreset, activePresetId } = inject('composerSettings')
+const { presets, loadPreset, activePresetId } = injectRequired(composerSettingsKey)
 const router = useRouter()
 const creating = ref(false)
 
 // The box shows the preset the setup matches; change anything and it goes back
 // to "Presets". Choosing one loads it.
-async function onPick(e) {
-  const select = e.target
+async function onPick(event: Event): Promise<void> {
+  const select = event.target
+  if (!(select instanceof HTMLSelectElement)) return
   const value = select.value
   if (value === '__manage') {
     select.value = activePresetId.value
-    return router.push('/presets')
+    await router.push('/presets')
+    return
   }
   const preset = presets.value.find(p => p.id === value)
   if (preset) await loadPreset(preset)

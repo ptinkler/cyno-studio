@@ -1,32 +1,40 @@
-<!-- The app's own confirm / prompt dialog (see composables/useDialog.ts). -->
-<script setup>
+<script setup lang="ts">
 import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { dialog, settleDialog } from '../composables/useDialog'
 
-const input = ref(null)
-const okBtn = ref(null)
+const input = ref<HTMLInputElement | null>(null)
+const okBtn = ref<HTMLButtonElement | null>(null)
 
-const cancel = () => settleDialog(null)
-function ok() {
-  settleDialog(dialog.kind === 'prompt' ? dialog.value.trim() || null : true)
+const cancel = (): void => {
+  settleDialog(null)
 }
-function onKey(e) {
+function ok(): void {
+  const text = dialog.value.trim()
+  settleDialog(dialog.kind === 'prompt' ? (text === '' ? null : text) : true)
+}
+function onKey(event: KeyboardEvent): void {
   if (!dialog.open) return
-  if (e.key === 'Escape') cancel()
-  else if (e.key === 'Enter' && e.target?.tagName !== 'TEXTAREA') {
-    e.preventDefault()
+  if (event.key === 'Escape') {
+    cancel()
+  } else if (event.key === 'Enter' && !(event.target instanceof HTMLTextAreaElement)) {
+    event.preventDefault()
     ok()
   }
 }
-onMounted(() => window.addEventListener('keydown', onKey))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
+onMounted(() => {
+  window.addEventListener('keydown', onKey)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKey)
+})
 
 watch(
   () => dialog.open,
   async open => {
     if (!open) return
     await nextTick()
-    ;(dialog.kind === 'prompt' ? input.value : okBtn.value)?.focus()
+    const target = dialog.kind === 'prompt' ? input.value : okBtn.value
+    target?.focus()
   },
 )
 </script>

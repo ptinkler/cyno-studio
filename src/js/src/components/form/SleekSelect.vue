@@ -1,33 +1,38 @@
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from 'vue'
 
-const props = defineProps({
-  modelValue: { type: [String, Number], default: '' },
-  label: { type: String, required: true },
-  options: { type: Array, required: true },
-  hint: { type: String, default: '' },
-})
+/** An option: just a value, or a value with a label and (optionally) a group to list it under. */
+type SelectOption = string | number | { value: string | number; label: string; group?: string }
 
-const emit = defineEmits(['update:modelValue'])
-
-const focused = ref(false)
-const hasValue = computed(() => props.modelValue !== '' && props.modelValue !== null)
-
-function getOptionValue(opt) {
-  return typeof opt === 'object' ? opt.value : opt
+interface OptionGroup {
+  group: string | null
+  options: SelectOption[]
 }
 
-function getOptionLabel(opt) {
-  return typeof opt === 'object' ? opt.label : opt
+const props = withDefaults(
+  defineProps<{ modelValue?: string | number; label: string; options: readonly SelectOption[]; hint?: string }>(),
+  { modelValue: '', hint: '' },
+)
+
+const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
+
+const focused = ref(false)
+const hasValue = computed(() => props.modelValue !== '')
+
+const getOptionValue = (opt: SelectOption): string | number => (typeof opt === 'object' ? opt.value : opt)
+const getOptionLabel = (opt: SelectOption): string | number => (typeof opt === 'object' ? opt.label : opt)
+
+function onChange(event: Event): void {
+  if (event.target instanceof HTMLSelectElement) emit('update:modelValue', event.target.value)
 }
 
 // Options may optionally carry a `group` field, grouping them under an
 // <optgroup> in encounter order. Options without a group render ungrouped.
 const groupedOptions = computed(() => {
-  const groups = []
-  const byName = new Map()
+  const groups: OptionGroup[] = []
+  const byName = new Map<string, OptionGroup>()
   for (const opt of props.options) {
-    const name = typeof opt === 'object' ? opt.group : null
+    const name = typeof opt === 'object' ? opt.group : undefined
     if (!name) {
       groups.push({ group: null, options: [opt] })
       continue
@@ -51,13 +56,8 @@ const groupedOptions = computed(() => {
       <span v-if="hint" class="field-hint">{{ hint }}</span>
     </div>
     <div class="select-wrapper">
-      <select
-        :value="modelValue"
-        @change="emit('update:modelValue', $event.target.value)"
-        @focus="focused = true"
-        @blur="focused = false"
-      >
-        <template v-for="group in groupedOptions" :key="group.group ?? getOptionValue(group.options[0])">
+      <select :value="modelValue" @change="onChange" @focus="focused = true" @blur="focused = false">
+        <template v-for="group in groupedOptions" :key="group.group ?? String(getOptionValue(group.options[0] ?? ''))">
           <optgroup v-if="group.group" :label="group.group">
             <option v-for="opt in group.options" :key="getOptionValue(opt)" :value="getOptionValue(opt)">
               {{ getOptionLabel(opt) }}

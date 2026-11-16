@@ -1,14 +1,15 @@
-<!-- Inspector section: how much history + how many recent images each turn
-     sends (the composer's memory/image sliders). -->
-<script setup>
-import { inject, computed } from 'vue'
+<script setup lang="ts">
+import { computed } from 'vue'
+import { composerSettingsKey, injectRequired } from '../../injection'
 import { MEMORY_STEPS, IMAGE_STEPS } from '../../composables/useComposerSettings'
+import type { Step } from '../../composables/composerPrefs'
 
-const { mode, memoryIndex, imageIndex, historyLimit, imageLimit } = inject('composerSettings')
+const { mode, memoryIndex, imageIndex, historyLimit, imageLimit } = injectRequired(composerSettingsKey)
 
-const label = v => (v == null ? 'All' : v)
+const label = (value: Step): string | number => value ?? 'All'
 // The filled part of the track, so these read like the video Length slider
-const pct = (i, steps) => `${steps.length > 1 ? (i / (steps.length - 1)) * 100 : 0}%`
+const pct = (i: number, steps: readonly Step[]): string =>
+  `${String(steps.length > 1 ? (i / (steps.length - 1)) * 100 : 0)}%`
 const memoryFill = computed(() => pct(memoryIndex.value, MEMORY_STEPS))
 const imageFill = computed(() => pct(imageIndex.value, IMAGE_STEPS))
 </script>

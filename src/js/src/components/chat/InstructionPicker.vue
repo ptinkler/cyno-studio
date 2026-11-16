@@ -1,74 +1,116 @@
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from 'vue'
+import type { Instruction, InstructionGroup } from '../../composables/chatSettingsApi'
+import type { InheritedDefault } from '../../composables/useChatDefaults'
 import { instructionColor } from '../../utils/format'
 import { defaultIcon as fromIcon, defaultTitle as fromTitle } from '../../utils/defaults'
 import PickDialog from '../PickDialog.vue'
+import type { PickItem } from '../PickDialog.vue'
+
+type Kind = 'snippet' | 'group'
+
+/** A chip or card was acted on: which kind of thing, and which one (null = a new one). */
+interface Target {
+  kind: Kind
+  id: number
+}
+
+/** One card in the pick dialog. */
+interface InstructionCard extends PickItem {
+  id: number
+  type: Kind
+  kind: 'default' | 'own'
+}
 
 // Attached instruction groups and snippets as chips, plus a dialog to pick
 // more (names aren't unique, so each card shows a preview of its text). Editing and creating happen in InstructionEditor (and the Instructions page); this
 // only attaches/detaches, and emits 'edit' ({ kind, id }: a chip was
 // clicked) or 'manage' to open that dialog.
-const props = defineProps({
-  instructions: { type: Array, default: () => [] }, // all saved snippets
-  groups: { type: Array, default: () => [] }, // all saved groups
-  snippetIds: { type: Array, default: () => [] }, // attached snippet ids
-  groupIds: { type: Array, default: () => [] }, // attached group ids
-  manageable: { type: Boolean, default: true }, // show the "Manage & create…" item
-  // Attached by the chat's defaults: [{ id, from }] — shown, but changed in the defaults, not here
-  inheritedSnippets: { type: Array, default: () => [] },
-  inheritedGroups: { type: Array, default: () => [] },
-  // Defaults switched off in this chat: [{ id, from }] — offered in the menu to switch back on
-  hiddenSnippets: { type: Array, default: () => [] },
-  hiddenGroups: { type: Array, default: () => [] },
-  // Attached but paused in this chat (own or inherited): shown dimmed, not sent
-  pausedSnippets: { type: Array, default: () => [] },
-  pausedGroups: { type: Array, default: () => [] },
-})
-// 'hide' / 'unhide': { kind, id } — a default switched off / on in this chat only
-// 'pause' / 'resume': { kind, id } — an attachment paused / resumed in this chat
-const emit = defineEmits([
-  'update:snippetIds',
-  'update:groupIds',
-  'manage',
-  'edit',
-  'hide',
-  'unhide',
-  'pause',
-  'resume',
-])
+const props = withDefaults(
+  defineProps<{
+    /** All saved snippets. */
+    instructions?: readonly Instruction[] | undefined
+    /** All saved groups. */
+    groups?: readonly InstructionGroup[] | undefined
+    /** Attached snippet ids. */
+    snippetIds?: readonly number[] | undefined
+    /** Attached group ids. */
+    groupIds?: readonly number[] | undefined
+    /** Show the "Manage & create…" item. */
+    manageable?: boolean | undefined
+    /** Attached by the chat's defaults: shown, but changed in the defaults, not here. */
+    inheritedSnippets?: readonly InheritedDefault[] | undefined
+    inheritedGroups?: readonly InheritedDefault[] | undefined
+    /** Defaults switched off in this chat: offered in the menu to switch back on. */
+    hiddenSnippets?: readonly InheritedDefault[] | undefined
+    hiddenGroups?: readonly InheritedDefault[] | undefined
+    /** Attached but paused in this chat (own or inherited): shown dimmed, not sent. */
+    pausedSnippets?: readonly number[] | undefined
+    pausedGroups?: readonly number[] | undefined
+  }>(),
+  {
+    instructions: () => [],
+    groups: () => [],
+    snippetIds: () => [],
+    groupIds: () => [],
+    manageable: true,
+    inheritedSnippets: () => [],
+    inheritedGroups: () => [],
+    hiddenSnippets: () => [],
+    hiddenGroups: () => [],
+    pausedSnippets: () => [],
+    pausedGroups: () => [],
+  },
+)
+// 'hide' / 'unhide': a default switched off / on in this chat only
+// 'pause' / 'resume': an attachment paused / resumed in this chat
+const emit = defineEmits<{
+  'update:snippetIds': [ids: number[]]
+  'update:groupIds': [ids: number[]]
+  manage: []
+  edit: [target: { kind: Kind; id: number | null }]
+  hide: [target: Target]
+  unhide: [target: Target]
+  pause: [target: Target]
+  resume: [target: Target]
+}>()
 
 const open = ref(false)
-const close = () => (open.value = false)
-const toggle = () => (open.value = !open.value)
+const close = (): void => {
+  open.value = false
+}
+const toggle = (): void => {
+  open.value = !open.value
+}
 
 const snippetById = computed(() => new Map(props.instructions.map(s => [s.id, s])))
 const groupById = computed(() => new Map(props.groups.map(g => [g.id, g])))
 const inheritedGroupIds = computed(() => [...props.inheritedGroups, ...props.hiddenGroups].map(x => x.id))
 const inheritedSnippetIds = computed(() => [...props.inheritedSnippets, ...props.hiddenSnippets].map(x => x.id))
-const fromDefaults = (list, byId) =>
-  list.map(x => byId.get(x.id) && { ...byId.get(x.id), from: x.from }).filter(Boolean)
+
+/** The items a default list names, each with where it comes from. */
+function fromDefaults<T>(list: readonly InheritedDefault[], byId: ReadonlyMap<number, T>): (T & { from: string })[] {
+  return list.flatMap(x => {
+    const item = byId.get(x.id)
+    return item ? [{ ...item, from: x.from }] : []
+  })
+}
 const defaultGroups = computed(() => fromDefaults(props.inheritedGroups, groupById.value))
 const defaultSnippets = computed(() => fromDefaults(props.inheritedSnippets, snippetById.value))
 const hiddenGroupItems = computed(() => fromDefaults(props.hiddenGroups, groupById.value))
 const hiddenSnippetItems = computed(() => fromDefaults(props.hiddenSnippets, snippetById.value))
 const attachedGroups = computed(() =>
-  props.groupIds
-    .filter(id => !inheritedGroupIds.value.includes(id))
-    .map(id => groupById.value.get(id))
-    .filter(Boolean),
+  props.groupIds.filter(id => !inheritedGroupIds.value.includes(id)).flatMap(id => groupById.value.get(id) ?? []),
 )
 const attachedSnippets = computed(() =>
-  props.snippetIds
-    .filter(id => !inheritedSnippetIds.value.includes(id))
-    .map(id => snippetById.value.get(id))
-    .filter(Boolean),
+  props.snippetIds.filter(id => !inheritedSnippetIds.value.includes(id)).flatMap(id => snippetById.value.get(id) ?? []),
 )
 const anyAttached = computed(
   () =>
-    defaultGroups.value.length ||
-    defaultSnippets.value.length ||
-    attachedGroups.value.length ||
-    attachedSnippets.value.length,
+    defaultGroups.value.length > 0 ||
+    defaultSnippets.value.length > 0 ||
+    attachedGroups.value.length > 0 ||
+    attachedSnippets.value.length > 0,
 )
 const unattachedGroups = computed(() =>
   props.groups.filter(g => !props.groupIds.includes(g.id) && !inheritedGroupIds.value.includes(g.id)),
@@ -76,80 +118,83 @@ const unattachedGroups = computed(() =>
 const unattachedSnippets = computed(() =>
   props.instructions.filter(s => !props.snippetIds.includes(s.id) && !inheritedSnippetIds.value.includes(s.id)),
 )
-function unhide(kind, item) {
+
+function unhide(kind: Kind, item: { id: number }): void {
   emit('unhide', { kind, id: item.id })
 }
 
-function groupTitle(g) {
-  const n = g.snippet_ids?.length || 0
-  return `Group — ${n} snippet${n === 1 ? '' : 's'}`
+function groupTitle(group: InstructionGroup): string {
+  const n = group.snippet_ids.length
+  return `Group — ${String(n)} snippet${n === 1 ? '' : 's'}`
 }
 
-function attachGroup(g) {
+const attachGroup = (g: InstructionGroup): void => {
   emit('update:groupIds', [...props.groupIds, g.id])
 }
-
-function detachGroup(g) {
+const detachGroup = (g: InstructionGroup): void => {
   emit(
     'update:groupIds',
     props.groupIds.filter(id => id !== g.id),
   )
 }
-
-function attachSnippet(s) {
+const attachSnippet = (s: Instruction): void => {
   emit('update:snippetIds', [...props.snippetIds, s.id])
 }
-
-function detachSnippet(s) {
+const detachSnippet = (s: Instruction): void => {
   emit(
     'update:snippetIds',
     props.snippetIds.filter(id => id !== s.id),
   )
 }
 
-const isPaused = (kind, id) => (kind === 'group' ? props.pausedGroups : props.pausedSnippets).includes(id)
-function togglePause(kind, item) {
-  emit(isPaused(kind, item.id) ? 'resume' : 'pause', { kind, id: item.id })
+const isPaused = (kind: Kind, id: number): boolean =>
+  (kind === 'group' ? props.pausedGroups : props.pausedSnippets).includes(id)
+
+function togglePause(kind: Kind, item: { id: number }): void {
+  if (isPaused(kind, item.id)) emit('resume', { kind, id: item.id })
+  else emit('pause', { kind, id: item.id })
 }
 
 // Open the editor for a new snippet / group (same modal as editing one)
-function create(kind) {
+function create(kind: Kind): void {
   close()
   emit('edit', { kind, id: null })
 }
 
-function manage() {
+function manage(): void {
   close()
   emit('manage')
 }
 
+const sourceLabel = (from: string): string => `${fromIcon(from)} ${fromTitle(from)}`
+
 // Every group and snippet as a card: in use (own, or from the defaults) or not
-const preview = text => (text || '').replace(/\s+/g, ' ').trim().slice(0, 140)
-const groupCard = (g, on, from) => ({
-  key: `g${from ? 'd' : ''}${g.id}`,
+const preview = (text: string): string => text.replace(/\s+/g, ' ').trim().slice(0, 140)
+const groupCard = (g: InstructionGroup, on: boolean, from?: string): InstructionCard => ({
+  key: `g${from ? 'd' : ''}${String(g.id)}`,
   id: g.id,
   type: 'group',
   section: 'Groups',
   icon: '📦',
   name: g.name,
   sub: groupTitle(g),
-  from: from ? `${fromIcon(from)} ${fromTitle(from)}` : undefined,
+  ...(from ? { from: sourceLabel(from) } : {}),
   on,
   kind: from ? 'default' : 'own',
 })
-const snippetCard = (sn, on, from) => ({
-  key: `s${from ? 'd' : ''}${sn.id}`,
+const snippetCard = (sn: Instruction, on: boolean, from?: string): InstructionCard => ({
+  key: `s${from ? 'd' : ''}${String(sn.id)}`,
   id: sn.id,
   type: 'snippet',
   section: 'Snippets',
   dot: instructionColor(sn.name),
   name: sn.name,
   sub: preview(sn.content),
-  from: from ? `${fromIcon(from)} ${fromTitle(from)}` : undefined,
+  ...(from ? { from: sourceLabel(from) } : {}),
   on,
   kind: from ? 'default' : 'own',
 })
-const cards = computed(() => [
+const cards = computed<InstructionCard[]>(() => [
   ...attachedGroups.value.map(g => groupCard(g, true)),
   ...defaultGroups.value.map(g => groupCard(g, true, g.from)),
   ...hiddenGroupItems.value.map(g => groupCard(g, false, g.from)),
@@ -159,15 +204,25 @@ const cards = computed(() => [
   ...hiddenSnippetItems.value.map(sn => snippetCard(sn, false, sn.from)),
   ...unattachedSnippets.value.map(sn => snippetCard(sn, false)),
 ])
-function onToggle(item) {
-  const byId = item.type === 'group' ? groupById.value : snippetById.value
-  const it = byId.get(item.id)
-  if (!it) return
-  if (item.kind === 'default') {
-    return item.on ? emit('hide', { kind: item.type, id: it.id }) : unhide(item.type, it)
+
+function onToggle(item: InstructionCard): void {
+  if (item.type === 'group') {
+    const group = groupById.value.get(item.id)
+    if (!group) return
+    if (item.kind === 'default') {
+      if (item.on) emit('hide', { kind: 'group', id: group.id })
+      else unhide('group', group)
+    } else if (item.on) detachGroup(group)
+    else attachGroup(group)
+    return
   }
-  if (item.type === 'group') return item.on ? detachGroup(it) : attachGroup(it)
-  return item.on ? detachSnippet(it) : attachSnippet(it)
+  const snippet = snippetById.value.get(item.id)
+  if (!snippet) return
+  if (item.kind === 'default') {
+    if (item.on) emit('hide', { kind: 'snippet', id: snippet.id })
+    else unhide('snippet', snippet)
+  } else if (item.on) detachSnippet(snippet)
+  else attachSnippet(snippet)
 }
 </script>
 

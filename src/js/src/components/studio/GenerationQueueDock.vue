@@ -1,61 +1,59 @@
-<!-- Always-visible generation queue: a collapsible pill in the top bar (centre) that shows
-     what's rendering across every thread, even after you navigate away. Finished
-     and failed items stay until cleared. Clicking a row opens that thread's
-     gallery. Fed by useGenQueue (polls /api/chat/generations/active). -->
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
+import type { Generation } from '../../composables/chatFilesApi'
 import { chatMediaUrl, chatMediaPreviewUrl } from '../../composables/useChat'
+import { readText, writeText } from '../../utils/storage'
 
-defineProps({
-  entries: { type: Array, default: () => [] },
-  pending: { type: Number, default: 0 },
-  done: { type: Number, default: 0 },
-})
-const emit = defineEmits(['open', 'clear', 'clear-one'])
+const props = withDefaults(
+  defineProps<{
+    entries?: readonly Generation[] | undefined
+    pending?: number | undefined
+    done?: number | undefined
+  }>(),
+  { entries: () => [], pending: 0, done: 0 },
+)
+const emit = defineEmits<{ open: [entry: Generation]; clear: []; 'clear-one': [mediaId: string] }>()
 
-const CKEY = 'studio.genQueue.collapsed'
-const readCollapsed = () => {
-  try {
-    return localStorage.getItem(CKEY) !== '0'
-  } catch {
-    return true
-  }
-}
-const collapsed = ref(readCollapsed())
-function toggle() {
+const COLLAPSED_KEY = 'studio.genQueue.collapsed'
+const collapsed = ref(readText(COLLAPSED_KEY) !== '0')
+function toggle(): void {
   collapsed.value = !collapsed.value
-  try {
-    localStorage.setItem(CKEY, collapsed.value ? '1' : '0')
-  } catch {
-    /* storage unavailable */
+  writeText(COLLAPSED_KEY, collapsed.value ? '1' : '0')
+}
+
+const root = ref<HTMLElement | null>(null)
+// Clicking anywhere else folds the list away, so it never sits over a menu
+const onOutside = (event: MouseEvent): void => {
+  if (!collapsed.value && root.value && event.target instanceof Node && !root.value.contains(event.target)) {
+    collapsed.value = true
   }
 }
+onMounted(() => {
+  document.addEventListener('mousedown', onOutside)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', onOutside)
+})
 
-const root = ref(null)
-// Clicking anywhere else folds the list away, so it never sits over a menu
-const onOutside = e => {
-  if (!collapsed.value && root.value && !root.value.contains(e.target)) collapsed.value = true
-}
-onMounted(() => document.addEventListener('mousedown', onOutside))
-onBeforeUnmount(() => document.removeEventListener('mousedown', onOutside))
-
-const thumb = e =>
-  e.kind === 'image' ? chatMediaPreviewUrl(e.conversation_id, e.file) : chatMediaUrl(e.conversation_id, e.file)
-function label(e) {
-  if (e.status === 'pending') return e.kind === 'video' ? 'Rendering video…' : 'Creating image…'
-  if (e.status === 'error') return e.moderated ? 'Blocked' : 'Failed'
-  return e.kind === 'video' ? 'Video ready' : 'Image ready'
+const thumb = (entry: Generation): string =>
+  entry.kind === 'image'
+    ? chatMediaPreviewUrl(entry.conversation_id, entry.file ?? '')
+    : chatMediaUrl(entry.conversation_id, entry.file ?? '')
+function label(entry: Generation): string {
+  if (entry.status === 'pending') return entry.kind === 'video' ? 'Rendering video…' : 'Creating image…'
+  if (entry.status === 'error') return entry.moderated ? 'Blocked' : 'Failed'
+  return entry.kind === 'video' ? 'Video ready' : 'Image ready'
 }
 </script>
 
 <template>
-  <div v-if="entries.length" ref="root" class="qdock" :class="{ collapsed }">
+  <div v-if="props.entries.length" ref="root" class="qdock" :class="{ collapsed }">
     <div class="qhead" @click="toggle">
       <span class="qtitle">
         <span v-if="pending" class="qspin"></span>
         {{ pending ? `${pending} generating` : 'Generations' }}
       </span>
-      <span class="qcount">{{ entries.length }}</span>
+      <span class="qcount">{{ props.entries.length }}</span>
       <button class="qbtn" :title="collapsed ? 'Expand' : 'Collapse'" @click.stop="toggle">
         {{ collapsed ? '▴' : '▾' }}
       </button>

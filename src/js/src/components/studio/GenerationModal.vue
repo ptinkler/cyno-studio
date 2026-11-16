@@ -1,50 +1,55 @@
-<!-- The "big view" for a generation: large media on the left, its prompt and
-     details plus actions on the right. Works for both the in-thread gallery
-     and the cross-thread Favourites gallery — `canManage` gates the actions
-     that need the generation's message to be in the open thread. -->
-<script setup>
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import type { GenerationItem, ImagePick } from '../../composables/studioTypes'
 import { shortModel, fmtCost, creditsToUsd } from '../../utils/format'
 import RequestDialog from '../chat/RequestDialog.vue'
 
-const props = defineProps({
-  // { url, kind, file, prompt?, model?, cost?, created_at?, favourite?, conversation_title? }
-  item: { type: Object, default: null },
-  canManage: { type: Boolean, default: false },
-  // Studio theme ('dark' | 'light'), so the body-teleported modal keeps the --s* vars.
-  theme: { type: String, default: '' },
-})
-const emit = defineEmits([
-  'close',
-  'favourite',
-  'use-image',
-  'use-settings',
-  'regenerate',
-  'delete',
-  'open-thread',
-  'make-character',
-])
+const props = withDefaults(
+  defineProps<{
+    item?: GenerationItem | null | undefined
+    canManage?: boolean | undefined
+    /** Studio theme ('dark' | 'light'), so the body-teleported modal keeps the --s* vars. */
+    theme?: string | undefined
+  }>(),
+  { item: null, canManage: false, theme: '' },
+)
+const emit = defineEmits<{
+  close: []
+  favourite: [item: GenerationItem]
+  'use-image': [pick: ImagePick]
+  'use-settings': [item: GenerationItem]
+  regenerate: [item: GenerationItem]
+  delete: [item: GenerationItem]
+  'open-thread': [id: string]
+  'make-character': [item: GenerationItem]
+}>()
 
 const isVideo = computed(() => props.item?.kind === 'video')
 const isError = computed(() => props.item?.status === 'error')
 const requestOpen = ref(false) // the "exactly what was sent" dialog
 // Pollo bills in credits, everything else in dollars
 const costLabel = computed(() => {
-  const { credits, cost } = props.item || {}
-  if (credits) return `${fmtCost(creditsToUsd(credits))} (${credits} cr)`
+  const { credits, cost } = props.item ?? {}
+  if (credits) return `${fmtCost(creditsToUsd(credits))} (${String(credits)} cr)`
   return fmtCost(cost)
 })
 const loop = ref(false) // videos don't autoplay; the user opts into looping
 const when = computed(() => {
-  const d = props.item?.created_at && new Date(props.item.created_at)
-  return d && !isNaN(d) ? d.toLocaleString() : ''
+  const created = props.item?.created_at
+  if (!created) return ''
+  const date = new Date(created)
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleString()
 })
 
-function onKey(e) {
-  if (e.key === 'Escape' && props.item) emit('close')
+function onKey(event: KeyboardEvent): void {
+  if (event.key === 'Escape' && props.item) emit('close')
 }
-onMounted(() => window.addEventListener('keydown', onKey))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
+onMounted(() => {
+  window.addEventListener('keydown', onKey)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKey)
+})
 </script>
 
 <template>
@@ -178,7 +183,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     v-if="requestOpen && item"
     :request="item.request"
     :response="item.response"
-    :error="isError ? item.error : ''"
+    :error="isError ? (item.error ?? '') : ''"
     @close="requestOpen = false"
   />
 </template>

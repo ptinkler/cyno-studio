@@ -1,22 +1,24 @@
-<!-- The pictures and clips a user attached to their prompt, above its text: open, pin as a reference, or
-     reuse in Image / Video mode. -->
-<script setup>
-import { chatMediaPreviewUrl, chatMediaUrl } from '../../composables/useChat'
-import { canPinMedia } from '../../utils/chatMedia'
+<script setup lang="ts">
+import type { MediaCard } from '../../composables/chatConversationsApi'
+import { chatMediaPreviewUrl, chatMediaUrl } from '../../composables/chatFilesApi'
+import type { GenerationItem, UiMessage } from '../../composables/studioTypes'
+import { bigView, canPinMedia } from '../../utils/chatMedia'
 import PinButton from './PinButton.vue'
 
-const props = defineProps({
-  message: { type: Object, required: true },
-  convId: { type: String, required: true },
-})
-const emit = defineEmits(['open-media', 'use-image', 'pin'])
+const props = defineProps<{ message: UiMessage; convId: string }>()
+const emit = defineEmits<{
+  'open-media': [item: GenerationItem]
+  'use-image': [pick: { file: string | null | undefined; mode: 'image' | 'video' }]
+  pin: [pick: { mediaId: string; pinned: boolean }]
+}>()
 
-const mediaUrl = item => chatMediaUrl(props.convId, item.file)
+// A card with no file yet (still rendering) has nothing to show
+const fileOf = (item: MediaCard): string => item.file ?? ''
+const mediaUrl = (item: MediaCard): string => chatMediaUrl(props.convId, fileOf(item))
 // What's shown in the chat: a scaled-down copy (a big chat's full images add up)
-const mediaPreview = item => chatMediaPreviewUrl(props.convId, item.file)
-const canPin = item => canPinMedia(item, props.message)
-// What the big view (GenerationModal) needs: the card plus where it lives
-const bigView = item => ({ ...item, url: mediaUrl(item), message_id: props.message.id, conversation_id: props.convId })
+const mediaPreview = (item: MediaCard): string => chatMediaPreviewUrl(props.convId, fileOf(item))
+const canPin = (item: MediaCard): boolean => canPinMedia(item, props.message)
+const big = (item: MediaCard): GenerationItem => bigView(item, props.message, props.convId)
 </script>
 
 <template>
@@ -35,7 +37,7 @@ const bigView = item => ({ ...item, url: mediaUrl(item), message_id: props.messa
         alt="attachment"
         loading="lazy"
         decoding="async"
-        @click="emit('open-media', bigView(item))"
+        @click="emit('open-media', big(item))"
       />
       <span v-if="item.kind !== 'audio'" class="use-btns">
         <button

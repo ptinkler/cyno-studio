@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ChatMessage from '../components/chat/ChatMessage.vue'
+import { uiMessage } from './models'
 
 const image = { id: 'm1', kind: 'image', source: 'generated', status: 'done', file: 'img_a.png', prompt: 'a fox' }
 const video = { id: 'm2', kind: 'video', source: 'generated', status: 'done', file: 'vid_a.mp4' }
@@ -10,13 +11,13 @@ describe('ChatMessage "make a video from this image"', () => {
     const w = mount(ChatMessage, {
       props: {
         convId: 'c1',
-        message: {
+        message: uiMessage({
           id: 1,
           role: 'assistant',
           content: '',
           status: 'done',
           media: [image, video],
-        },
+        }),
       },
     })
     const buttons = w.findAll('button[title="Attach this picture and switch to Video mode"]')
@@ -29,13 +30,13 @@ describe('ChatMessage "make a video from this image"', () => {
     const w = mount(ChatMessage, {
       props: {
         convId: 'c1',
-        message: {
+        message: uiMessage({
           id: 2,
           role: 'user',
           content: 'look',
           status: 'done',
           media: [{ id: 'u1', kind: 'image', source: 'upload', status: 'done', file: 'up_b.png' }],
-        },
+        }),
       },
     })
     await w.find('button[title="Attach this picture and switch to Video mode"]').trigger('click')
@@ -46,13 +47,13 @@ describe('ChatMessage "make a video from this image"', () => {
     const w = mount(ChatMessage, {
       props: {
         convId: 'c1',
-        message: {
+        message: uiMessage({
           id: 3,
           role: 'assistant',
           content: '',
           status: 'done',
           media: [image],
-        },
+        }),
       },
     })
     await w.find('.media-item img').trigger('click')
@@ -73,25 +74,25 @@ describe('ChatMessage media settings', () => {
     const w = mount(ChatMessage, {
       props: {
         convId: 'c1',
-        message: {
+        message: uiMessage({
           id: 4,
           role: 'assistant',
           content: '',
           status: 'done',
           created_at: new Date().toISOString(),
           media: [pending],
-        },
+        }),
       },
     })
     expect(w.find('.pending-specs').text()).toBe('from image · 5s · 480p · audio')
     await w.setProps({
-      message: {
+      message: uiMessage({
         id: 4,
         role: 'assistant',
         content: '',
         status: 'done',
         media: [{ ...pending, status: 'done', file: 'vid.mp4' }],
-      },
+      }),
     })
     expect(w.find('.caption-specs').text()).toBe('from image · 5s · 480p · audio')
   })
@@ -100,13 +101,13 @@ describe('ChatMessage media settings', () => {
     const w = mount(ChatMessage, {
       props: {
         convId: 'c1',
-        message: {
+        message: uiMessage({
           id: 5,
           role: 'assistant',
           content: '',
           status: 'done',
           media: [{ ...image, model: 'pollo/seedream', params: { aspect_ratio: '16:9', resolution: '2K', refs: [] } }],
-        },
+        }),
       },
     })
     expect(w.find('.caption-specs').text()).toBe('2K · 16:9')
@@ -116,7 +117,11 @@ describe('ChatMessage media settings', () => {
 describe('ChatMessage mode tag', () => {
   const user = mode =>
     mount(ChatMessage, {
-      props: { convId: 'c1', canEdit: true, message: { id: 6, role: 'user', content: 'waves', status: 'done', mode } },
+      props: {
+        convId: 'c1',
+        canEdit: true,
+        message: uiMessage({ id: 6, role: 'user', content: 'waves', status: 'done', mode }),
+      },
     })
 
   it('marks prompts sent outside Auto mode', () => {
@@ -135,13 +140,13 @@ describe('ChatMessage "make a picture" and text-to-media', () => {
     const w = mount(ChatMessage, {
       props: {
         convId: 'c1',
-        message: {
+        message: uiMessage({
           id: 7,
           role: 'assistant',
           content: '',
           status: 'done',
           media: [image],
-        },
+        }),
       },
     })
     await w.find('button[title="Attach this picture and switch to Image mode"]').trigger('click')
@@ -152,7 +157,7 @@ describe('ChatMessage "make a picture" and text-to-media', () => {
     const w = mount(ChatMessage, {
       props: {
         convId: 'c1',
-        message: { id: 9, role: 'assistant', content: 'Some words.', status: 'done', media: [] },
+        message: uiMessage({ id: 9, role: 'assistant', content: 'Some words.', status: 'done', media: [] }),
       },
     })
     expect(w.find('button[title$="as an Image-mode prompt"]').exists()).toBe(false)
@@ -165,13 +170,13 @@ describe('ChatMessage pin as reference', () => {
     const w = mount(ChatMessage, {
       props: {
         convId: 'c1',
-        message: {
+        message: uiMessage({
           id: 5,
           role: 'assistant',
           content: '',
           status: 'done',
           media: [image, video],
-        },
+        }),
       },
     })
     const pins = w.findAll('.pin-btn')
@@ -179,7 +184,13 @@ describe('ChatMessage pin as reference', () => {
     await pins[0].trigger('click')
     expect(w.emitted('pin')).toEqual([[{ mediaId: 'm1', pinned: true }]])
     await w.setProps({
-      message: { id: 5, role: 'assistant', content: '', status: 'done', media: [{ ...image, pinned: true }, video] },
+      message: uiMessage({
+        id: 5,
+        role: 'assistant',
+        content: '',
+        status: 'done',
+        media: [{ ...image, pinned: true }, video],
+      }),
     })
     expect(w.find('.pin-btn').classes()).toContain('on')
     await w.find('.pin-btn').trigger('click')
@@ -188,13 +199,13 @@ describe('ChatMessage pin as reference', () => {
     const u = mount(ChatMessage, {
       props: {
         convId: 'c1',
-        message: {
+        message: uiMessage({
           id: 6,
           role: 'user',
           content: 'this is Linh',
           status: 'done',
           media: [{ id: 'u1', kind: 'image', source: 'upload', status: 'done', file: 'up_b.png' }],
-        },
+        }),
       },
     })
     expect(u.findAll('.pin-btn')).toHaveLength(1)
@@ -204,13 +215,13 @@ describe('ChatMessage pin as reference', () => {
     const w = mount(ChatMessage, {
       props: {
         convId: 'c1',
-        message: {
+        message: uiMessage({
           id: 'tmp-1',
           role: 'user',
           content: 'x',
           status: 'done',
           media: [{ id: 'u1', kind: 'image', source: 'upload', status: 'done', file: 'up_b.png' }],
-        },
+        }),
       },
     })
     expect(w.find('.pin-btn').exists()).toBe(false)
@@ -223,13 +234,13 @@ describe('ChatMessage delete', () => {
       props: {
         convId: 'c1',
         canEdit: true,
-        message: {
+        message: uiMessage({
           id: 7,
           role: 'user',
           content: 'draw a cat',
           status: 'done',
           media: [],
-        },
+        }),
       },
     })
     await user.find('button[title^="Delete this prompt"]').trigger('click')
@@ -238,13 +249,13 @@ describe('ChatMessage delete', () => {
       props: {
         convId: 'c1',
         canEdit: false,
-        message: {
+        message: uiMessage({
           id: 8,
           role: 'assistant',
           content: 'Meow',
           status: 'done',
           media: [],
-        },
+        }),
       },
     })
     expect(reply.find('button[title^="Delete this prompt"]').exists()).toBe(false)
@@ -257,13 +268,13 @@ describe('ChatMessage branch to a new chat', () => {
       props: {
         convId: 'c1',
         canEdit: true,
-        message: {
+        message: uiMessage({
           id: 7,
           role: 'user',
           content: 'draw a cat',
           status: 'done',
           media: [],
-        },
+        }),
       },
     })
     await user.find('button[title^="Start a new chat from here"]').trigger('click')
@@ -271,13 +282,13 @@ describe('ChatMessage branch to a new chat', () => {
     const reply = mount(ChatMessage, {
       props: {
         convId: 'c1',
-        message: {
+        message: uiMessage({
           id: 8,
           role: 'assistant',
           content: 'Meow',
           status: 'done',
           media: [],
-        },
+        }),
       },
     })
     expect(reply.find('button[title^="Start a new chat from here"]').exists()).toBe(false)
@@ -290,13 +301,13 @@ describe('ChatMessage branches', () => {
       props: {
         convId: 'c1',
         canBranch: true,
-        message: {
+        message: uiMessage({
           id: 9,
           role: 'assistant',
           content: 'Meow',
           status: 'done',
           media: [],
-        },
+        }),
       },
     })
     await w.find('button[title^="Start a new chat from here: everything up to this reply"]').trigger('click')
@@ -311,14 +322,14 @@ describe('ChatMessage branches', () => {
     const w = mount(ChatMessage, {
       props: {
         convId: 'c1',
-        message: {
+        message: uiMessage({
           id: 7,
           role: 'user',
           content: 'draw a fox',
           status: 'done',
           media: [],
           forks,
-        },
+        }),
       },
     })
     expect(w.find('.fork-toggle').text()).toBe('⑂ 2 branches')
@@ -337,26 +348,26 @@ describe('ChatMessage refs sent', () => {
     const w = mount(ChatMessage, {
       props: {
         convId: 'c1',
-        message: {
+        message: uiMessage({
           id: 9,
           role: 'assistant',
           content: '',
           status: 'done',
           media: [item],
-        },
+        }),
       },
     })
     expect(w.find('.media-caption').text()).toContain('🔗 1 of 3 refs')
     const all = mount(ChatMessage, {
       props: {
         convId: 'c1',
-        message: {
+        message: uiMessage({
           id: 10,
           role: 'assistant',
           content: '',
           status: 'done',
           media: [{ ...image, params: { refs: ['a.png', 'b.png'] } }],
-        },
+        }),
       },
     })
     expect(all.find('.media-caption').text()).toContain('🔗 2 refs')
@@ -366,7 +377,10 @@ describe('ChatMessage refs sent', () => {
     const item = { ...image, params: { refs: ['a.png', 'char:7/b.png'], refs_used: 1 } }
     const w = mount(ChatMessage, {
       attachTo: document.body,
-      props: { convId: 'c1', message: { id: 11, role: 'assistant', content: '', status: 'done', media: [item] } },
+      props: {
+        convId: 'c1',
+        message: uiMessage({ id: 11, role: 'assistant', content: '', status: 'done', media: [item] }),
+      },
     })
     await w.find('.caption-refs').trigger('mouseenter')
     const imgs = document.querySelectorAll('.refs-peek img')
@@ -389,7 +403,7 @@ describe('ChatMessage request view', () => {
       global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
       props: {
         convId: 'c1',
-        message: {
+        message: uiMessage({
           id: 3,
           role: 'assistant',
           content: '',
@@ -407,7 +421,7 @@ describe('ChatMessage request view', () => {
               response: { error: 'Your prompt violates the content policy' },
             },
           ],
-        },
+        }),
       },
     })
     await w.find('button[title="Show exactly what was sent to the provider"]').trigger('click')
@@ -422,7 +436,7 @@ describe('ChatMessage request view', () => {
     const w = mount(ChatMessage, {
       props: {
         convId: 'c1',
-        message: {
+        message: uiMessage({
           id: 4,
           role: 'assistant',
           content: '',
@@ -430,7 +444,7 @@ describe('ChatMessage request view', () => {
           media: [
             { id: 'n', kind: 'image', source: 'generated', status: 'done', file: 'x.png', prompt: 'p', model: 'a/b' },
           ],
-        },
+        }),
       },
     })
     expect(w.find('button[title="Show exactly what was sent to the provider"]').exists()).toBe(false)
@@ -440,7 +454,7 @@ describe('ChatMessage request view', () => {
 const reply = (media, extra = {}) => ({
   props: {
     convId: 'c1',
-    message: { id: 42, role: 'assistant', content: 'Here you go.', status: 'done', media, ...extra },
+    message: uiMessage({ id: 42, role: 'assistant', content: 'Here you go.', status: 'done', media, ...extra }),
   },
 })
 
@@ -633,13 +647,13 @@ describe('ChatMessage renders one element per media kind', () => {
   const media = extra => ({
     props: {
       convId: 'c1',
-      message: {
+      message: uiMessage({
         id: 50,
         role: 'assistant',
         content: '',
         status: 'done',
         media: [{ id: 'm1', source: 'generated', status: 'done', prompt: 'a fox', ...extra }],
-      },
+      }),
     },
   })
 
@@ -673,7 +687,7 @@ describe('ChatMessage a failed picture can be changed and retried', () => {
   const failed = {
     props: {
       convId: 'c1',
-      message: {
+      message: uiMessage({
         id: 60,
         role: 'assistant',
         content: '',
@@ -689,7 +703,7 @@ describe('ChatMessage a failed picture can be changed and retried', () => {
             model: 'i/model',
           },
         ],
-      },
+      }),
     },
   }
 

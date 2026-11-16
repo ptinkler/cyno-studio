@@ -1,25 +1,31 @@
-<!-- One joined strip: this thread's spend + the provider balances. Every segment
-     is clickable — balances open the usage page, Spent opens a per-model breakdown. -->
-<script setup>
+<script setup lang="ts">
 import { computed, ref } from 'vue'
+import type { Balances, Spend, UiMessage } from '../../composables/studioTypes'
 import { shortModel, fmtCost, creditsToUsd } from '../../utils/format'
 
-const props = defineProps({
-  balances: { type: Object, default: () => ({}) },
-  spend: { type: Object, default: null },
-  messages: { type: Array, default: () => [] },
-})
-const emit = defineEmits(['usage'])
+const props = withDefaults(
+  defineProps<{
+    balances?: Balances | undefined
+    spend?: Spend | null | undefined
+    messages?: readonly UiMessage[] | undefined
+  }>(),
+  {
+    balances: () => ({ openrouter: null, venice: null, veniceCredits: null, pollo: null }),
+    spend: null,
+    messages: () => [],
+  },
+)
+const emit = defineEmits<{ usage: [] }>()
 
 const open = ref(false)
-const fmtCredits = v => (v == null ? '—' : Math.round(v).toLocaleString())
-const fmtBal = v => (v == null ? '—' : `$${v.toFixed(2)}`)
+const fmtCredits = (value: number | null): string => (value === null ? '—' : Math.round(value).toLocaleString())
+const fmtBal = (value: number | null): string => (value === null ? '—' : `$${value.toFixed(2)}`)
 
 const pills = computed(() => [
   {
     id: 'pollo',
     label: 'Pollo',
-    value: props.balances.pollo == null ? '—' : fmtBal(creditsToUsd(props.balances.pollo)),
+    value: props.balances.pollo === null ? '—' : fmtBal(creditsToUsd(props.balances.pollo)),
     tip: `Pollo balance (${fmtCredits(props.balances.pollo)} credits)`,
   },
   { id: 'openrouter', label: 'OpenRouter', value: fmtBal(props.balances.openrouter), tip: 'OpenRouter balance' },
@@ -30,17 +36,17 @@ const label = computed(() => {
   const s = props.spend
   if (!s) return ''
   // Pollo's credits count in dollars too, so one figure covers every provider
-  const cr = (s.credits || 0) + (s.inherited_credits || 0)
-  return fmtCost((s.usd || 0) + (s.inherited_usd || 0) + creditsToUsd(cr))
+  const credits = s.credits + s.inherited_credits
+  return fmtCost(s.usd + s.inherited_usd + creditsToUsd(credits))
 })
 
 // USD per model for this thread's own messages (inherited spend is one line)
 const byModel = computed(() => {
-  const totals = new Map()
+  const totals = new Map<string, number>()
   for (const m of props.messages) {
     if (!m.cost) continue
-    const key = m.model || 'unknown'
-    totals.set(key, (totals.get(key) || 0) + Number(m.cost))
+    const key = m.model ?? 'unknown'
+    totals.set(key, (totals.get(key) ?? 0) + m.cost)
   }
   return [...totals].map(([model, usd]) => ({ model, usd })).sort((a, b) => b.usd - a.usd)
 })

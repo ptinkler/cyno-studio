@@ -1,6 +1,12 @@
-<!-- Studio right pane: composes the inspector section components (models,
-     media options, instructions, characters) for the active thread. -->
-<script setup>
+<script setup lang="ts">
+import type { Character } from '../../composables/charactersApi'
+import type { Catalogues } from '../../composables/useComposerSettings'
+import type {
+  CharactersPane,
+  InstructionEditEvent,
+  InstructionsPane,
+  InstructionTarget,
+} from '../../composables/studioTypes'
 import StudioModelSection from './StudioModelSection.vue'
 import StudioMediaOptions from './StudioMediaOptions.vue'
 import StudioAudioOptions from './StudioAudioOptions.vue'
@@ -8,30 +14,33 @@ import StudioContextSection from './StudioContextSection.vue'
 import StudioInstructions from './StudioInstructions.vue'
 import StudioCharacters from './StudioCharacters.vue'
 
-defineProps({
-  models: { type: Object, required: true },
-  modelsLoading: { type: Boolean, default: false },
-  collapsed: { type: Boolean, default: false },
-  instructions: { type: Object, required: true }, // { list, groups, snippetIds, groupIds, summary }
-  characters: { type: Object, required: true }, // { list, ids, names, support }
-})
+withDefaults(
+  defineProps<{
+    models: Catalogues
+    modelsLoading?: boolean | undefined
+    collapsed?: boolean | undefined
+    instructions: InstructionsPane
+    characters: CharactersPane
+  }>(),
+  { modelsLoading: false, collapsed: false },
+)
 // StudioModelSection / StudioMediaOptions read composer settings via inject
-defineEmits([
-  'update:collapsed',
-  'update:snippetIds',
-  'update:groupIds',
-  'manage',
-  'edit-instruction',
-  'instr-hide',
-  'instr-unhide',
-  'instr-pause',
-  'instr-resume',
-  'update:characterIds',
-  'edit-character',
-  'create-character',
-  'char-hide',
-  'char-unhide',
-])
+defineEmits<{
+  'update:collapsed': [collapsed: boolean]
+  'update:snippetIds': [ids: number[]]
+  'update:groupIds': [ids: number[]]
+  manage: []
+  'edit-instruction': [target: InstructionEditEvent]
+  'instr-hide': [target: InstructionTarget]
+  'instr-unhide': [target: InstructionTarget]
+  'instr-pause': [target: InstructionTarget]
+  'instr-resume': [target: InstructionTarget]
+  'update:characterIds': [ids: number[]]
+  'edit-character': [character: Character]
+  'create-character': []
+  'char-hide': [id: number]
+  'char-unhide': [id: number]
+}>()
 </script>
 
 <template>

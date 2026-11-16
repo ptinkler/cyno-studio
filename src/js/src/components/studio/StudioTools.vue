@@ -1,12 +1,9 @@
-<!-- Tools & library, shown in the center pane (its own top-level button, no
-     longer buried under Settings). Links to the library/tool panes plus the
-     global defaults and chat import. -->
-<script setup>
-defineEmits(['close', 'navigate', 'defaults', 'import'])
+<script setup lang="ts">
+defineEmits<{ close: []; navigate: [route: string]; defaults: []; import: [] }>()
 
 // `path` so each row is a real link (right-click, new tab); `route` is what the
 // click emits for in-app navigation. They must agree — see STUDIO_PANE_PATH.
-const TOOLS = [
+const TOOLS: readonly { route: string; path: string; label: string; note: string }[] = [
   {
     route: 'characters',
     path: '/characters',

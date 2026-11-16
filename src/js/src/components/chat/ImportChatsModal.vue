@@ -1,5 +1,6 @@
-<script setup>
+<script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import type { components } from '../../api/schema'
 import {
   cancelChatGptUpload,
   chatExportUrl,
@@ -9,7 +10,10 @@ import {
   startChatGptImport,
   startChatGptUpload,
 } from '../../composables/useChat'
+import { messageOf } from '../../utils/errors'
 import BaseDialog from '../BaseDialog.vue'
+
+type Schemas = components['schemas']
 
 // Import chats from a ChatGPT export, or from this app's own chat export
 // (made below, here or on another server): upload the zip (in chunks, then
@@ -17,174 +21,209 @@ import BaseDialog from '../BaseDialog.vue'
 // folder, and follow the import (it runs on the server; closing this doesn't
 // stop it). Emits `imported` when one finishes, so the list can reload.
 // The Export tab picks chats and downloads them as one zip.
-const props = defineProps({
-  visible: { type: Boolean, default: false },
-})
-const emit = defineEmits(['close', 'imported'])
+const props = withDefaults(defineProps<{ visible?: boolean | undefined }>(), { visible: false })
+const emit = defineEmits<{ close: []; imported: [] }>()
 
 const POLL_MS = 1500
 const CHUNK_TRIES = 4 // per chunk, each after the API's own retries
 const CHUNK_RETRY_MS = 5000
+const BYTES_PER_MB = 1e6
+const BYTES_PER_GB = 1e9
+
+/** An upload in progress. */
+interface Upload {
+  id: string
+  name: string
+  size: number
+  sent: number
+}
 
 const folder = ref('')
-const files = ref([])
-const selected = ref(null)
-const job = ref(null)
+const files = ref<Schemas['ImportFile'][]>([])
+const selected = ref<string | null>(null)
+const job = ref<Schemas['ImportJob'] | null>(null)
 const loading = ref(false)
 const error = ref('')
-const upload = ref(null) // { id, name, size, sent } while uploading
-const picker = ref(null)
-let timer = null
-let cancelled = false
+const upload = ref<Upload | null>(null)
+const picker = ref<HTMLInputElement | null>(null)
+let timer: ReturnType<typeof setTimeout> | undefined
+// Set when the user cancels an upload, read by the chunk loop that is still running
+const uploadState = { cancelled: false }
+const wasCancelled = (): boolean => uploadState.cancelled // a call, so a check after an await isn't read as always false
 
 // Export: pick chats, download them as one zip
-const tab = ref('import')
-const chats = ref(null) // null until loaded
-const picked = ref(new Set())
+const tab = ref<'import' | 'export'>('import')
+const chats = ref<Schemas['ExportableChat'][] | null>(null) // null until loaded
+const picked = ref(new Set<string>())
 const exportQuery = ref('')
 const shownChats = computed(() => {
   const q = exportQuery.value.trim().toLowerCase()
-  return (chats.value || []).filter(c => !q || (c.title || '').toLowerCase().includes(q))
+  return (chats.value ?? []).filter(c => !q || c.title.toLowerCase().includes(q))
 })
 const allShownPicked = computed(
   () => shownChats.value.length > 0 && shownChats.value.every(c => picked.value.has(c.id)),
 )
 const exportHref = computed(() => chatExportUrl([...picked.value]))
-async function openExport() {
+
+async function openExport(): Promise<void> {
   tab.value = 'export'
   if (chats.value) return
   try {
     chats.value = (await fetchExportableChats()).chats
   } catch (e) {
-    error.value = e.message
+    error.value = messageOf(e)
     chats.value = []
   }
 }
-function togglePick(id) {
+
+function togglePick(id: string): void {
   const next = new Set(picked.value)
   if (next.has(id)) next.delete(id)
   else next.add(id)
   picked.value = next
 }
-function toggleAllShown() {
+
+function toggleAllShown(): void {
   const next = new Set(picked.value)
   const on = !allShownPicked.value
-  for (const c of shownChats.value) on ? next.add(c.id) : next.delete(c.id)
+  for (const chat of shownChats.value) {
+    if (on) next.add(chat.id)
+    else next.delete(chat.id)
+  }
   picked.value = next
 }
 
 const running = computed(() => job.value?.state === 'running')
 const busy = computed(() => running.value || !!upload.value)
-const finished = computed(() => ['done', 'error'].includes(job.value?.state) && job.value?.file)
+const finished = computed(() => (job.value?.state === 'done' || job.value?.state === 'error') && !!job.value.file)
 
-function fmtSize(bytes) {
-  return bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1e6))} MB`
+function fmtSize(bytes: number): string {
+  return bytes >= BYTES_PER_GB
+    ? `${(bytes / BYTES_PER_GB).toFixed(1)} GB`
+    : `${String(Math.max(1, Math.round(bytes / BYTES_PER_MB)))} MB`
 }
 
-function fmtDate(iso) {
+function fmtDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 }
 
-async function refresh() {
+async function refresh(): Promise<void> {
   try {
     const data = await fetchChatGptImport()
     folder.value = data.folder
     files.value = data.files
     const was = job.value?.state
     job.value = data.job
-    if (!files.value.some(f => f.name === selected.value)) selected.value = files.value[0]?.name || null
+    if (!files.value.some(f => f.name === selected.value)) selected.value = files.value[0]?.name ?? null
     if (was === 'running' && data.job.state !== 'running') emit('imported')
     error.value = ''
   } catch (e) {
-    error.value = e.message
+    error.value = messageOf(e)
   }
   clearTimeout(timer)
-  if (props.visible && running.value) timer = setTimeout(refresh, POLL_MS)
+  if (props.visible && running.value) timer = setTimeout(() => void refresh(), POLL_MS)
 }
 
 watch(
   () => props.visible,
-  async v => {
+  async visible => {
     clearTimeout(timer)
-    if (!v) return
+    if (!visible) return
     chats.value = null // fresh list each time it opens
     loading.value = true
     await refresh()
     loading.value = false
   },
 )
-onBeforeUnmount(() => clearTimeout(timer))
+onBeforeUnmount(() => {
+  clearTimeout(timer)
+})
 
 // Leaving the page stops an upload
-function warnOnLeave(e) {
-  e.preventDefault()
+function warnOnLeave(event: BeforeUnloadEvent): void {
+  event.preventDefault()
 }
 watch(upload, (now, before) => {
   if (now && !before) window.addEventListener('beforeunload', warnOnLeave)
   if (!now) window.removeEventListener('beforeunload', warnOnLeave)
 })
-onBeforeUnmount(() => window.removeEventListener('beforeunload', warnOnLeave))
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', warnOnLeave)
+})
 
-async function sendChunk(id, offset, blob) {
+async function sendChunk(id: string, offset: number, blob: Blob): Promise<Schemas['UploadProgress']> {
   for (let attempt = 1; ; attempt++) {
     try {
       return await sendChatGptUploadChunk(id, offset, blob)
     } catch (e) {
-      if (attempt >= CHUNK_TRIES || cancelled) throw e
+      if (attempt >= CHUNK_TRIES || wasCancelled()) throw e
       await new Promise(resolve => setTimeout(resolve, CHUNK_RETRY_MS))
     }
   }
 }
 
-async function uploadFile(file) {
+function discardUpload(id: string): void {
+  cancelChatGptUpload(id).catch(() => undefined)
+}
+
+/** Send the file in chunks; the stored name once it is all there. */
+async function sendFile(file: File, started: Schemas['UploadStarted']): Promise<string | null> {
+  let stored: string | null = null
+  for (let offset = 0; offset < file.size && !wasCancelled(); offset += started.chunk_size) {
+    const progress = await sendChunk(started.id, offset, file.slice(offset, offset + started.chunk_size))
+    if (upload.value) upload.value.sent = progress.received
+    stored = progress.file ?? stored
+  }
+  return stored
+}
+
+async function uploadFile(file: File): Promise<void> {
   error.value = ''
-  cancelled = false
-  let id = null
+  uploadState.cancelled = false
+  let id: string | null = null
   try {
     const started = await startChatGptUpload(file.name, file.size)
     id = started.id
     upload.value = { id, name: file.name, size: file.size, sent: 0 }
-    let done = null
-    for (let offset = 0; offset < file.size && !cancelled; offset += started.chunk_size) {
-      done = await sendChunk(id, offset, file.slice(offset, offset + started.chunk_size))
-      upload.value.sent = done.received
-    }
-    if (cancelled) return
+    const stored = await sendFile(file, started)
+    if (wasCancelled()) return
     upload.value = null
     await refresh()
-    selected.value = done.file
+    selected.value = stored
     await start()
   } catch (e) {
-    if (cancelled) return // a chunk still on its way when it was cancelled
-    error.value = `Upload failed: ${e.message}`
-    if (id) cancelChatGptUpload(id).catch(() => {})
+    if (wasCancelled()) return // a chunk still on its way when it was cancelled
+    error.value = `Upload failed: ${messageOf(e)}`
+    if (id) discardUpload(id)
   } finally {
     upload.value = null
   }
 }
 
-function onPick(e) {
-  const [file] = e.target.files
-  e.target.value = ''
-  if (file) uploadFile(file)
+function onPick(event: Event): void {
+  const input = event.target
+  if (!(input instanceof HTMLInputElement)) return
+  const [file] = input.files ?? []
+  input.value = ''
+  if (file) void uploadFile(file)
 }
 
-function cancelUpload() {
-  cancelled = true
+function cancelUpload(): void {
+  uploadState.cancelled = true
   const id = upload.value?.id
   upload.value = null
-  if (id) cancelChatGptUpload(id).catch(() => {})
+  if (id) discardUpload(id)
 }
 
-async function start() {
+async function start(): Promise<void> {
   if (!selected.value) return
   try {
     job.value = await startChatGptImport(selected.value)
     error.value = ''
   } catch (e) {
-    error.value = e.message
+    error.value = messageOf(e)
   }
-  refresh()
+  await refresh()
 }
 </script>
 
@@ -215,7 +254,7 @@ async function start() {
             <input type="checkbox" :checked="picked.has(c.id)" @change="togglePick(c.id)" />
             <span class="file-name">{{ c.title || 'Untitled' }}</span>
             <span class="file-meta"
-              ><template v-if="c.space">{{ c.space }} · </template>{{ fmtDate(c.updated_at) }}</span
+              ><template v-if="c.space">{{ c.space }} · </template>{{ c.updated_at ? fmtDate(c.updated_at) : '' }}</span
             >
           </label>
         </li>
@@ -253,14 +292,16 @@ async function start() {
         Uploading {{ upload.name }}… {{ fmtSize(upload.sent) }} / {{ fmtSize(upload.size) }}. Keep this tab open; it's
         imported once it's up.
       </div>
-      <div v-else-if="running" class="progress">
-        <div class="bar"><span :style="{ width: `${job.total ? (100 * job.processed) / job.total : 0}%` }"></span></div>
+      <div v-else-if="job && running" class="progress">
+        <div class="bar">
+          <span :style="{ width: `${job.total ? (100 * (job.processed ?? 0)) / job.total : 0}%` }"></span>
+        </div>
         Importing {{ job.file }}… {{ job.processed || 0 }} / {{ job.total || '?' }} chats
       </div>
-      <div v-else-if="finished && job.state === 'error'" class="result error">
+      <div v-else-if="job && finished && job.state === 'error'" class="result error">
         Import of {{ job.file }} failed: {{ job.error }}
       </div>
-      <div v-else-if="finished" class="result">
+      <div v-else-if="job && finished" class="result">
         <strong>{{ job.file }}</strong
         >: {{ job.new }} new, {{ job.updated }} updated, {{ job.unchanged }} unchanged
         <template v-if="job.deleted">, {{ job.deleted }} deleted here (skipped)</template>. {{ job.images }} images
@@ -287,7 +328,7 @@ async function start() {
     </template>
     <template v-else #actions>
       <button v-if="upload" class="btn btn-secondary" @click="cancelUpload">Cancel upload</button>
-      <button v-else class="btn btn-secondary" :disabled="busy" @click="picker.click()">Upload export…</button>
+      <button v-else class="btn btn-secondary" :disabled="busy" @click="picker?.click()">Upload export…</button>
       <span class="spacer"></span>
       <button class="btn btn-secondary" @click="emit('close')">Close</button>
       <button class="btn btn-primary" :disabled="!selected || busy" @click="start">

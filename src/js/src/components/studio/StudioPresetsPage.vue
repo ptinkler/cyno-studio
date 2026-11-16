@@ -1,17 +1,17 @@
-<!-- Tools → Presets: saved model + option sets, opened in the same kind of
-     modal as characters. -->
-<script setup>
-import { inject, ref } from 'vue'
+<script setup lang="ts">
+import { ref } from 'vue'
+import { composerSettingsKey, injectRequired } from '../../injection'
+import type { StoredPreset } from '../../composables/composerPresets'
 import PresetEditor from './PresetEditor.vue'
 import { presetSummary } from '../../utils/presets'
 
-defineEmits(['close'])
-const { presets } = inject('composerSettings')
+defineEmits<{ close: [] }>()
+const { presets } = injectRequired(composerSettingsKey)
 
 const editorOpen = ref(false)
-const editing = ref(null)
-function edit(p) {
-  editing.value = p
+const editing = ref<StoredPreset | null>(null)
+function edit(preset: StoredPreset | null): void {
+  editing.value = preset
   editorOpen.value = true
 }
 </script>

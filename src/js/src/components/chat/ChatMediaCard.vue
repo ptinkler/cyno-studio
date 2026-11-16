@@ -1,135 +1,113 @@
-<!-- One generated picture, video or audio clip on a reply: the media, its versions, pending / failed states,
-     the caption (model, settings, cost) and the actions on it (redo, edit, copy prompt, show request). -->
-<script setup>
-import { ref, inject, onMounted, onBeforeUnmount } from 'vue'
+<script setup lang="ts">
+import { ref, computed, inject, onMounted, onBeforeUnmount } from 'vue'
+import { chatModelsKey } from '../../injection'
+import type { MediaCard } from '../../composables/chatConversationsApi'
 import { chatMediaPreviewUrl, chatMediaUrl } from '../../composables/useChat'
-import { characterImageUrl } from '../../composables/useCharacters'
+import type { GenerationItem, ImagePick, RegenerateRequest, UiMessage } from '../../composables/studioTypes'
 import { useCopy } from '../../composables/useClipboard'
+import { bigView, canPinMedia } from '../../utils/chatMedia'
+import { cardParams, cardSpecs, refUrl, refsLabel, refsTitle } from '../../utils/cardSpecs'
+import type { CardParams } from '../../utils/cardSpecs'
 import { shortModel, fmtCost } from '../../utils/format'
-import { canPinMedia } from '../../utils/chatMedia'
 import ModelPicker from './ModelPicker.vue'
 import PinButton from './PinButton.vue'
 import PromptBox from './PromptBox.vue'
 import RequestDialog from './RequestDialog.vue'
 
-const props = defineProps({
-  item: { type: Object, required: true }, // one of the reply's media items
-  message: { type: Object, required: true }, // the reply holding it
-  convId: { type: String, required: true },
-  canSwitch: { type: Boolean, default: false }, // ‹ › arrows usable (not mid-reply)
-})
-const emit = defineEmits(['open-media', 'media-version', 'pin', 'use-image', 'regenerate'])
+const props = withDefaults(
+  defineProps<{
+    /** One of the reply's media items. */
+    item: MediaCard
+    /** The reply holding it. */
+    message: UiMessage
+    convId: string
+    /** The ‹ › arrows are usable (not mid-reply). */
+    canSwitch?: boolean | undefined
+  }>(),
+  { canSwitch: false },
+)
+const emit = defineEmits<{
+  'open-media': [item: GenerationItem]
+  'media-version': [pick: { mediaId: string; index: number }]
+  pin: [pick: { mediaId: string; pinned: boolean }]
+  'use-image': [pick: ImagePick]
+  regenerate: [request: RegenerateRequest]
+}>()
 
 // Model catalogues, provided by ChatView, for "Try another model"
-const KIND_LABEL = { image: 'Image', video: 'Video', audio: 'Audio' }
-const KIND_ICON = { image: '🖼', video: '🎬', audio: '🔊' }
-const chatModels = inject('chatModels', { image: [], video: [], audio: [] })
+const KIND_LABEL: Readonly<Record<string, string>> = { image: 'Image', video: 'Video', audio: 'Audio' }
+const KIND_ICON: Readonly<Record<string, string>> = { image: '🖼', video: '🎬', audio: '🔊' }
+const chatModels = inject(chatModelsKey, { text: [], image: [], video: [], audio: [] })
 
 // Ticking clock for "rendering 1:23" on pending videos
+const TICK_MS = 1000
+const SECONDS_PER_MINUTE = 60
 const now = ref(Date.now())
-let timer = null
+let timer: ReturnType<typeof setInterval> | undefined
 onMounted(() => {
   timer = setInterval(() => {
     now.value = Date.now()
-  }, 1000)
+  }, TICK_MS)
 })
-onBeforeUnmount(() => clearInterval(timer))
+onBeforeUnmount(() => {
+  clearInterval(timer)
+})
 
-function elapsed() {
-  const start = Date.parse(props.message.created_at) || now.value
-  const s = Math.max(0, Math.floor((now.value - start) / 1000))
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
-}
-
-// The settings a generated item was made with. For Pollo these are what was
-// actually sent (defaults included); for OpenRouter only what we asked for —
-// the provider fills in the rest without saying.
-function specs(item) {
-  const p = item.params || {}
-  const isVideo = item.kind === 'video'
-  return [
-    ...(isVideo ? videoSource(p) : []),
-    isVideo && p.duration && `${p.duration}s`,
-    p.resolution,
-    p.aspect_ratio,
-    isVideo && p.generate_audio != null && (p.generate_audio ? 'audio' : 'no audio'),
-    p.character_names?.length && `👤 ${p.character_names.join(', ')}`,
-  ].filter(Boolean)
+function elapsed(): string {
+  const created = Date.parse(props.message.created_at ?? '')
+  const start = Number.isNaN(created) ? now.value : created
+  const seconds = Math.max(0, Math.floor((now.value - start) / TICK_MS))
+  return `${String(Math.floor(seconds / SECONDS_PER_MINUTE))}:${String(seconds % SECONDS_PER_MINUTE).padStart(2, '0')}`
 }
 
-// What a video was made from, besides its prompt
-function videoSource(p) {
-  const frames = p.last_frame ? 'first+last frame' : p.first_frame && !p.refs?.length && 'from image'
-  return [p.source_video && 'from video', frames]
-}
-
-// "4 refs", or "2 of 4 refs" when the model took fewer than were picked
-// (Venice edit models cap the count; the first ones win)
-function refsLabel(p) {
-  const n = p.refs.length
-  const used = p.refs_used
-  return used != null && used < n ? `${used} of ${n} refs` : `${n} ref${n === 1 ? '' : 's'}`
-}
-function refsTitle(p) {
-  const used = p.refs_used
-  return used != null && used < p.refs.length
-    ? `The model takes ${used} image${used === 1 ? '' : 's'}, so only the first ${used} of these were sent:`
-    : 'Based on these images:'
-}
-// A ref is a chat file or a character image ("char:<id>/<file>")
-function refUrl(r) {
-  const m = /^char:(\d+)\/(.+)$/.exec(r)
-  return m ? characterImageUrl(m[1], m[2]) : chatMediaUrl(props.convId, r)
-}
+// The settings this item was made with (see utils/cardSpecs)
+const params = computed(() => cardParams(props.item.params))
+const specs = computed(() => cardSpecs(props.item.kind, params.value))
 
 // Hovering "🔗 4 refs" shows the reference images. Teleported and fixed so
 // the caption's overflow clipping doesn't cut it off.
-const refsPeek = ref(null) // { params, x, y }
-function showRefs(e, params) {
-  const r = e.currentTarget.getBoundingClientRect()
-  refsPeek.value = { params, x: r.left, y: r.top }
+const refsPeek = ref<{ params: CardParams; x: number; y: number } | null>(null)
+function showRefs(event: MouseEvent, shown: CardParams): void {
+  if (!(event.currentTarget instanceof HTMLElement)) return
+  const rect = event.currentTarget.getBoundingClientRect()
+  refsPeek.value = { params: shown, x: rect.left, y: rect.top }
 }
 
-const mediaUrl = item => chatMediaUrl(props.convId, item.file)
+const mediaUrl = (item: MediaCard): string => chatMediaUrl(props.convId, item.file ?? '')
 // What's shown in the chat: a scaled-down copy (a big chat's full images add up)
-const mediaPreview = item => chatMediaPreviewUrl(props.convId, item.file)
+const mediaPreview = (item: MediaCard): string => chatMediaPreviewUrl(props.convId, item.file ?? '')
 
-const canPin = item => canPinMedia(item, props.message)
-// What the big view (GenerationModal) needs: everything the card knows, plus
-// where it lives, so its actions can act on the right message.
-const bigView = item => ({
-  ...item,
-  url: mediaUrl(item),
-  message_id: props.message.id,
-  conversation_id: props.convId,
-})
+const canPin = (item: MediaCard): boolean => canPinMedia(item, props.message)
+const big = (item: MediaCard): GenerationItem => bigView(item, props.message, props.convId)
 
-const canRemake = item =>
+const canRemake = (item: MediaCard): boolean =>
   item.status === 'done' && item.source === 'generated' && !!item.prompt && props.message.status !== 'streaming'
 
 // A card's pictures, oldest first. The one showing is the real one — what
 // the chat sends as context and references from then on — so the arrows ask
 // the server to swap it in (`version_shown` is its place among them all; a
 // failed redo has no picture, so it isn't one of them).
-const versionsOf = item => item.versions || []
-const versionCount = item => versionsOf(item).length + (item.file ? 1 : 0)
-const versionAt = item => item.version_shown ?? versionsOf(item).length
-const stepVersion = (item, by) => {
+const versionsOf = (item: MediaCard) => item.versions ?? []
+const versionCount = (item: MediaCard): number => versionsOf(item).length + (item.file ? 1 : 0)
+const versionAt = (item: MediaCard): number => item.version_shown ?? versionsOf(item).length
+function stepVersion(item: MediaCard, by: number): void {
   const next = versionAt(item) + by
   if (next >= 0 && next < versionCount(item)) emit('media-version', { mediaId: item.id, index: next })
 }
 
 // The box the pencil and Redo open: one prompt, applied to this picture alone.
 // `edit` sends the picture back as the reference; Redo just re-runs the words.
-const promptBox = ref(null)
-const openPrompt = (item, edit) => (promptBox.value = { mediaId: item.id, edit, text: edit ? '' : item.prompt || '' })
-function submitPrompt(item) {
+const promptBox = ref<{ mediaId: string; edit: boolean; text: string } | null>(null)
+function openPrompt(item: MediaCard, edit: boolean): void {
+  promptBox.value = { mediaId: item.id, edit, text: edit ? '' : (item.prompt ?? '') }
+}
+function submitPrompt(item: MediaCard): void {
   const box = promptBox.value
   if (!box?.text.trim()) return
   promptBox.value = null
   emit('regenerate', {
     mediaId: item.id,
-    model: item.model || null,
+    model: item.model ?? null,
     prompt: box.text.trim(),
     edit: box.edit,
     replace: true,
@@ -138,7 +116,7 @@ function submitPrompt(item) {
 
 const { copiedKey, copy } = useCopy()
 // The media item whose provider request and response are open (RequestDialog)
-const requestItem = ref(null)
+const requestItem = ref<MediaCard | null>(null)
 </script>
 
 <template>
@@ -150,7 +128,7 @@ const requestItem = ref(null)
         :alt="item.prompt || 'generated image'"
         loading="lazy"
         decoding="async"
-        @click="emit('open-media', bigView(item))"
+        @click="emit('open-media', big(item))"
       />
       <audio v-else-if="item.kind === 'audio'" :src="mediaUrl(item)" class="media-audio" controls></audio>
       <video v-else :src="mediaUrl(item)" controls loop playsinline preload="metadata"></video>
@@ -209,7 +187,7 @@ const requestItem = ref(null)
         <span v-else-if="item.kind === 'audio'">Composing audio… {{ elapsed() }}</span>
         <span v-else>Rendering video… {{ elapsed() }}</span>
       </div>
-      <div v-if="specs(item).length" class="pending-specs">{{ specs(item).join(' · ') }}</div>
+      <div v-if="specs.length" class="pending-specs">{{ specs.join(' · ') }}</div>
       <div v-if="item.prompt" class="pending-prompt" :title="item.prompt">{{ item.prompt }}</div>
     </div>
 
@@ -253,25 +231,25 @@ const requestItem = ref(null)
 
     <!-- Which model made this — the footer only names the chat model -->
     <div v-if="item.model || item.prompt" class="media-caption">
-      <span class="caption-text" :title="[item.model, ...specs(item)].join(' · ')">
+      <span class="caption-text" :title="[item.model, ...specs].join(' · ')">
         {{ KIND_ICON[item.kind] || '🎬' }} {{ shortModel(item.model)
-        }}<template v-if="specs(item).length">
-          · <span class="caption-specs">{{ specs(item).join(' · ') }}</span></template
+        }}<template v-if="specs.length">
+          · <span class="caption-specs">{{ specs.join(' · ') }}</span></template
         ><template v-if="item.cost"> · {{ fmtCost(item.cost) }}</template
         ><template v-if="item.credits">
           ·
           <span title="Billed to your Pollo account"
             >{{ item.credits }} credit{{ item.credits === 1 ? '' : 's' }}</span
           ></template
-        ><template v-if="item.params?.context">
+        ><template v-if="params.context">
           · <span title="The image model was given the conversation">💬 context</span></template
-        ><template v-if="item.params?.refs?.length">
+        ><template v-if="params.refs.length">
           ·
-          <span class="caption-refs" title="" @mouseenter="showRefs($event, item.params)" @mouseleave="refsPeek = null"
-            >🔗 {{ refsLabel(item.params) }}</span
+          <span class="caption-refs" title="" @mouseenter="showRefs($event, params)" @mouseleave="refsPeek = null"
+            >🔗 {{ refsLabel(params) }}</span
           ></template
-        ><template v-if="item.params?.upload_notice">
-          · <span class="caption-warn" :title="item.params.upload_notice">⚠ backup upload host</span></template
+        ><template v-if="params.upload_notice">
+          · <span class="caption-warn" :title="params.upload_notice">⚠ backup upload host</span></template
         >
       </span>
       <button
@@ -321,7 +299,7 @@ const requestItem = ref(null)
     v-if="requestItem"
     :request="requestItem.request"
     :response="requestItem.response"
-    :error="requestItem.status === 'error' ? requestItem.error : ''"
+    :error="requestItem.status === 'error' ? (requestItem.error ?? '') : ''"
     @close="requestItem = null"
   />
   <Teleport to="body">
@@ -331,7 +309,7 @@ const requestItem = ref(null)
         <img
           v-for="(r, i) in refsPeek.params.refs"
           :key="r"
-          :src="refUrl(r)"
+          :src="refUrl(convId, r)"
           :alt="r"
           :class="{ unused: refsPeek.params.refs_used != null && i >= refsPeek.params.refs_used }"
         />

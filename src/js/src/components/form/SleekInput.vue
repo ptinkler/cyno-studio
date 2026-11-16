@@ -1,18 +1,18 @@
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from 'vue'
 
-const props = defineProps({
-  modelValue: { type: String, default: '' },
-  label: { type: String, required: true },
-  type: { type: String, default: 'text' },
-  placeholder: { type: String, default: '' },
-  hint: { type: String, default: '' },
-})
-
-const emit = defineEmits(['update:modelValue'])
+const props = withDefaults(
+  defineProps<{ modelValue?: string; label: string; type?: string; placeholder?: string; hint?: string }>(),
+  { modelValue: '', type: 'text', placeholder: '', hint: '' },
+)
+const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 
 const focused = ref(false)
 const hasValue = computed(() => !!props.modelValue)
+
+function onInput(event: Event): void {
+  if (event.target instanceof HTMLInputElement) emit('update:modelValue', event.target.value)
+}
 </script>
 
 <template>
@@ -26,7 +26,7 @@ const hasValue = computed(() => !!props.modelValue)
         :type="type"
         :value="modelValue"
         :placeholder="placeholder"
-        @input="emit('update:modelValue', $event.target.value)"
+        @input="onInput"
         @focus="focused = true"
         @blur="focused = false"
       />

@@ -1,64 +1,75 @@
-<!-- A thread's Generations gallery: flattens the thread's message media into
-     cards (newest first) and hands them to GenerationGrid. Includes in-progress
-     (pending) and failed tiles too, so it doubles as the live generation queue. -->
-<script setup>
+<script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import type { MediaCard } from '../../composables/chatConversationsApi'
 import { fetchMediaPage } from '../../composables/useMedia'
 import { chatMediaUrl, chatMediaPreviewUrl } from '../../composables/useChat'
+import type { GenerationItem, UiMessage } from '../../composables/studioTypes'
 import GenerationGrid from './GenerationGrid.vue'
 
-const props = defineProps({
-  messages: { type: Array, default: () => [] },
-  convId: { type: [String, Number], default: '' },
-})
-const emit = defineEmits(['open', 'favourite'])
+const props = withDefaults(
+  defineProps<{ messages?: readonly UiMessage[] | undefined; convId?: string | undefined }>(),
+  { messages: () => [], convId: '' },
+)
+const emit = defineEmits<{ open: [item: GenerationItem]; favourite: [item: GenerationItem] }>()
 
-function toCard(m, item, originals) {
-  const hasFile = !!item.file
-  const url = f => chatMediaUrl(props.convId, f)
-  const thumb = f => (item.kind === 'image' ? chatMediaPreviewUrl(props.convId, f) : url(f))
+function toCard(
+  message: UiMessage,
+  item: MediaCard,
+  originals: ReadonlyMap<number | string, UiMessage>,
+): GenerationItem {
+  const file = item.file ?? ''
+  const url = (f: string): string => chatMediaUrl(props.convId, f)
+  const thumb = (f: string): string => (item.kind === 'image' ? chatMediaPreviewUrl(props.convId, f) : url(f))
   return {
     ...item,
-    message_id: m.id,
+    message_id: typeof message.id === 'number' ? message.id : null,
     conversation_id: props.convId,
-    model: item.model || m.model,
+    model: item.model ?? message.model,
     // What the user typed (the parent message), vs the prompt the model ended up with
-    original_prompt: originals.get(m.parent_id)?.content || '',
-    cost: m.cost,
-    created_at: m.created_at,
-    url: hasFile ? url(item.file) : '',
-    preview: hasFile ? thumb(item.file) : '',
+    original_prompt: (message.parent_id === null ? undefined : originals.get(message.parent_id)?.content) ?? '',
+    cost: message.cost,
+    created_at: message.created_at,
+    url: file ? url(file) : '',
+    preview: file ? thumb(file) : '',
   }
 }
 
 // Only generations — uploads on user messages aren't shown here
-const isGeneration = item =>
-  (item.kind === 'image' || item.kind === 'video') && (item.source || 'generated') === 'generated'
+const isGeneration = (item: MediaCard): boolean =>
+  (item.kind === 'image' || item.kind === 'video') && item.source === 'generated'
 
 const items = computed(() => {
   const originals = new Map(props.messages.map(m => [m.id, m]))
-  const out = props.messages.flatMap(m => (m.media || []).filter(isGeneration).map(i => toCard(m, i, originals)))
+  const out = props.messages.flatMap(m => m.media.filter(isGeneration).map(i => toCard(m, i, originals)))
   return out.reverse()
 })
 // Files in this thread's folder that no message records (loaded on demand: it
 // scans the whole library)
 const showOrphans = ref(false)
-const orphans = ref([])
+const orphans = ref<GenerationItem[]>([])
 const loadingOrphans = ref(false)
-async function loadOrphans() {
+async function loadOrphans(): Promise<void> {
   loadingOrphans.value = true
   try {
     const { items: all } = await fetchMediaPage({ origin: 'orphan' })
-    orphans.value = (all || [])
+    orphans.value = all
       .filter(i => i.conversation_id === props.convId)
-      .map(i => ({ ...i, status: 'done', file: i.name, preview: i.thumb_url || i.url, orphan: true }))
+      .map(i => ({
+        ...i,
+        conversation_id: props.convId,
+        message_id: null,
+        status: 'done',
+        file: i.name,
+        preview: i.thumb_url || i.url,
+        orphan: true,
+      }))
   } finally {
     loadingOrphans.value = false
   }
 }
-function toggleOrphans() {
+function toggleOrphans(): void {
   showOrphans.value = !showOrphans.value
-  if (showOrphans.value) loadOrphans()
+  if (showOrphans.value) void loadOrphans()
 }
 watch(
   () => props.convId,
@@ -68,8 +79,13 @@ watch(
   },
 )
 // Orphans have no message to manage: open the file itself, and no favouriting
-const onOpen = item => (item.orphan ? window.open(item.url, '_blank', 'noopener') : emit('open', item))
-const onFavourite = item => !item.orphan && emit('favourite', item)
+function onOpen(item: GenerationItem): void {
+  if (item.orphan) window.open(item.url, '_blank', 'noopener')
+  else emit('open', item)
+}
+function onFavourite(item: GenerationItem): void {
+  if (!item.orphan) emit('favourite', item)
+}
 const shownItems = computed(() => (showOrphans.value ? orphans.value : items.value))
 </script>
 

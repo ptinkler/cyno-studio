@@ -1,25 +1,22 @@
-<!-- Studio settings, shown in the center pane. Appearance is live; keys / VPN
-     summarise current setup (full management wires up next). -->
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue'
+import type { ThemeChoice } from '../../composables/useStudioTheme'
 import StudioAccount from './StudioAccount.vue'
 import StudioTitleModel from './StudioTitleModel.vue'
 import StudioKeys from './StudioKeys.vue'
 import StudioUploads from './StudioUploads.vue'
 import StudioVpnCard from './StudioVpnCard.vue'
 
-defineProps({
-  theme: { type: String, default: 'system' },
-})
-defineEmits(['set-theme', 'close', 'sign-out'])
+withDefaults(defineProps<{ theme?: ThemeChoice | undefined }>(), { theme: 'system' })
+defineEmits<{ 'set-theme': [theme: ThemeChoice]; close: []; 'sign-out': [] }>()
 
 // VPN controls are admin-only; StudioAccount reports the signed-in user
 const isAdmin = ref(false)
-function onUser(user) {
-  isAdmin.value = !!(user && user.is_admin)
+function onUser(user: { is_admin?: boolean } | null): void {
+  isAdmin.value = !!user?.is_admin
 }
 
-const THEMES = [
+const THEMES: readonly { id: ThemeChoice; label: string }[] = [
   { id: 'system', label: 'System' },
   { id: 'light', label: 'Light' },
   { id: 'dark', label: 'Dark' },

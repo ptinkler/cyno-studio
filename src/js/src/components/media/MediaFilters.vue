@@ -1,21 +1,23 @@
-<script setup>
-// Filter bar for the media library: v-model:filters is useMediaFilters' state
-defineProps({
-  showKind: { type: Boolean, default: true },
-})
-const filters = defineModel('filters', { type: Object, required: true })
+<script setup lang="ts">
+import type { MediaFilterState } from '../../composables/useMedia'
 
-const KINDS = [
+// Filter bar for the media library: v-model:filters is useMediaFilters' state
+withDefaults(defineProps<{ showKind?: boolean }>(), { showKind: true })
+const filters = defineModel<MediaFilterState>('filters', { required: true })
+
+type Choice = readonly [value: string, label: string]
+
+const KINDS: readonly Choice[] = [
   ['all', 'All'],
   ['image', 'Images'],
   ['video', 'Videos'],
 ]
-const SOURCES = [
+const SOURCES: readonly Choice[] = [
   ['all', 'Any source'],
   ['upload', 'Uploads'],
   ['generated', 'Creations'],
 ]
-const ORIGINS = [
+const ORIGINS: readonly Choice[] = [
   ['all', 'Everywhere'],
   ['library', 'Library'],
   ['chat', 'Chats'],
