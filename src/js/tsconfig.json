@@ -1,6 +1,6 @@
 {
-  // The TypeScript half of the migration: every .ts file, fully strict. It grows as files move over from
-  // tsconfig.legacy.json; when that one is empty it is deleted and this is the only config.
+  // Every .ts file, fully strict. The .vue components are still plain JavaScript; they are checked with
+  // vue-tsc once they move to <script setup lang="ts">.
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",

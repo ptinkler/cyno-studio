@@ -1,4 +1,6 @@
 import { reactive, computed } from 'vue'
+import type { Ref } from 'vue'
+import type { LibraryEntry } from './mediaApi'
 
 // The media library (see web/media/): the API wrappers are typed in mediaApi.ts and re-exported here.
 export {
@@ -14,10 +16,14 @@ export {
   importMediaToCharacter,
 } from './mediaApi'
 
+const hasTitle = (title: string | null | undefined): title is string =>
+  title !== null && title !== undefined && title !== ''
+
 /** Where an item came from, for display. */
-export function mediaOrigin(item) {
-  if (item.origin === 'chat') return item.conversation_title || 'Chat'
-  if (item.origin === 'orphan') return item.conversation_title ? `${item.conversation_title} (orphaned)` : 'Orphaned'
+export function mediaOrigin(item: Pick<LibraryEntry, 'origin' | 'conversation_title'>): string {
+  const title = item.conversation_title
+  if (item.origin === 'chat') return hasTitle(title) ? title : 'Chat'
+  if (item.origin === 'orphan') return hasTitle(title) ? `${title} (orphaned)` : 'Orphaned'
   return 'Library'
 }
 
@@ -25,7 +31,10 @@ export function mediaOrigin(item) {
  * Filters over a list of media items (a ref): kind, source, origin and a
  * text search over prompt / name / where it's from.
  */
-export function useMediaFilters(items, { kind = 'all', origin = 'all' } = {}) {
+export function useMediaFilters(
+  items: Ref<readonly LibraryEntry[]>,
+  { kind = 'all', origin = 'all' }: { kind?: string; origin?: string } = {},
+) {
   const filters = reactive({ kind, source: 'all', origin, q: '' })
   const filtered = computed(() => {
     const q = filters.q.trim().toLowerCase()

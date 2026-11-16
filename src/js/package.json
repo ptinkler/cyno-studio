@@ -13,7 +13,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc -p . && tsc -p tsconfig.legacy.json",
+    "typecheck": "tsc -p .",
     "gen:api": "openapi-typescript --default-non-nullable false --output src/api/schema.d.ts"
   },
   "dependencies": {

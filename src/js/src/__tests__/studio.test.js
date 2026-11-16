@@ -9,7 +9,13 @@ vi.mock('../composables/useChat', async importOriginal => ({
   fetchConversation: vi.fn(),
   fetchConversationSpend: vi.fn(async () => null),
   fetchChatStatus: vi.fn(async () => ({ openrouter: true })),
-  fetchChatModels: vi.fn(async () => ({ text: [{ id: 't1' }], image: [{ id: 'pollo/seedream' }] })),
+  fetchChatModels: vi.fn(async () => ({
+    errors: {},
+    text: [textModel({ id: 't1', name: 'T1' })],
+    image: [imageModel({ id: 'pollo/seedream', name: 'Seedream' })],
+    video: [],
+    audio: [],
+  })),
   createConversation: vi.fn(async body => ({ id: 'c1', kind: body.kind, title: 'New' })),
   sendChatMessage: vi.fn(),
   retryChatMessage: vi.fn(),
@@ -28,6 +34,7 @@ vi.mock('../composables/useDialog', async importOriginal => ({
 import * as chat from '../composables/useChat'
 import { confirmDialog } from '../composables/useDialog'
 import { useComposerSettings } from '../composables/useComposerSettings'
+import { conversation, imageModel, textModel } from './models'
 import { useStudio } from '../composables/useStudio'
 
 // Every name the Studio view reads off useStudio(): a refactor must keep them all
@@ -154,14 +161,14 @@ describe('useStudio', () => {
     const { studio, models } = setup()
     await studio.loadModels()
     await studio.loadLists()
-    expect(models.text).toEqual([{ id: 't1' }])
+    expect(models.text.map(m => m.id)).toEqual(['t1'])
     expect(studio.modelsLoading.value).toBe(false)
     expect(studio.threads.value).toEqual([])
   })
 
   it('opens a thread, unwrapping the conversation and its messages', async () => {
     chat.fetchConversation.mockResolvedValue({
-      conversation: { id: 'c9', kind: 'gallery', title: 'Old', instruction_ids: [3], character_ids: [4] },
+      conversation: conversation({ id: 'c9', kind: 'gallery', title: 'Old', instruction_ids: [3], character_ids: [4] }),
       messages: [{ id: 'm1', role: 'user', content: 'hi' }],
     })
     const { studio } = setup()
@@ -236,10 +243,10 @@ describe('useStudio', () => {
 
   it('retries a reply by resending from its message', async () => {
     chat.fetchConversation.mockResolvedValue({
-      conversation: { id: 'c9' },
+      conversation: conversation({ id: 'c9' }),
       messages: [
-        { id: 'u1', role: 'user', content: 'q' },
-        { id: 'a1', role: 'assistant', content: 'a', parent_id: 'u1' },
+        { id: 1, role: 'user', content: 'q' },
+        { id: 2, role: 'assistant', content: 'a', parent_id: 1 },
       ],
     })
     chat.retryChatMessage.mockResolvedValue(undefined)
@@ -248,31 +255,31 @@ describe('useStudio', () => {
     await studio.retry(studio.messages.value[1])
     expect(chat.retryChatMessage).toHaveBeenCalledOnce()
     expect(chat.retryChatMessage.mock.calls[0][0]).toBe('c9')
-    expect(chat.retryChatMessage.mock.calls[0][1].message_id).toBe('a1')
+    expect(chat.retryChatMessage.mock.calls[0][1].message_id).toBe(2)
   })
 
   it('asks before deleting an exchange, naming what goes, and shows the result', async () => {
     chat.fetchConversation.mockResolvedValue({
-      conversation: { id: 'c9' },
-      messages: [{ id: 'u1', role: 'user', content: 'q' }],
+      conversation: conversation({ id: 'c9' }),
+      messages: [{ id: 1, role: 'user', content: 'q' }],
     })
     chat.fetchDeleteInfo.mockResolvedValue({ other_versions: 2, other_messages: 0, media: { image: 2, video: 1 } })
     confirmDialog.mockResolvedValue({ checked: true })
-    chat.deleteChatExchange.mockResolvedValue({ messages: [] })
+    chat.deleteChatExchange.mockResolvedValue({ conversation: conversation({ id: 'c9' }), messages: [] })
     const { studio } = setup()
     await studio.openThread('c9')
     await studio.deleteExchange(studio.messages.value[0])
     const opts = confirmDialog.mock.calls[0][0]
     expect(opts.message).toContain('This also removes 2 other versions.')
     expect(opts.checkbox.label).toBe('Also delete the 2 images and 1 video it made')
-    expect(chat.deleteChatExchange).toHaveBeenCalledWith('u1', { deleteMedia: true })
+    expect(chat.deleteChatExchange).toHaveBeenCalledWith(1, { deleteMedia: true })
     expect(studio.messages.value).toEqual([])
   })
 
   it('leaves the exchange alone when the dialog is declined', async () => {
     chat.fetchConversation.mockResolvedValue({
-      conversation: { id: 'c9' },
-      messages: [{ id: 'u1', role: 'user', content: 'q' }],
+      conversation: conversation({ id: 'c9' }),
+      messages: [{ id: 1, role: 'user', content: 'q' }],
     })
     chat.fetchDeleteInfo.mockResolvedValue({})
     confirmDialog.mockResolvedValue(null)

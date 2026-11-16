@@ -1,5 +1,8 @@
-// Status, balances, defaults, instructions and spaces are typed in chatSettingsApi.ts; re-exported so
-// everything chat-related is still imported from here.
+// The chat API in one place. Everything is implemented in the typed modules below (each owns one area and
+// takes its types from the backend); this file only gathers them, so composables import from one path and
+// tests have one seam to mock.
+
+// Status, balances, defaults, instructions and spaces
 export {
   fetchChatStatus,
   fetchOpenRouterCredits,
