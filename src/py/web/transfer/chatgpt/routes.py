@@ -23,6 +23,7 @@ from web.core.metadata import current_tenant
 from web.transfer import export as chat_export
 from web.transfer.chatgpt.common import NOT_AN_EXPORT
 from web.transfer.chatgpt.importer import run_import
+from web.transfer.limits import MAX_IMPORT_BYTES
 from web.transfer.schemas import ImportFile, ImportJob, ImportStatus, UploadCancelled, UploadProgress, UploadStarted
 from web.types import JsonValue
 from web.uploads.files import safe_filename
@@ -134,7 +135,7 @@ class StartUpload(BaseModel):
     """Original filename and total byte size for a chunked export upload."""
 
     name: str
-    size: int = Field(gt=0)
+    size: int = Field(gt=0, le=MAX_IMPORT_BYTES)
 
 
 def _upload_paths(upload_id: str) -> tuple[Path, Path]:

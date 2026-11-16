@@ -154,11 +154,23 @@ class UserMixin(DBBase):
                 )
                 session.add(user)
             user.is_admin = True
+            if user.password_hash:  # a new password ends the sessions the old one made
+                user.session_version += 1
             user.password_hash = password_hash
             session.commit()
             session.refresh(user)
             session.expunge(user)
             return user
+
+    def bump_session_version(self, user_id: str) -> int:
+        """Invalidate every login cookie made so far for this user; return the version new ones carry."""
+        with self._session() as session:
+            user = session.get(User, user_id)
+            if not user:
+                return 0
+            user.session_version += 1
+            session.commit()
+            return user.session_version
 
     def set_user_password(self, user_id: str, password_hash: str) -> None:
         """Replace a user's stored password hash (e.g. after a transparent rehash)."""

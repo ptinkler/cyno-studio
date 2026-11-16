@@ -89,3 +89,14 @@ class TestLogin:
         assert ok.status_code == 200
         assert ok.json()["email"] == "admin@x.com"
         assert client.cookies.get("user_session")
+
+
+def test_unknown_email_still_spends_the_time_of_a_password_check(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unknown email must not answer faster than a wrong password, or the difference lists the accounts."""
+    spent: list[str] = []
+    monkeypatch.setattr(api_mod, "spend_verification_time", spent.append)
+    r = client.post("/api/auth/login", json={"email": "nobody@example.com", "password": "pw"})
+    assert r.status_code == 401
+    assert spent == ["pw"]

@@ -632,7 +632,7 @@ describe('ChatMessage earlier versions of a picture', () => {
     const chosen: MediaCard = { ...versioned, file: 'img_a.png', versions: [{ file: 'img_new.png' }], version_shown: 0 }
     const w = mount(ChatMessage, { props: { ...reply([chosen]).props, canSwitch: true } })
     expect(w.find('.ver-nav span').text()).toBe('1/2')
-    expect(w.find('img').attributes('src')).toContain('img_a.png')
+    expect(w.find('.media-item img').attributes('src')).toContain('img_a.png')
     const [back, forward] = w.findAll('.ver-nav button')
     expect(back?.attributes('disabled')).toBeDefined()
     expect(forward?.attributes('disabled')).toBeUndefined()
@@ -748,7 +748,7 @@ describe('ChatMessage renders one element per media kind', () => {
 
   it('an image is an <img> and nothing else', () => {
     const w = mount(ChatMessage, media({ kind: 'image', file: 'a.png' }))
-    expect(w.findAll('img')).toHaveLength(1)
+    expect(w.findAll('.media-item img')).toHaveLength(1)
     expect(w.find('video').exists()).toBe(false)
     expect(w.find('audio').exists()).toBe(false)
   })
@@ -762,7 +762,7 @@ describe('ChatMessage renders one element per media kind', () => {
   it('a video is a <video> and not an <img>', () => {
     const w = mount(ChatMessage, media({ kind: 'video', file: 'a.mp4' }))
     expect(w.findAll('video')).toHaveLength(1)
-    expect(w.find('img').exists()).toBe(false)
+    expect(w.find('.media-item img').exists()).toBe(false)
   })
 
   it('audio is an <audio> and not a <video>', () => {

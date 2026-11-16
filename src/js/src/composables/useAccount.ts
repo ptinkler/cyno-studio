@@ -7,6 +7,8 @@ type UploadPrefsUpdate = components['schemas']['UploadPrefsUpdate']
 // Account + per-user keys (OAuth sign-in, admin, provider keys).
 export const fetchMe = () => api.get('/api/auth/me')
 export const fetchAuthProviders = () => api.get('/api/auth/providers')
+// Ends every other device's login; this one stays signed in.
+export const signOutOtherDevices = () => api.post('/api/auth/logout-others')
 export const fetchUserKeys = () => api.get('/api/keys')
 export const saveUserKeys = (keys: Record<string, string | null>) => api.put('/api/keys', { keys })
 

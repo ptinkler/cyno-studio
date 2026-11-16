@@ -52,6 +52,8 @@ class User(Base):
     provider: Mapped[str] = mapped_column(String(32))  # google | microsoft | x | local
     provider_sub: Mapped[str] = mapped_column(String(255))  # stable per-provider user id
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Login cookies carry the version they were made at; raising it signs every other device out
+    session_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     # argon2id hash for a local (email + password) admin account; null for OAuth users
     password_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Per-user provider keys, JSON {"pollo": "...", "venice": "...", "openrouter": "..."}

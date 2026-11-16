@@ -10,3 +10,4 @@ FROM mirror.gcr.io/library/nginx:alpine
 LABEL org.opencontainers.image.source="https://github.com/ptinkler/cyno-studio"
 COPY --from=frontend-builder /build/src/js/dist /usr/share/nginx/html
 COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx/security-headers.inc /etc/nginx/security-headers.inc

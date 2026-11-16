@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, NotRequired, TypedDict
 
 from web.jsonutil import as_object, as_objects, loads
+from web.transfer.limits import EntryTooLargeError, read_entry
 from web.types import JsonValue
 
 if TYPE_CHECKING:
@@ -65,10 +66,10 @@ class Export:
             m = _FILE_ID.match(name.rsplit("/", 1)[-1])
             if m and not name.endswith("/"):
                 self.files.setdefault(m.group(1), name)
-        self.conversations = as_objects(loads(zf.read("conversations.json")))
+        self.conversations = as_objects(loads(read_entry(zf, "conversations.json")))
         self.library: dict[str, list[Mapping[str, JsonValue]]] = {}  # chat id → its files
         if "library_files.json" in zf.namelist():
-            for f in as_objects(loads(zf.read("library_files.json"))):
+            for f in as_objects(loads(read_entry(zf, "library_files.json"))):
                 thread_id = f.get("origination_thread_id")
                 if isinstance(thread_id, str) and f.get("file_id"):
                     self.library.setdefault(thread_id, []).append(f)
@@ -76,7 +77,12 @@ class Export:
     def read(self, file_id: str) -> bytes | None:
         """The bytes of an exported file (None if the zip doesn't have it)."""
         name = self.files.get(file_id)
-        return self.zf.read(name) if name else None
+        if not name:
+            return None
+        try:
+            return read_entry(self.zf, name)
+        except EntryTooLargeError:
+            return None  # a file that unpacks to far more than any picture or clip: left out
 
 
 def _chain(data: Mapping[str, JsonValue]) -> list[Mapping[str, JsonValue]]:

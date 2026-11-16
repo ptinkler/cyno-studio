@@ -40,6 +40,7 @@ from web.chat import ConversationCreate, api_create_conversation, conversation_d
 from web.core.metadata import get_db, iso
 from web.core.metadata.imports import ImportStamp
 from web.core.metadata.models import ChatConversation
+from web.transfer.limits import EntryTooLargeError, copy_entry, is_media_file
 from web.transfer.schemas import ExportableChat, ExportableChats
 from web.types import JsonValue
 from web.uploads.files import safe_filename
@@ -330,11 +331,13 @@ def _copy_files(zf: zipfile.ZipFile, src_id: str, conv_id: str, stats: dict[str,
             continue
         file = safe_filename(name[len(prefix) :])
         target = folder / file
-        if not file or target.exists():
+        if not is_media_file(file) or target.exists():
+            continue  # a chat's folder holds pictures, videos and audio, so that is all that is unpacked
+        try:
+            copy_entry(zf, name, target)
+        except (EntryTooLargeError, zipfile.BadZipFile):
+            log.warning("import: skipped %s (too large or damaged)", name)
             continue
-        with zf.open(name) as src, target.open("wb") as dst:
-            while chunk := src.read(1 << 20):
-                dst.write(chunk)
         written.append(target)
         stats["images"] = int(_num(stats.get("images")) or 0) + 1
     return written

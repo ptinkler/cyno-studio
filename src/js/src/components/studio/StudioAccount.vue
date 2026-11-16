@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { fetchAuthProviders, authLoginUrl, PROVIDER_LABELS } from '../../composables/useAccount'
+import { ref, inject, onMounted } from 'vue'
+import { showToastKey, noToast } from '../../injection'
+import { fetchAuthProviders, authLoginUrl, signOutOtherDevices, PROVIDER_LABELS } from '../../composables/useAccount'
+import { messageOf } from '../../utils/errors'
 
 type Providers = Awaited<ReturnType<typeof fetchAuthProviders>>
 
 const emit = defineEmits<{ user: [user: Providers['user']]; 'sign-out': [] }>()
 
+const showToast = inject(showToastKey, noToast)
 const user = ref<Providers['user']>(null)
 const providers = ref<string[]>([])
 
@@ -17,6 +20,16 @@ async function load(): Promise<void> {
     emit('user', found.user)
   } catch {
     user.value = null
+  }
+}
+
+// Anyone signed in as this account on another device (or a stolen cookie) is signed out; this device isn't
+async function signOutOthers(): Promise<void> {
+  try {
+    await signOutOtherDevices()
+    showToast('Signed out of your other devices', 'success')
+  } catch (e) {
+    showToast(messageOf(e), 'error')
   }
 }
 
@@ -34,6 +47,10 @@ onMounted(load)
         <div class="em">{{ user.email }} · {{ PROVIDER_LABELS[user.provider] || user.provider }}</div>
       </div>
       <button class="btn" @click="$emit('sign-out')">Sign out</button>
+    </div>
+    <div v-if="user" class="crow">
+      <span class="cnote">Signed in somewhere else, or lost a device?</span>
+      <button class="btn btn-sm" @click="signOutOthers">Sign out other devices</button>
     </div>
     <template v-else>
       <div class="providers">

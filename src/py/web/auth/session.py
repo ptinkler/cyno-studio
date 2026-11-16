@@ -12,6 +12,7 @@ import hmac
 import logging
 import os
 import time
+from typing import NamedTuple
 
 from fastapi import Request, Response
 
@@ -19,7 +20,8 @@ from web.core.env import bool_env, bool_env_or_none
 
 log = logging.getLogger(__name__)
 
-_TOKEN_PARTS = 3  # a signed token is <payload>.<expiry>.<signature>
+_LEGACY_PARTS = 3  # <user id>.<expiry>.<signature>: made before cookies carried a version (that is, version 0)
+_TOKEN_PARTS = 4  # <user id>.<version>.<expiry>.<signature>
 
 # The session token and the cookie carrying it expire together.
 SESSION_TTL = 60 * 60 * 24 * 30  # 30 days
@@ -29,10 +31,6 @@ USER_COOKIE = "user_session"
 
 def _b64(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
-
-
-def _unb64(text: str) -> bytes:
-    return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
 
 
 #
@@ -84,11 +82,22 @@ def check_secrets() -> None:
             log.warning("%s is still the example value from .env.example: anyone can read what it protects", name)
 
 
-def make_user_session(user_id: str) -> str:
-    """A signed cookie value for a signed-in user id."""
-    payload = f"{user_id}.{int(time.time()) + SESSION_TTL}"
-    sig = hmac.new(user_secret(), payload.encode(), hashlib.sha256).digest()
-    return f"{payload}.{_b64(sig)}"
+def signing_key(purpose: str) -> bytes:
+    """A signing key for one purpose, derived from the secret, so a signature made for one use is no good for another.
+
+    Login cookies keep the key `user_secret` gives (changing it would sign everyone out).
+    """
+    return hmac.new(user_secret(), f"purpose:{purpose}".encode(), hashlib.sha256).digest()
+
+
+def _sign(payload: str) -> str:
+    return _b64(hmac.new(user_secret(), payload.encode(), hashlib.sha256).digest())
+
+
+def make_user_session(user_id: str, version: int = 0) -> str:
+    """A signed cookie value for a signed-in user id, good while the user's session version is still `version`."""
+    payload = f"{user_id}.{version}.{int(time.time()) + SESSION_TTL}"
+    return f"{payload}.{_sign(payload)}"
 
 
 def cookie_secure(request: Request) -> bool:
@@ -110,14 +119,14 @@ def cookie_secure(request: Request) -> bool:
     return host not in {"localhost", "127.0.0.1", "::1"}
 
 
-def set_user_cookie(response: Response, request: Request, user_id: str) -> None:
+def set_user_cookie(response: Response, request: Request, user_id: str, version: int = 0) -> None:
     """Set the signed-in user's session cookie on the response.
 
     Password login, OAuth, and development login all set the cookie here.
     """
     response.set_cookie(
         key=USER_COOKIE,
-        value=make_user_session(user_id),
+        value=make_user_session(user_id, version),
         httponly=True,
         samesite="lax",  # lax so the OAuth redirect back from the provider keeps it
         secure=cookie_secure(request),
@@ -125,24 +134,30 @@ def set_user_cookie(response: Response, request: Request, user_id: str) -> None:
     )
 
 
-def resolve_user_session(token: str | None) -> str | None:
-    """Return the authenticated user ID, or None for an invalid session.
+class SessionClaim(NamedTuple):
+    """Who a valid login cookie is for, and the session version it was made at."""
 
-    Session IDs are UUID hex strings and therefore contain no periods.
+    user_id: str
+    version: int
+
+
+def resolve_user_session(token: str | None) -> SessionClaim | None:
+    """Return who a login cookie is for, or None when it is forged, malformed or expired.
+
+    Whether its version is still the user's current one is for the caller to check.
+    User ids are UUID hex strings and therefore contain no periods.
     """
     if not token:
         return None
     parts = token.strip().split(".")
-    if len(parts) != _TOKEN_PARTS:
+    if len(parts) not in (_LEGACY_PARTS, _TOKEN_PARTS):
         return None
-    user_id, exp_s, sig_b64 = parts
-    payload = f"{user_id}.{exp_s}"
-    expected = hmac.new(user_secret(), payload.encode(), hashlib.sha256).digest()
+    *claims, sig_b64 = parts
+    user_id, version, exp_s = (claims[0], "0", claims[1]) if len(claims) == _LEGACY_PARTS - 1 else claims
+    expected = _sign(".".join(claims))
     try:
-        if not hmac.compare_digest(expected, _unb64(sig_b64)):
+        if not hmac.compare_digest(expected, sig_b64) or time.time() > int(exp_s):
             return None
-        if time.time() > int(exp_s):
-            return None
+        return SessionClaim(user_id, int(version))
     except (ValueError, TypeError):
         return None
-    return user_id

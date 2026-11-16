@@ -147,6 +147,21 @@ class TestImport:
         assert (conversation_dir(copy_id) / "img_fox.png").read_bytes() == png_bytes()
         assert db.get_chat_spend(copy_id) == (0.04, 8)
 
+    def test_only_media_files_are_unpacked(self, imp: None, client: TestClient, db: MetadataDB, tmp_path: Path) -> None:
+        """A zip can carry other files in a chat's folder (a page, an .svg); they are left in the zip."""
+        conv = _chat_with_branches(client, db)
+        path = _export(client, [conv["id"]], tmp_path)
+        with zipfile.ZipFile(path, "a") as zf:
+            zf.writestr(f"chats/{conv['id']}/page.html", "<script>1</script>")
+            zf.writestr(f"chats/{conv['id']}/pic.svg", "<svg onload='1'/>")
+        client.delete(f"/api/chat/conversations/{conv['id']}")
+        imp_mod.run_import(path)
+        [copy] = _copies(client, "Foxes")
+        folder = conversation_dir(text(copy, "id"))
+        assert (folder / "img_fox.png").is_file()
+        assert not (folder / "page.html").exists()
+        assert not (folder / "pic.svg").exists()
+
     def test_importing_again_changes_nothing(
         self, imp: None, client: TestClient, db: MetadataDB, tmp_path: Path
     ) -> None:

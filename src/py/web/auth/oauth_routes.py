@@ -84,5 +84,5 @@ async def callback(provider: str, request: Request) -> RedirectResponse:
 
     user = db.upsert_oauth_user(profile, is_admin=is_admin)
     resp = RedirectResponse(url="/", status_code=302)
-    set_user_cookie(resp, request, user.id)  # samesite=lax survives the redirect back
+    set_user_cookie(resp, request, user.id, user.session_version)  # samesite=lax survives the redirect back
     return resp

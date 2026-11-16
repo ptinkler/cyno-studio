@@ -57,6 +57,14 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _fresh_login_throttle() -> Iterator[None]:
+    """Every test starts, and leaves, with no failed logins counted (the test client is one address)."""
+    web.api.reset_login_attempts()
+    yield
+    web.api.reset_login_attempts()
+
+
+@pytest.fixture(autouse=True)
 def _guard_real_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Redirect config paths to a temp directory.
 

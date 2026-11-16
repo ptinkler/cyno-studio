@@ -61,10 +61,12 @@ def admit(email: str | None, *, is_first_user: bool) -> tuple[bool, bool]:
 
 def current_user(user_cookie: str | None) -> User | None:
     """The signed-in User for a user-session cookie (OAuth), or None."""
-    user_id = resolve_user_session(user_cookie)
-    if not user_id:
+    claim = resolve_user_session(user_cookie)
+    if not claim:
         return None
-    return get_db().get_user(user_id)
+    user = get_db().get_user(claim.user_id)
+    # A cookie from before the user signed out their other devices (or changed their password) is dead
+    return user if user and user.session_version == claim.version else None
 
 
 def resolve_current_user(user_cookie: str | None) -> User | None:

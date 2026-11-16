@@ -106,5 +106,5 @@ async def dev_login(response: Response, request: Request) -> LoginResult:
             "Use a fresh dev database.",
         )
     user = dev_user()
-    set_user_cookie(response, request, user.id)
+    set_user_cookie(response, request, user.id, user.session_version)
     return login_result(user)
