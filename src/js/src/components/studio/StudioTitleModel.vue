@@ -57,13 +57,13 @@ async function pick(id: string): Promise<void> {
 }
 .hint {
   margin-top: 2px;
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--smuted);
   line-height: 1.45;
-  max-width: 360px;
+  max-width: 24rem;
 }
 .crow :deep(.model-picker) {
-  flex: 0 1 240px;
-  min-width: 190px;
+  flex: 0 1 16rem;
+  min-width: 12.6667rem;
 }
 </style>

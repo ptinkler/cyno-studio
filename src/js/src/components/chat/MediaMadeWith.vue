@@ -87,19 +87,21 @@ function showRefs(event: MouseEvent, shown: CardParams): void {
 <style scoped>
 .foot-info {
   display: flex;
-  flex: 1 1 200px;
+  flex: 1 1 14rem;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 8px;
+  align-content: center;
+  gap: 0.2667rem 0.5333rem;
   min-width: 0;
+  min-height: 2rem; /* level with the buttons beside it */
 }
 .foot-model {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 0.3333rem;
   min-width: 0;
   color: var(--sfg);
-  font-size: 13px;
+  font-size: 0.8667rem;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
@@ -109,13 +111,13 @@ function showRefs(event: MouseEvent, shown: CardParams): void {
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 1px 7px;
+  gap: 0.2667rem;
+  padding: 1px 0.4667rem;
   border: 1px solid var(--sborder);
-  border-radius: 6px;
+  border-radius: 0.4rem;
   background: var(--shover);
   color: var(--smuted);
-  font-size: 12px;
+  font-size: 0.8rem;
   white-space: nowrap;
 }
 .chip.caption-warn {
@@ -130,39 +132,39 @@ function showRefs(event: MouseEvent, shown: CardParams): void {
   position: fixed;
   z-index: 1000;
   transform: translateY(calc(-100% - 6px));
-  max-width: 340px;
-  padding: 8px;
+  max-width: 22.6667rem;
+  padding: 0.5333rem;
   background: var(--spanel2);
   border: 1px solid var(--sborder);
   border-radius: var(--r);
   box-shadow: var(--shadow-pop);
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--text2);
   pointer-events: none;
 }
 .refs-peek-title {
-  margin-bottom: 6px;
+  margin-bottom: 0.4rem;
 }
 .refs-peek-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 0.4rem;
 }
 .refs-peek-grid img {
-  width: 72px;
-  height: 72px;
+  width: 4.8rem;
+  height: 4.8rem;
   object-fit: cover;
-  border-radius: 4px;
+  border-radius: 0.2667rem;
   background: var(--surface2);
 }
 /* A reference image that isn't served here: a gap instead of a broken picture */
 .ref-gone {
   display: grid;
   place-items: center;
-  width: 72px;
-  height: 72px;
+  width: 4.8rem;
+  height: 4.8rem;
   border: 1px dashed var(--sborder);
-  border-radius: 4px;
+  border-radius: 0.2667rem;
   color: var(--sfaint);
 }
 .refs-peek-grid img.unused {

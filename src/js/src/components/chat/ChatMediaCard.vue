@@ -317,7 +317,7 @@ const requestItem = ref<MediaCard | null>(null)
   display: block;
   width: 100%;
   height: auto;
-  max-height: 560px;
+  max-height: 37.3333rem;
   object-fit: contain;
   background: #000;
 }
@@ -326,8 +326,8 @@ const requestItem = ref<MediaCard | null>(null)
 }
 .media-overlay {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 0.5333rem;
+  right: 0.5333rem;
   opacity: 0;
   transition: opacity 0.2s;
 }
@@ -336,16 +336,16 @@ const requestItem = ref<MediaCard | null>(null)
 }
 .media-overlay {
   display: flex;
-  gap: 6px;
+  gap: 0.4rem;
 }
 .media-btn {
   border: none;
   cursor: pointer;
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 2.1333rem;
+  height: 2.1333rem;
+  border-radius: 0.5333rem;
   background: rgba(0, 0, 0, 0.65);
   color: white;
   text-decoration: none;
@@ -356,16 +356,16 @@ const requestItem = ref<MediaCard | null>(null)
 .media-caption {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 10px;
-  padding: 8px 10px;
-  font-size: 12px;
+  align-items: flex-start;
+  gap: 0.4rem 0.6667rem;
+  padding: 0.5333rem 0.6667rem;
+  font-size: 0.8rem;
   color: var(--smuted);
   border-top: 1px solid var(--sborder);
 }
 .foot-actions {
   display: flex;
-  gap: 6px;
+  gap: 0.4rem;
   margin-left: auto;
 }
 .media-pending {
@@ -375,8 +375,8 @@ const requestItem = ref<MediaCard | null>(null)
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 16px;
+  gap: 0.6667rem;
+  padding: 1.0667rem;
   overflow: hidden;
 }
 .media-item.image .media-pending {
@@ -401,17 +401,17 @@ const requestItem = ref<MediaCard | null>(null)
   position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5333rem;
   font-size: 0.85rem;
 }
 .pending-specs {
   position: relative;
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--accent2);
 }
 .pending-prompt {
   position: relative;
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--text2);
   text-align: center;
   max-width: 90%;
@@ -423,8 +423,8 @@ const requestItem = ref<MediaCard | null>(null)
 .media-error {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 12px 14px;
+  gap: 0.2667rem;
+  padding: 0.8rem 0.9333rem;
   font-size: 0.82rem;
   color: var(--sdanger);
   background: var(--sdanger-soft);
@@ -444,19 +444,19 @@ const requestItem = ref<MediaCard | null>(null)
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 0.4rem;
+  margin-top: 0.5333rem;
 }
 .retry-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 0.3333rem;
   background: none;
   border: 1px solid var(--border);
   border-radius: var(--r);
-  padding: 4px 10px;
+  padding: 0.2667rem 0.6667rem;
   color: var(--text);
-  font-size: 12px;
+  font-size: 0.8rem;
   cursor: pointer;
 }
 .retry-btn:hover {
@@ -472,21 +472,21 @@ const requestItem = ref<MediaCard | null>(null)
 .media-item .media-audio {
   display: block;
   width: 100%;
-  min-width: 260px;
+  min-width: 17.3333rem;
 }
 /* ‹ 1/2 › over a picture that has earlier versions */
 .ver-nav {
   position: absolute;
-  bottom: 6px;
-  left: 6px;
+  bottom: 0.4rem;
+  left: 0.4rem;
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 1px 4px;
-  border-radius: 999px;
+  padding: 1px 0.2667rem;
+  border-radius: 66.6rem;
   background: rgb(0 0 0 / 55%);
   color: #fff;
-  font-size: 12px;
+  font-size: 0.8rem;
   opacity: 0;
   transition: opacity 0.12s;
 }
@@ -495,7 +495,7 @@ const requestItem = ref<MediaCard | null>(null)
   opacity: 1;
 }
 .ver-nav button {
-  padding: 0 3px;
+  padding: 0 0.2rem;
   border: none;
   background: none;
   color: inherit;

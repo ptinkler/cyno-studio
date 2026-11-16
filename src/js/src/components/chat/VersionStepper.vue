@@ -40,12 +40,12 @@ const position = computed(() =>
 .stepper {
   display: inline-flex;
   align-items: center;
-  height: 30px;
+  height: 2rem;
   border: 1px solid var(--sborder);
   border-radius: var(--r);
   background: var(--spanel2);
   color: var(--smuted);
-  font-size: 12px;
+  font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -53,7 +53,7 @@ const position = computed(() =>
   display: grid;
   place-items: center;
   align-self: stretch;
-  width: 26px;
+  width: 1.7333rem;
   border: none;
   background: none;
   color: inherit;

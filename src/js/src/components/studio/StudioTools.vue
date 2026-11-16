@@ -69,15 +69,15 @@ const TOOLS: readonly { route: string; path: string; label: string; note: string
   border: 1px solid var(--sborder);
   background: var(--sbg);
   border-radius: var(--r-lg);
-  padding: 6px;
+  padding: 0.4rem;
 }
 .link {
   text-decoration: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
+  gap: 0.8rem;
+  padding: 0.6667rem 0.8rem;
   border: none;
   border-radius: var(--r);
   background: none;
@@ -95,11 +95,11 @@ const TOOLS: readonly { route: string; path: string; label: string; note: string
   min-width: 0;
 }
 .llabel {
-  font-size: 13.5px;
+  font-size: 0.9rem;
   font-weight: 500;
 }
 .lnote {
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--smuted);
 }
 .link .ic {

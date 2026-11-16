@@ -169,7 +169,7 @@ async function close(): Promise<void> {
 </script>
 
 <template>
-  <BaseDialog :open="!!target" :title="title" width="540px" form @close="close" @submit="save">
+  <BaseDialog :open="!!target" :title="title" width="36rem" form @close="close" @submit="save">
     <input
       ref="nameInput"
       v-model="name"
@@ -234,32 +234,32 @@ async function close(): Promise<void> {
 
 <style scoped>
 .name {
-  padding: 8px 11px;
-  font-size: 15px;
+  padding: 0.5333rem 0.7333rem;
+  font-size: 1rem;
   font-weight: 600;
 }
 
 textarea {
-  min-height: 220px;
-  padding: 9px 11px;
+  min-height: 14.6667rem;
+  padding: 0.6rem 0.7333rem;
 }
 
 .members {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  max-height: 200px;
+  gap: 0.4rem;
+  max-height: 13.3333rem;
   overflow-y: auto;
 }
 
 .chip {
   display: inline-flex;
   align-items: center;
-  max-width: 240px;
-  gap: 6px;
-  padding: 3px 4px 3px 10px;
+  max-width: 16rem;
+  gap: 0.4rem;
+  padding: 0.2rem 0.2667rem 0.2rem 0.6667rem;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 66.6rem;
   background: var(--surface2);
   font-size: 0.8rem;
 }
@@ -277,8 +277,8 @@ textarea {
 
 .dot {
   flex-shrink: 0;
-  width: 7px;
-  height: 7px;
+  width: 0.4667rem;
+  height: 0.4667rem;
   border-radius: 50%;
 }
 
@@ -288,9 +288,9 @@ textarea {
   border: none;
   color: var(--text2);
   cursor: pointer;
-  font-size: 11px;
-  padding: 2px 5px;
-  border-radius: 999px;
+  font-size: 0.7333rem;
+  padding: 2px 0.3333rem;
+  border-radius: 66.6rem;
 }
 
 .chip-x:hover {
@@ -304,20 +304,20 @@ textarea {
 
 .adder input {
   width: 100%;
-  padding: 7px 10px;
-  border-radius: 8px;
+  padding: 0.4667rem 0.6667rem;
+  border-radius: 0.5333rem;
   font-size: 0.85rem;
 }
 
 .adder-menu {
   position: absolute;
   z-index: 5;
-  top: calc(100% + 4px);
+  top: calc(100% + 0.2667rem);
   left: 0;
   right: 0;
-  max-height: 220px;
+  max-height: 14.6667rem;
   overflow-y: auto;
-  padding: 4px;
+  padding: 0.2667rem;
   background: var(--spanel2);
   border: 1px solid var(--sborder);
   border-radius: var(--r-lg);
@@ -329,10 +329,10 @@ textarea {
 .item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
+  gap: 0.5333rem;
+  padding: 0.4rem 0.5333rem;
   border: none;
-  border-radius: 6px;
+  border-radius: 0.4rem;
   background: none;
   color: var(--text);
   text-align: left;
@@ -347,6 +347,6 @@ textarea {
 .empty {
   font-size: 0.8rem;
   color: var(--text2);
-  padding: 4px 2px;
+  padding: 0.2667rem 2px;
 }
 </style>

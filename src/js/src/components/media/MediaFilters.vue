@@ -52,18 +52,18 @@ const ORIGINS: readonly Choice[] = [
 .media-filters {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 0.5333rem;
   align-items: center;
 }
 
 select,
 input {
-  padding: 5px 9px;
-  font-size: 12.5px;
+  padding: 0.3333rem 0.6rem;
+  font-size: 0.8333rem;
 }
 
 input {
   flex: 1;
-  min-width: 160px;
+  min-width: 10.6667rem;
 }
 </style>

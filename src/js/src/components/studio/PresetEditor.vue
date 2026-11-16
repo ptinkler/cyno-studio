@@ -85,7 +85,7 @@ async function load(): Promise<void> {
     :open="open"
     :title="props.preset ? props.preset.name : 'New preset'"
     label="Preset"
-    width="520px"
+    width="34.6667rem"
     @close="emit('close')"
   >
     <p class="sub">
@@ -168,11 +168,11 @@ async function load(): Promise<void> {
 .sub {
   font-size: 0.8rem;
   color: var(--text2);
-  margin-bottom: 8px;
+  margin-bottom: 0.5333rem;
   line-height: 1.45;
 }
 label {
-  margin-top: 4px;
+  margin-top: 0.2667rem;
 }
 input,
 select {
@@ -181,11 +181,11 @@ select {
 .pickers {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0.5333rem;
 }
 .row {
   display: flex;
-  gap: 8px;
+  gap: 0.5333rem;
 }
 .row select {
   flex: 1;

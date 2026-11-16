@@ -96,10 +96,10 @@ function onDrop(event: DragEvent): void {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px;
+  gap: 0.4rem;
+  padding: 0.5333rem;
   border: 1px solid var(--sborder);
-  border-radius: 8px;
+  border-radius: 0.5333rem;
   background: var(--spanel2);
 }
 .prompt-box.drag {
@@ -107,9 +107,9 @@ function onDrop(event: DragEvent): void {
 }
 .prompt-box textarea {
   width: 100%;
-  padding: 6px 8px;
+  padding: 0.4rem 0.5333rem;
   border: 1px solid var(--sborder);
-  border-radius: 6px;
+  border-radius: 0.4rem;
   background: var(--sbg);
   color: var(--text);
   font: inherit;
@@ -119,11 +119,11 @@ function onDrop(event: DragEvent): void {
 .prompt-box-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5333rem;
 }
 .prompt-box-hint {
   flex: 1;
   color: var(--smuted);
-  font-size: 12px;
+  font-size: 0.8rem;
 }
 </style>

@@ -5,7 +5,7 @@
   overflow: hidden;
   background: var(--sbg2);
   color: var(--sfg);
-  font-size: 15px; /* base for inherited text */
+  font-size: 1rem; /* base for inherited text */
 }
 .center {
   flex: 1;
@@ -18,14 +18,14 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px 10px;
-  min-height: 52px;
-  padding: 10px 18px;
+  gap: 0.5333rem 0.6667rem;
+  min-height: 3.4667rem;
+  padding: 0.6667rem 1.2rem;
   border-bottom: 1px solid var(--sborder2);
 }
 .ttitle {
   font-weight: 600;
-  flex: 1 1 120px; /* take the slack and truncate, so the controls never overflow */
+  flex: 1 1 8rem; /* take the slack and truncate, so the controls never overflow */
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -35,7 +35,7 @@
   flex: 1;
 }
 .gcount {
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--smuted);
 }
 .sprite {

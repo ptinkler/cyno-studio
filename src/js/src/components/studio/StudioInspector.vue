@@ -107,7 +107,7 @@ defineEmits<{
 
 <style scoped>
 .side {
-  width: 288px;
+  width: 19.2rem;
   background: var(--sbg);
   border-left: 1px solid var(--sborder);
 }
@@ -117,6 +117,6 @@ defineEmits<{
 .pbody {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 14px 10px;
+  padding: 0.2667rem 0.9333rem 0.6667rem;
 }
 </style>

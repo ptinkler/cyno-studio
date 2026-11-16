@@ -272,45 +272,45 @@ function confirm(): void {
   background: rgba(0, 0, 0, 0.6);
   display: grid;
   place-items: center;
-  padding: 16px;
+  padding: 1.0667rem;
 }
 
 .dialog {
-  width: min(900px, 100%);
-  height: min(720px, calc(100vh - 32px));
+  width: min(60rem, 100%);
+  height: min(48rem, calc(100vh - 2.1333rem));
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0.6667rem;
   background: var(--sbg);
   border: 1px solid var(--sborder);
   border-radius: var(--r-xl);
   box-shadow: var(--shadow-modal);
-  padding: 14px 18px 16px;
+  padding: 0.9333rem 1.2rem 1.0667rem;
 }
 
 .head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5333rem;
 }
 
 .head h3 {
   flex: 1;
-  font-size: 15px;
+  font-size: 1rem;
   font-weight: 600;
 }
 
 .x {
-  width: 28px;
-  height: 28px;
+  width: 1.8667rem;
+  height: 1.8667rem;
   margin-right: -6px;
-  font-size: 13px;
+  font-size: 0.8667rem;
 }
 
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 0.6667rem;
   flex-wrap: wrap;
 }
 
@@ -325,18 +325,18 @@ function confirm(): void {
 }
 
 .muted {
-  font-size: 12.5px;
+  font-size: 0.8333rem;
   color: var(--smuted);
 }
 
 .actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5333rem;
 }
 .tallies {
   display: flex;
-  gap: 12px;
+  gap: 0.8rem;
 }
 
 .spacer {

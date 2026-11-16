@@ -98,11 +98,11 @@ onMounted(load)
 
 <style scoped>
 .failed {
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--smuted);
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 0.3333rem;
   text-transform: none;
   letter-spacing: 0;
   font-weight: 400;
@@ -111,7 +111,7 @@ onMounted(load)
 .entry {
   border: 1px solid var(--sborder);
   border-radius: var(--r);
-  margin-bottom: 6px;
+  margin-bottom: 0.4rem;
   overflow: hidden;
   background: var(--sbg);
 }
@@ -121,15 +121,15 @@ onMounted(load)
 .row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 0.6667rem;
   width: 100%;
-  padding: 8px 12px;
+  padding: 0.5333rem 0.8rem;
   background: none;
   border: none;
   color: var(--sfg);
   cursor: pointer;
   text-align: left;
-  font-size: 12.5px;
+  font-size: 0.8333rem;
   font-variant-numeric: tabular-nums;
 }
 .row:hover {
@@ -137,7 +137,7 @@ onMounted(load)
 }
 .status {
   font-weight: 700;
-  min-width: 34px;
+  min-width: 2.2667rem;
 }
 .status.good {
   color: var(--ssuccess);
@@ -170,27 +170,27 @@ onMounted(load)
   margin-left: auto;
 }
 .err {
-  padding: 6px 12px;
+  padding: 0.4rem 0.8rem;
   color: var(--sdanger);
-  font-size: 12px;
+  font-size: 0.8rem;
 }
 .detail {
-  padding: 10px 12px;
+  padding: 0.6667rem 0.8rem;
   border-top: 1px solid var(--sborder2);
 }
 .detail h4 {
-  font-size: 12px;
+  font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--sfaint);
-  margin: 10px 0 4px;
+  margin: 0.6667rem 0 0.2667rem;
 }
 .detail pre {
   background: var(--sbg2);
   border-radius: var(--r);
-  padding: 10px;
+  padding: 0.6667rem;
   overflow-x: auto;
-  font-size: 12px;
+  font-size: 0.8rem;
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;

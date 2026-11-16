@@ -344,14 +344,14 @@ async function start(): Promise<void> {
 <style scoped>
 .tabs {
   align-self: flex-start;
-  margin-bottom: 4px;
+  margin-bottom: 0.2667rem;
 }
 
 .filter {
   width: 100%;
-  padding: 6px 8px;
+  padding: 0.4rem 0.5333rem;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 0.4rem;
   background: var(--surface);
   color: inherit;
   font: inherit;
@@ -365,8 +365,8 @@ async function start(): Promise<void> {
 .file-item.pick label {
   display: grid;
   grid-template-columns: auto 1fr;
-  column-gap: 8px;
-  padding: 6px 12px;
+  column-gap: 0.5333rem;
+  padding: 0.4rem 0.8rem;
   cursor: pointer;
   align-items: center;
 }
@@ -398,17 +398,17 @@ a.btn {
 .file-list {
   list-style: none;
   padding: 0;
-  max-height: 200px;
+  max-height: 13.3333rem;
   overflow-y: auto;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 0.5333rem;
 }
 
 .file-item {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 8px 12px;
+  padding: 0.5333rem 0.8rem;
   cursor: pointer;
   border-bottom: 1px solid var(--border);
 }
@@ -433,7 +433,7 @@ a.btn {
 }
 
 .file-meta {
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--text2);
 }
 
@@ -448,11 +448,11 @@ a.btn {
 }
 
 .bar {
-  height: 6px;
-  border-radius: 3px;
+  height: 0.4rem;
+  border-radius: 0.2rem;
   background: var(--surface2);
   overflow: hidden;
-  margin-bottom: 6px;
+  margin-bottom: 0.4rem;
 }
 
 .bar span {
@@ -463,8 +463,8 @@ a.btn {
 }
 
 .failed {
-  margin: 6px 0 0;
-  padding-left: 18px;
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
   color: var(--text2);
 }
 </style>

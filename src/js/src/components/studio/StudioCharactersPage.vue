@@ -138,8 +138,8 @@ onMounted(load)
 <style scoped>
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(11.3333rem, 1fr));
+  gap: 0.6667rem;
 }
 .card {
   padding: 0;
@@ -158,41 +158,41 @@ onMounted(load)
   object-fit: cover;
 }
 .info {
-  padding: 8px 10px 10px;
+  padding: 0.5333rem 0.6667rem 0.6667rem;
 }
 .info h3 {
-  font-size: 13.5px;
+  font-size: 0.9rem;
   font-weight: 600;
 }
 .desc {
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--smuted);
-  margin: 2px 0 4px;
+  margin: 2px 0 0.2667rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .meta {
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--sfaint);
 }
 .adhoc {
-  margin-top: 8px;
+  margin-top: 0.5333rem;
 }
 .adhoc .sub {
-  margin: 0 0 4px;
+  margin: 0 0 0.2667rem;
 }
 .arow {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 7px 0;
+  gap: 0.6667rem;
+  padding: 0.4667rem 0;
   border-bottom: 1px solid var(--sborder2);
-  font-size: 13px;
+  font-size: 0.8667rem;
 }
 .mini {
-  width: 28px;
-  height: 28px;
+  width: 1.8667rem;
+  height: 1.8667rem;
   border-radius: var(--r-sm);
   object-fit: cover;
 }
@@ -207,7 +207,7 @@ onMounted(load)
   color: var(--sfg);
   cursor: pointer;
   font-weight: 500;
-  font-size: 13px;
+  font-size: 0.8667rem;
   padding: 0;
 }
 .link:hover {
@@ -219,7 +219,7 @@ onMounted(load)
   border: none;
   color: var(--smuted);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 0.8rem;
   padding: 0;
 }
 .chat-link:hover {

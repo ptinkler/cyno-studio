@@ -100,21 +100,21 @@ const byModel = computed(() => {
 .bseg {
   text-decoration: none;
   font: inherit;
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--smuted);
   background: none;
   border: 0;
   border-left: 1px solid var(--sborder);
-  padding: 3px 9px;
+  padding: 0.2rem 0.6rem;
   white-space: nowrap;
   cursor: pointer;
 }
 .bseg:first-child {
   border-left: 0;
-  border-radius: 7px 0 0 7px;
+  border-radius: 0.4667rem 0 0 0.4667rem;
 }
 .bseg:last-of-type {
-  border-radius: 0 7px 7px 0;
+  border-radius: 0 0.4667rem 0.4667rem 0;
 }
 .bseg:hover {
   background: var(--saccent-soft);
@@ -131,33 +131,33 @@ const byModel = computed(() => {
 }
 .pop {
   position: absolute;
-  top: calc(100% + 6px);
+  top: calc(100% + 0.4rem);
   right: 0;
   z-index: 41;
-  min-width: 260px;
+  min-width: 17.3333rem;
   background: var(--spanel2);
   border: 1px solid var(--sborder);
   border-radius: var(--r-lg);
-  padding: 10px 12px;
+  padding: 0.6667rem 0.8rem;
   box-shadow: var(--shadow-pop);
-  font-size: 12.5px;
+  font-size: 0.8333rem;
   color: var(--sfg);
 }
 .pop-title {
   font-weight: 600;
-  margin-bottom: 6px;
+  margin-bottom: 0.4rem;
 }
 .row {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: 1.0667rem;
   padding: 2px 0;
 }
 .m {
   color: var(--smuted);
 }
 .pop-link {
-  margin-top: 8px;
+  margin-top: 0.5333rem;
   background: none;
   border: 0;
   color: var(--saccent);

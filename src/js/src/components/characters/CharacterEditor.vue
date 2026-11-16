@@ -216,7 +216,7 @@ async function remove(): Promise<void> {
     :open="open"
     :title="character ? character.name : 'New character'"
     label="Character"
-    width="560px"
+    width="37.3333rem"
     @close="emit('close')"
   >
     <template #head>
@@ -307,8 +307,8 @@ async function remove(): Promise<void> {
 
 <style scoped>
 .tag {
-  font-size: 12px;
-  padding: 1px 7px;
+  font-size: 0.8rem;
+  padding: 1px 0.4667rem;
   border-radius: var(--r-sm);
   background: var(--spanel2);
   color: var(--swarn);
@@ -317,12 +317,12 @@ async function remove(): Promise<void> {
 .sub {
   font-size: 0.8rem;
   color: var(--text2);
-  margin-bottom: 8px;
+  margin-bottom: 0.5333rem;
   line-height: 1.45;
 }
 
 label {
-  margin-top: 4px;
+  margin-top: 0.2667rem;
 }
 
 .count {
@@ -336,19 +336,19 @@ textarea {
 }
 
 textarea {
-  min-height: 110px;
+  min-height: 7.3333rem;
 }
 
 .images {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(5.6rem, 1fr));
+  gap: 0.5333rem;
 }
 
 .img {
   position: relative;
   aspect-ratio: 1;
-  border-radius: 10px;
+  border-radius: 0.6667rem;
   overflow: hidden;
   border: 1px solid var(--border);
   background: var(--surface2);
@@ -388,7 +388,7 @@ textarea {
 }
 
 .add-label {
-  font-size: 12px;
+  font-size: 0.8rem;
 }
 
 .img.add:hover {
@@ -398,44 +398,44 @@ textarea {
 
 .main-tag {
   position: absolute;
-  left: 4px;
-  bottom: 4px;
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 6px;
+  left: 0.2667rem;
+  bottom: 0.2667rem;
+  font-size: 0.7333rem;
+  padding: 1px 0.4rem;
+  border-radius: 0.4rem;
   background: var(--saccent-fill);
   color: #fff;
 }
 
 .pos-tag {
   position: absolute;
-  left: 4px;
-  bottom: 4px;
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 6px;
+  left: 0.2667rem;
+  bottom: 0.2667rem;
+  font-size: 0.7333rem;
+  padding: 1px 0.4rem;
+  border-radius: 0.4rem;
   background: rgba(0, 0, 0, 0.65);
   color: #fff;
 }
 
 .img-btn {
   position: absolute;
-  top: 4px;
-  width: 22px;
-  height: 22px;
+  top: 0.2667rem;
+  width: 1.4667rem;
+  height: 1.4667rem;
   border-radius: 50%;
   border: none;
   background: rgba(0, 0, 0, 0.65);
   color: #fff;
-  font-size: 12px;
+  font-size: 0.8rem;
   cursor: pointer;
 }
 
 .x-btn {
-  right: 4px;
+  right: 0.2667rem;
 }
 
 .star {
-  left: 4px;
+  left: 0.2667rem;
 }
 </style>

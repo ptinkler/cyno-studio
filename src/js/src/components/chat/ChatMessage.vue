@@ -241,7 +241,7 @@ const { copiedKey, copy } = useCopy()
             <svg class="ic"><use href="#s-pencil" /></svg>
           </button>
           <button class="iconbtn boxed" title="Resend" aria-label="Resend" @click="emit('resend')">
-            <svg class="ic"><use href="#s-refresh" /></svg>
+            <svg class="ic"><use href="#s-repeat" /></svg>
           </button>
           <button class="iconbtn boxed" title="Branch from here" aria-label="Branch from here" @click="emit('fork')">
             <svg class="ic"><use href="#s-branch" /></svg>

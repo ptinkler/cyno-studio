@@ -137,34 +137,34 @@ onMounted(load)
 .rows {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0.5333rem;
 }
 .urow {
   display: grid;
-  grid-template-columns: 110px 1fr auto;
+  grid-template-columns: 7.3333rem 1fr auto;
   align-items: center;
-  gap: 10px;
+  gap: 0.6667rem;
 }
 .ul {
   color: var(--sfg);
-  font-size: 13.5px;
+  font-size: 0.9rem;
   text-transform: none;
   letter-spacing: 0;
   font-weight: 400;
 }
 .hint {
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--sfaint);
 }
 .subnote {
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--smuted);
   line-height: 1.5;
   margin: 2px 0 0;
 }
 .subnote code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
+  font-size: 0.8rem;
 }
 .subnote.ok {
   color: var(--ssuccess);

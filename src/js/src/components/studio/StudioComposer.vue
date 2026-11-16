@@ -203,21 +203,21 @@ defineExpose({ focusPrompt })
 
 <style scoped>
 .est {
-  font-size: 12.5px;
+  font-size: 0.8333rem;
   color: var(--saccent);
   white-space: nowrap;
 }
 .compose {
-  padding: 8px 22px 20px;
+  padding: 0.5333rem 1.4667rem 1.3333rem;
 }
 .cbox {
   position: relative;
-  max-width: 820px;
+  max-width: 54.6667rem;
   margin: 0 auto;
   border: 1px solid var(--sborder);
   background: var(--sbg);
   border-radius: var(--r-lg);
-  padding: 10px 12px 8px;
+  padding: 0.6667rem 0.8rem 0.5333rem;
 }
 .cbox:focus-within {
   border-color: var(--sfaint);
@@ -229,19 +229,19 @@ defineExpose({ focusPrompt })
 
 .modes {
   display: flex;
-  gap: 6px;
+  gap: 0.4rem;
   flex: 0 0 auto;
 }
 .ed {
   width: 100%;
   min-width: 0;
-  min-height: 22px;
+  min-height: 1.4667rem;
   color: var(--sfg);
   max-height: 45vh;
   overflow-y: auto;
-  padding: 5px 7px;
+  padding: 0.3333rem 0.4667rem;
   border: 1px solid var(--sborder2);
-  border-radius: 6px;
+  border-radius: 0.4rem;
   background: color-mix(in srgb, var(--shover) 28%, var(--sbg));
   font: inherit;
   line-height: 1.5;
@@ -263,12 +263,12 @@ defineExpose({ focusPrompt })
 .pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 0.4rem;
   vertical-align: middle;
   margin: 0 2px;
-  padding: 2px 10px 2px 3px;
+  padding: 2px 0.6667rem 2px 0.2rem;
   border: 1px solid var(--sborder);
-  border-radius: 8px;
+  border-radius: 0.5333rem;
   background: var(--saccent-soft);
   color: var(--saccent);
   font-size: 0.86em;
@@ -276,72 +276,72 @@ defineExpose({ focusPrompt })
   white-space: nowrap;
 }
 .pill img {
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
+  width: 1.3333rem;
+  height: 1.3333rem;
+  border-radius: 0.3333rem;
   object-fit: cover;
 }
 .pill-ic {
-  font-size: 14px;
+  font-size: 0.9333rem;
 }
 .cbar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding-top: 6px;
+  gap: 0.6667rem;
+  padding-top: 0.4rem;
 }
 .atwrap {
   position: relative;
 }
 .clip.at {
-  font-size: 18px;
+  font-size: 1.2rem;
   font-weight: 700;
 }
 .atmenu {
   position: absolute;
-  bottom: 40px;
+  bottom: 2.6667rem;
   left: 0;
   z-index: 20;
-  min-width: 150px;
-  max-height: 240px;
+  min-width: 10rem;
+  max-height: 16rem;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   background: var(--spanel2);
   border: 1px solid var(--sborder);
   border-radius: var(--r-lg);
-  padding: 4px;
+  padding: 0.2667rem;
   box-shadow: var(--shadow-pop);
 }
 .atmenu button {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 0.4667rem;
   text-align: left;
   border: none;
   background: none;
   color: var(--sfg);
   font: inherit;
-  font-size: 13px;
-  padding: 6px 9px;
-  border-radius: 7px;
+  font-size: 0.8667rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.4667rem;
   cursor: pointer;
 }
 .atmenu button:hover {
   background: var(--shover);
 }
 .atmenu img {
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
+  width: 1.4667rem;
+  height: 1.4667rem;
+  border-radius: 0.3333rem;
   object-fit: cover;
 }
 .clip {
-  width: 30px;
-  height: 30px;
+  width: 2rem;
+  height: 2rem;
   display: grid;
   place-items: center;
-  border-radius: 8px;
+  border-radius: 0.5333rem;
   color: var(--smuted);
   background: none;
   border: none;
@@ -353,12 +353,12 @@ defineExpose({ focusPrompt })
 }
 .note {
   flex: 1;
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--sfaint);
 }
 .sendbtn {
-  min-height: 30px;
-  padding: 5px 14px;
+  min-height: 2rem;
+  padding: 0.3333rem 0.9333rem;
   border: none;
   border-radius: var(--r);
   background: var(--saccent-fill);

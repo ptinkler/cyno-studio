@@ -100,10 +100,10 @@ const voiceLabel = (voice: Voice): string => [voice.voiceName, voice.language, v
 <style scoped>
 .orow + .orow,
 .aerr {
-  margin-top: 8px;
+  margin-top: 0.5333rem;
 }
 .aerr {
   color: var(--sdanger);
-  font-size: 12px;
+  font-size: 0.8rem;
 }
 </style>

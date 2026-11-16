@@ -359,15 +359,15 @@ function onToggle(item: InstructionCard): void {
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 0.4rem;
 }
 
 .chip {
   display: inline-flex;
   align-items: center;
-  max-width: 170px; /* long names are cut short; the full name is in the tooltip */
+  max-width: 11.3333rem; /* long names are cut short; the full name is in the tooltip */
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 66.6rem;
   background: var(--surface2);
   font-size: 0.8rem;
   overflow: hidden;
@@ -399,8 +399,8 @@ function onToggle(item: InstructionCard): void {
   border: none;
   color: var(--text2);
   cursor: pointer;
-  padding: 0 2px 0 7px;
-  font-size: 12px;
+  padding: 0 2px 0 0.4667rem;
+  font-size: 0.8rem;
   line-height: 1;
 }
 
@@ -410,20 +410,20 @@ function onToggle(item: InstructionCard): void {
 
 /* The icon already carries the left padding of the chip */
 .chip-pause + .chip-main {
-  padding-left: 4px;
+  padding-left: 0.2667rem;
 }
 
 .chip-src {
   flex-shrink: 0;
   padding: 0 0 0 2px;
-  font-size: 12px;
+  font-size: 0.8rem;
   opacity: 0.75;
 }
 
 .dot {
   flex-shrink: 0;
-  width: 7px;
-  height: 7px;
+  width: 0.4667rem;
+  height: 0.4667rem;
   border-radius: 50%;
 }
 
@@ -435,8 +435,8 @@ function onToggle(item: InstructionCard): void {
   display: inline-flex;
   align-items: center;
   min-width: 0;
-  gap: 6px;
-  padding: 3px 4px 3px 10px;
+  gap: 0.4rem;
+  padding: 0.2rem 0.2667rem 0.2rem 0.6667rem;
   color: var(--text);
   background: none;
   border: none;
@@ -454,8 +454,8 @@ function onToggle(item: InstructionCard): void {
   border: none;
   color: var(--text2);
   cursor: pointer;
-  padding: 0 8px 0 4px;
-  font-size: 11px;
+  padding: 0 0.5333rem 0 0.2667rem;
+  font-size: 0.7333rem;
 }
 
 .chip-x:hover {
@@ -463,8 +463,8 @@ function onToggle(item: InstructionCard): void {
 }
 
 .add {
-  padding: 4px 10px;
-  border-radius: 999px;
+  padding: 0.2667rem 0.6667rem;
+  border-radius: 66.6rem;
   border: 1px dashed var(--border);
   background: none;
   color: var(--text2);

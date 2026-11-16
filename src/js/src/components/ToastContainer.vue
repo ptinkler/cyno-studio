@@ -30,13 +30,13 @@ function getIcon(type: ToastType): string {
 <style scoped>
 .toaster {
   position: fixed;
-  top: 14px;
+  top: 0.9333rem;
   left: 50%;
   transform: translateX(-50%);
   z-index: 2000;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0.5333rem;
   pointer-events: none;
 }
 
@@ -45,14 +45,14 @@ function getIcon(type: ToastType): string {
   border: 1px solid var(--sborder);
   border-left: 3px solid var(--sfaint);
   border-radius: var(--r);
-  padding: 8px 14px;
+  padding: 0.5333rem 0.9333rem;
   box-shadow: var(--shadow-pop);
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 0.6667rem;
   pointer-events: auto;
   cursor: pointer;
-  max-width: min(520px, calc(100vw - 32px));
+  max-width: min(34.6667rem, calc(100vw - 2.1333rem));
 }
 
 .toast.success {
@@ -64,7 +64,7 @@ function getIcon(type: ToastType): string {
 }
 
 .toast-icon {
-  font-size: 13px;
+  font-size: 0.8667rem;
   font-weight: 700;
   color: var(--smuted);
 }
@@ -78,7 +78,7 @@ function getIcon(type: ToastType): string {
 }
 
 .toast-message {
-  font-size: 13px;
+  font-size: 0.8667rem;
   color: var(--sfg);
 }
 

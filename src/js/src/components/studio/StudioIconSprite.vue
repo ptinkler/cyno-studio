@@ -47,6 +47,9 @@
     <symbol id="s-refresh" viewBox="0 0 24 24">
       <path d="M20 11a8 8 0 1 0-.9 4.5M20 5v5h-5" />
     </symbol>
+    <symbol id="s-repeat" viewBox="0 0 24 24">
+      <path d="M17 3l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 21l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3" />
+    </symbol>
     <symbol id="s-film" viewBox="0 0 24 24">
       <rect x="3" y="5" width="18" height="14" rx="2" />
       <path d="M7 5v14M17 5v14M3 12h18" />

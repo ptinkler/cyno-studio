@@ -117,22 +117,22 @@ const providerLabels: Readonly<Record<string, string>> = { google: 'Google', mic
   border: 1px solid var(--sborder);
   border-radius: var(--r-xl);
   box-shadow: var(--shadow-modal);
-  padding: 18px 20px 20px;
-  width: 340px;
+  padding: 1.2rem 1.3333rem 1.3333rem;
+  width: 22.6667rem;
   max-width: 90vw;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0.6667rem;
 }
 
 .modal-box h3 {
-  font-size: 15px;
+  font-size: 1rem;
   font-weight: 600;
   margin-bottom: 2px;
 }
 
 .error-hint {
-  font-size: 12.5px;
+  font-size: 0.8333rem;
   color: var(--sdanger);
 }
 
@@ -143,8 +143,8 @@ const providerLabels: Readonly<Record<string, string>> = { google: 'Google', mic
 .divider {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 12px;
+  gap: 0.6667rem;
+  font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--sfaint);

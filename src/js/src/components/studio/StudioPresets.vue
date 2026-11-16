@@ -43,21 +43,21 @@ async function onPick(event: Event): Promise<void> {
 <style scoped>
 .presets {
   display: flex;
-  gap: 6px;
-  margin-bottom: 8px;
+  gap: 0.4rem;
+  margin-bottom: 0.5333rem;
 }
 .presets .ifield {
   flex: 1;
   min-width: 0;
 }
 .add {
-  width: 30px;
+  width: 2rem;
   flex: 0 0 auto;
   border: 1px solid var(--sborder);
   border-radius: var(--r);
   background: var(--spanel2);
   color: var(--smuted);
-  font-size: 15px;
+  font-size: 1rem;
   line-height: 1;
   cursor: pointer;
 }

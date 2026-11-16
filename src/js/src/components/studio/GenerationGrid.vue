@@ -141,35 +141,35 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 12px 16px 16px;
+  padding: 0.8rem 1.0667rem 1.0667rem;
 }
 .gbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 12px;
+  gap: 0.8rem;
+  padding-bottom: 0.8rem;
 }
 .gleft {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 0.6667rem;
   flex-wrap: wrap;
 }
 .gcount {
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--smuted);
 }
 .ginprog {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: 0.4rem;
+  font-size: 0.8rem;
   color: var(--saccent);
 }
 .ginprog .dot {
-  width: 7px;
-  height: 7px;
+  width: 0.4667rem;
+  height: 0.4667rem;
   border-radius: 50%;
   background: var(--saccent);
   animation: pulse 1.1s ease-in-out infinite;
@@ -177,8 +177,8 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
 .gfav {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 1.8667rem;
+  height: 1.8667rem;
   border: 1px solid var(--sborder);
   border-radius: var(--r);
   background: transparent;
@@ -194,19 +194,19 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
   border-color: var(--sstar);
 }
 .gfav .ic {
-  width: 15px;
-  height: 15px;
+  width: 1rem;
+  height: 1rem;
 }
 .empty {
   color: var(--smuted);
   text-align: center;
-  padding: 40px 0;
-  font-size: 13px;
+  padding: 2.6667rem 0;
+  font-size: 0.8667rem;
 }
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--min, 150px), 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(var(--min, 10rem), 1fr));
+  gap: 0.6667rem;
 }
 .cell {
   position: relative;
@@ -238,9 +238,9 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 0.5333rem;
   cursor: default;
-  padding: 10px;
+  padding: 0.6667rem;
   text-align: center;
 }
 .state.errored {
@@ -252,12 +252,12 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
   background: color-mix(in srgb, var(--sdanger, #e5484d) 8%, var(--sbg2));
 }
 .shint {
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--sfaint);
   margin-top: 2px;
 }
 .slabel {
-  font-size: 12px;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--smuted);
 }
@@ -265,7 +265,7 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
   color: var(--sdanger, #e5484d);
 }
 .sprompt {
-  font-size: 12px;
+  font-size: 0.8rem;
   line-height: 1.35;
   color: var(--sfaint);
   display: -webkit-box;
@@ -274,8 +274,8 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
   overflow: hidden;
 }
 .spinner {
-  width: 24px;
-  height: 24px;
+  width: 1.6rem;
+  height: 1.6rem;
   border: 2.5px solid var(--sborder);
   border-top-color: var(--saccent);
   border-radius: 50%;
@@ -297,24 +297,24 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
 }
 .vtag {
   position: absolute;
-  bottom: 6px;
-  right: 6px;
-  font-size: 12px;
+  bottom: 0.4rem;
+  right: 0.4rem;
+  font-size: 0.8rem;
   color: #fff;
   background: rgba(0, 0, 0, 0.55);
-  border-radius: 4px;
-  padding: 1px 6px;
+  border-radius: 0.2667rem;
+  padding: 1px 0.4rem;
 }
 .fav {
   position: absolute;
-  top: 6px;
-  left: 6px;
-  width: 26px;
-  height: 26px;
+  top: 0.4rem;
+  left: 0.4rem;
+  width: 1.7333rem;
+  height: 1.7333rem;
   display: grid;
   place-items: center;
   border: none;
-  border-radius: 7px;
+  border-radius: 0.4667rem;
   background: rgba(0, 0, 0, 0.5);
   color: rgba(255, 255, 255, 0.7);
   cursor: pointer;
@@ -329,7 +329,7 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
   color: var(--sstar);
 }
 .fav .ic {
-  width: 15px;
-  height: 15px;
+  width: 1rem;
+  height: 1rem;
 }
 </style>

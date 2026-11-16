@@ -49,13 +49,13 @@ const rows = computed<CostRow[]>(() => costRows(props.total, props.media))
   display: inline-flex;
 }
 .chip-btn {
-  height: 30px;
-  padding: 0 10px;
+  height: 2rem;
+  padding: 0 0.6667rem;
   border: 1px solid var(--sborder);
   border-radius: var(--r);
   background: var(--spanel2);
   color: var(--smuted);
-  font-size: 12px;
+  font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
   cursor: default;
 }
@@ -69,28 +69,28 @@ const rows = computed<CostRow[]>(() => costRows(props.total, props.media))
 .pop {
   position: absolute;
   right: 0;
-  bottom: calc(100% + 6px);
+  bottom: calc(100% + 0.4rem);
   z-index: 30;
-  min-width: 210px;
-  max-width: 320px;
-  padding: 8px 12px 10px;
+  min-width: 14rem;
+  max-width: 21.3333rem;
+  padding: 0.5333rem 0.8rem 0.6667rem;
   background: var(--spanel2);
   border: 1px solid var(--sborder);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-pop);
-  font-size: 12px;
+  font-size: 0.8rem;
 }
 .pop-title {
-  margin-bottom: 6px;
+  margin-bottom: 0.4rem;
   color: var(--sfaint);
-  font-size: 12px;
+  font-size: 0.8rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 .pop-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 16px;
+  gap: 1.0667rem;
   padding: 2px 0;
   color: var(--smuted);
 }
@@ -105,8 +105,8 @@ const rows = computed<CostRow[]>(() => costRows(props.total, props.media))
   text-align: right;
 }
 .pop-total {
-  margin-top: 4px;
-  padding-top: 6px;
+  margin-top: 0.2667rem;
+  padding-top: 0.4rem;
   border-top: 1px solid var(--sborder);
   color: var(--sfg);
   font-weight: 600;

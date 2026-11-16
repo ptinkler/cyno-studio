@@ -93,14 +93,14 @@ const renameText = defineModel<string>('renameText', { default: '' })
 .folder {
   display: flex;
   align-items: center;
-  border-radius: 9px;
+  border-radius: 0.6rem;
 }
 .folder:hover {
   background: var(--shover);
 }
 .fchev {
-  width: 26px;
-  height: 32px;
+  width: 1.7333rem;
+  height: 2.1333rem;
   display: grid;
   place-items: center;
   color: var(--sfaint);
@@ -117,10 +117,10 @@ const renameText = defineModel<string>('renameText', { default: '' })
 .fmain {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 0.6rem;
   flex: 1;
   min-width: 0;
-  padding: 7px 10px 7px 0;
+  padding: 0.4667rem 0.6667rem 0.4667rem 0;
   color: var(--smuted);
   background: none;
   border: none;
@@ -141,7 +141,7 @@ const renameText = defineModel<string>('renameText', { default: '' })
   white-space: nowrap;
 }
 .fmain .count {
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--sfaint);
 }
 .folder.drop {

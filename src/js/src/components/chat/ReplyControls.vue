@@ -49,7 +49,7 @@ function goBranch(by: number): void {
     </button>
     <template v-else>
       <button v-if="canRetry" class="iconbtn boxed" title="Retry reply" aria-label="Retry reply" @click="emit('retry')">
-        <svg class="ic"><use href="#s-refresh" /></svg>
+        <svg class="ic"><use href="#s-repeat" /></svg>
       </button>
       <button
         v-if="canBranch"
@@ -70,6 +70,6 @@ function goBranch(by: number): void {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 0.4rem;
 }
 </style>

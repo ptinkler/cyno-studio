@@ -187,11 +187,11 @@ a.gm-btn {
 .gm-btn.icon.req {
   font-family: monospace;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 0.8667rem;
 }
 .gm-sent {
-  margin-top: 10px;
-  font-size: 12.5px;
+  margin-top: 0.6667rem;
+  font-size: 0.8333rem;
   color: var(--smuted, inherit);
 }
 .gm-sent summary {
@@ -205,13 +205,13 @@ a.gm-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 1.6rem;
 }
 .gm-card {
   position: relative;
   display: flex;
   gap: 0;
-  width: min(1100px, 95vw);
+  width: min(73.3333rem, 95vw);
   max-height: 90vh;
   background: var(--sbg);
   border: 1px solid var(--sborder);
@@ -221,16 +221,16 @@ a.gm-btn {
 }
 .gm-x {
   position: absolute;
-  top: 10px;
-  right: 12px;
+  top: 0.6667rem;
+  right: 0.8rem;
   z-index: 2;
-  width: 30px;
-  height: 30px;
+  width: 2rem;
+  height: 2rem;
   border: none;
-  border-radius: 8px;
+  border-radius: 0.5333rem;
   background: rgba(0, 0, 0, 0.45);
   color: #fff;
-  font-size: 20px;
+  font-size: 1.3333rem;
   line-height: 1;
   cursor: pointer;
 }
@@ -241,14 +241,14 @@ a.gm-btn {
   display: grid;
   place-items: center;
   background: #000;
-  padding: 10px;
+  padding: 0.6667rem;
 }
 .gm-media img,
 .gm-media video {
   max-width: 100%;
-  max-height: calc(90vh - 20px);
+  max-height: calc(90vh - 1.3333rem);
   object-fit: contain;
-  border-radius: 8px;
+  border-radius: 0.5333rem;
 }
 .gm-media.is-error {
   background: var(--sbg2);
@@ -256,19 +256,19 @@ a.gm-btn {
 .gm-err {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0.6667rem;
   align-items: center;
   text-align: center;
-  padding: 32px;
-  max-width: 440px;
+  padding: 2.1333rem;
+  max-width: 29.3333rem;
 }
 .gm-err-title {
-  font-size: 15px;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--sdanger);
 }
 .gm-err-msg {
-  font-size: 13px;
+  font-size: 0.8667rem;
   line-height: 1.5;
   color: var(--smuted);
   white-space: pre-wrap;
@@ -285,23 +285,23 @@ a.gm-btn {
 }
 .gm-loop {
   position: absolute;
-  left: 16px;
-  bottom: 14px;
+  left: 1.0667rem;
+  bottom: 0.9333rem;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: 0.4rem;
+  font-size: 0.8rem;
   font-weight: 500;
   text-transform: none;
   letter-spacing: normal;
   color: #fff;
   background: rgba(0, 0, 0, 0.5);
-  padding: 4px 9px;
+  padding: 0.2667rem 0.6rem;
   border-radius: var(--r);
   cursor: pointer;
 }
 .gm-side {
-  flex: 0 0 300px;
+  flex: 0 0 20rem;
   display: flex;
   flex-direction: column;
   border-left: 1px solid var(--sborder);
@@ -310,21 +310,21 @@ a.gm-btn {
 .gm-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 44px 16px 12px;
+  padding: 2.9333rem 1.0667rem 0.8rem;
 }
 .gm-prompt {
-  font-size: 13px;
+  font-size: 0.8667rem;
   line-height: 1.5;
   color: var(--sfg);
   white-space: pre-wrap;
-  margin-bottom: 14px;
+  margin-bottom: 0.9333rem;
 }
 .gm-meta {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 4px 12px;
+  gap: 0.2667rem 0.8rem;
   margin: 0;
-  font-size: 12px;
+  font-size: 0.8rem;
 }
 .gm-meta dt {
   color: var(--sfaint);
@@ -337,22 +337,22 @@ a.gm-btn {
 .gm-actions {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 12px;
+  gap: 0.4rem;
+  padding: 0.8rem;
   border-top: 1px solid var(--sborder);
 }
 .gm-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 30px;
-  padding: 5px 12px;
+  gap: 0.5333rem;
+  min-height: 2rem;
+  padding: 0.3333rem 0.8rem;
   border: 1px solid var(--sborder);
   border-radius: var(--r);
   background: var(--sbg);
   color: var(--sfg);
   font: inherit;
-  font-size: 13px;
+  font-size: 0.8667rem;
   cursor: pointer;
   text-decoration: none;
 }
@@ -360,18 +360,18 @@ a.gm-btn {
   background: var(--shover);
 }
 .gm-btn .ic {
-  width: 16px;
-  height: 16px;
+  width: 1.0667rem;
+  height: 1.0667rem;
 }
 .gm-icons {
   display: flex;
-  gap: 6px;
+  gap: 0.4rem;
 }
 /* Every text action is a cell, so the column stays even however many show */
 .gm-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  gap: 0.4rem;
 }
 .gm-grid .gm-btn {
   justify-content: center;
@@ -402,7 +402,7 @@ a.gm-btn {
     border-top: 1px solid var(--sborder);
   }
   .gm-scroll {
-    padding-top: 12px;
+    padding-top: 0.8rem;
   }
   .gm-media video,
   .gm-media img {

@@ -186,6 +186,6 @@ async function remove(): Promise<void> {
 }
 
 label {
-  margin-top: 4px;
+  margin-top: 0.2667rem;
 }
 </style>

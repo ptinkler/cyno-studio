@@ -69,11 +69,11 @@ onMounted(load)
 .who {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 0.8rem;
 }
 .av {
-  width: 36px;
-  height: 36px;
+  width: 2.4rem;
+  height: 2.4rem;
   border-radius: 50%;
   object-fit: cover;
   flex: 0 0 auto;
@@ -92,13 +92,13 @@ onMounted(load)
 .nm {
   color: var(--sfg);
   font-weight: 550;
-  font-size: 13.5px;
+  font-size: 0.9rem;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5333rem;
 }
 .badge.admin {
-  font-size: 11px;
+  font-size: 0.7333rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   background: var(--saccent-soft);
@@ -107,7 +107,7 @@ onMounted(load)
 }
 .em {
   color: var(--smuted);
-  font-size: 12.5px;
+  font-size: 0.8333rem;
   margin-top: 1px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -116,7 +116,7 @@ onMounted(load)
 .providers {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0.5333rem;
 }
 .providers .btn {
   justify-content: center;

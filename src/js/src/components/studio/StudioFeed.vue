@@ -101,16 +101,16 @@ watch(
 .feed {
   flex: 1;
   overflow-y: auto;
-  padding: 18px 22px;
+  padding: 1.2rem 1.4667rem;
 }
 .empty {
   color: var(--sfaint);
 }
 .finner {
-  max-width: 820px;
+  max-width: 54.6667rem;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0.2667rem;
 }
 </style>
