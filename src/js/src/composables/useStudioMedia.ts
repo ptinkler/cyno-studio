@@ -62,6 +62,13 @@ export function useStudioMedia({
   // A saved message's id: a prompt the server hasn't saved yet has nothing to act on
   const savedId = (msg: { id: number | string }): number | null => (typeof msg.id === 'number' ? msg.id : null)
 
+  // The model asked for, else the one picked for the card's kind
+  const modelFor = (msg: UiMessage, mediaId: string, asked: string | null | undefined): string | null | undefined => {
+    if (asked) return asked
+    const kind = msg.media.find(i => i.id === mediaId)?.kind
+    return kind ? selected[kind] : undefined
+  }
+
   // Cards whose regenerate request is in flight: a double click on "Try
   // again" would otherwise start (and pay for) two generations
   const regenerating = new Set<string>()
@@ -72,11 +79,7 @@ export function useStudioMedia({
     const id = savedId(msg)
     if (id === null || regenerating.has(mediaId)) return
     regenerating.add(mediaId)
-    let model = options.model
-    if (!model) {
-      const kind = msg.media.find(i => i.id === mediaId)?.kind
-      if (kind && selected[kind]) model = selected[kind]
-    }
+    const model = modelFor(msg, mediaId, options.model)
     try {
       replaceMessage(await regenerateChatMedia(id, mediaId, { ...options, ...(model ? { model } : {}) }))
       polling.ensure()

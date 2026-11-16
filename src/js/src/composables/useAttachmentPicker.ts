@@ -23,21 +23,25 @@ export function useAttachmentPicker({
   // model takes image+video refs (audio is a chat-only upload, so not in the
   // library picker); a recast/motion model takes a source video + an image;
   // everything else takes images only.
-  const pickerKinds = computed<string[]>(() => {
+  const activeVideo = computed(() => {
     const info = settings.activeInfo.value
-    if (mode.value !== 'video' || !info || !('frame_images' in info)) return ['image']
+    return mode.value === 'video' && info && 'frame_images' in info ? info : null
+  })
+  const pickerKinds = computed<string[]>(() => {
+    const info = activeVideo.value
+    if (!info) return ['image']
     if (info.ref_mode) return (info.ref_mode.types ?? ['image', 'video']).filter(t => t !== 'audio')
     if (info.video_input) return ['image', 'video']
     return ['image']
   })
   // Per-kind caps for the picker = what's left after the current attachments
   const pickerLimits = computed<Record<string, number> | null>(() => {
-    const info = settings.activeInfo.value
-    if (mode.value !== 'video' || !info || !('frame_images' in info) || !info.ref_mode?.limits) return null
+    const limits = activeVideo.value?.ref_mode?.limits
+    if (!limits) return null
     const counts: Record<AttachmentKind, number> = { image: 0, video: 0, audio: 0 }
     for (const attachment of attachments.value) counts[attType(attachment)]++
     const remaining: Record<string, number> = {}
-    for (const [kind, cap] of Object.entries(info.ref_mode.limits)) {
+    for (const [kind, cap] of Object.entries(limits)) {
       remaining[kind] = Math.max(cap - (isAttachmentKind(kind) ? counts[kind] : 0), 0)
     }
     return remaining

@@ -205,24 +205,31 @@ const cards = computed<InstructionCard[]>(() => [
   ...unattachedSnippets.value.map(sn => snippetCard(sn, false)),
 ])
 
-function onToggle(item: InstructionCard): void {
-  if (item.type === 'group') {
-    const group = groupById.value.get(item.id)
-    if (!group) return
-    if (item.kind === 'default') {
-      if (item.on) emit('hide', { kind: 'group', id: group.id })
-      else unhide('group', group)
-    } else if (item.on) detachGroup(group)
-    else attachGroup(group)
-    return
-  }
-  const snippet = snippetById.value.get(item.id)
-  if (!snippet) return
+// A default one is hidden or brought back; one of this chat's own is detached or attached
+function toggleGroup(item: InstructionCard, group: InstructionGroup): void {
+  if (item.kind === 'default') {
+    if (item.on) emit('hide', { kind: 'group', id: group.id })
+    else unhide('group', group)
+  } else if (item.on) detachGroup(group)
+  else attachGroup(group)
+}
+
+function toggleSnippet(item: InstructionCard, snippet: Instruction): void {
   if (item.kind === 'default') {
     if (item.on) emit('hide', { kind: 'snippet', id: snippet.id })
     else unhide('snippet', snippet)
   } else if (item.on) detachSnippet(snippet)
   else attachSnippet(snippet)
+}
+
+function onToggle(item: InstructionCard): void {
+  if (item.type === 'group') {
+    const group = groupById.value.get(item.id)
+    if (group) toggleGroup(item, group)
+    return
+  }
+  const snippet = snippetById.value.get(item.id)
+  if (snippet) toggleSnippet(item, snippet)
 }
 </script>
 

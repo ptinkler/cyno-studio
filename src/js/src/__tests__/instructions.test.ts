@@ -1,15 +1,23 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import InstructionEditor from '../components/chat/InstructionEditor.vue'
 import InstructionPicker from '../components/chat/InstructionPicker.vue'
 import StudioInstructionsPage from '../components/studio/StudioInstructionsPage.vue'
 import { useChatDefaults } from '../composables/useChatDefaults'
+import * as dialogs from '../composables/useDialog'
 import { asRecord } from '../utils/storage'
 import { all, one } from './dom'
 import { fakeServer } from './fakeServer'
 import type { Call } from './fakeServer'
 import { instruction, instructionGroup, space } from './models'
+
+// The confirm dialog is a promise only an app-level dialog host answers, so it is a spy here
+vi.mock('../composables/useDialog', async importOriginal => ({
+  ...(await importOriginal<typeof dialogs>()),
+  confirmDialog: vi.fn(),
+}))
+const confirmDialog = vi.mocked(dialogs.confirmDialog)
 
 const snippets = [
   instruction({ id: 1, name: 'Terse tone', content: 'Be brief.' }),
@@ -22,6 +30,7 @@ const spaces = [space({ id: 4, name: 'Novel' })]
 
 let calls: Call[]
 beforeEach(() => {
+  vi.clearAllMocks()
   calls = fakeServer(({ method, url, body }) => {
     if (url.includes('/settings')) return method === 'PUT' ? body : { ...EMPTY }
     if (url.includes('/spaces/')) return { id: 4, ...asRecord(body) }
@@ -49,6 +58,33 @@ describe('InstructionEditor', () => {
     await flushPromises()
     return one('.dialog[role="dialog"]')
   }
+
+  const cancel = () => all('.dialog button').find(b => b.textContent.trim() === 'Cancel')
+
+  it('closes an editor with nothing changed without asking to discard', async () => {
+    await open({ kind: 'snippet', id: 1 })
+    cancel()?.click()
+    await flushPromises()
+    expect(confirmDialog).not.toHaveBeenCalled()
+    expect(w?.emitted('close')).toHaveLength(1)
+  })
+
+  it('asks before discarding changes, and stays open when declined', async () => {
+    const dialogEl = await open({ kind: 'snippet', id: 1 })
+    const name = one(HTMLInputElement, 'input[aria-label="Name"]', dialogEl)
+    name.value = 'Renamed'
+    name.dispatchEvent(new Event('input'))
+    await flushPromises()
+    confirmDialog.mockResolvedValueOnce(false)
+    cancel()?.click()
+    await flushPromises()
+    expect(confirmDialog).toHaveBeenCalledOnce()
+    expect(w?.emitted('close')).toBeUndefined()
+    confirmDialog.mockResolvedValueOnce({ checked: false })
+    cancel()?.click()
+    await flushPromises()
+    expect(w?.emitted('close')).toHaveLength(1)
+  })
 
   it("adds snippets to a group by searching, saves the group's snippets and closes", async () => {
     const dialog = await open({ kind: 'group', id: 7 })

@@ -8,11 +8,14 @@ import type { ShowToast } from './useToast'
 
 type RefKind = 'video' | 'audio'
 
+const refModeImageLimit = (refMode: NonNullable<VideoModel['ref_mode']>): number =>
+  refMode.limits?.image ?? refMode.max ?? MAX_ATTACHMENTS
+
 // How many images a video model takes (its catalogue entry `v`, undefined while that is loading)
 function videoImageLimit(v: VideoModel | undefined): number {
   if (!v) return MAX_ATTACHMENTS
   // Reference-to-video: as many images as the model's ref_mode allows.
-  if (v.ref_mode) return v.ref_mode.limits?.image ?? v.ref_mode.max ?? MAX_ATTACHMENTS
+  if (v.ref_mode) return refModeImageLimit(v.ref_mode)
   if (v.reference_images) return MAX_ATTACHMENTS
   return v.frame_images.includes('last_frame') ? 2 : 1
 }

@@ -12,25 +12,33 @@ const props = withDefaults(
 )
 const emit = defineEmits<{ open: [item: GenerationItem]; favourite: [item: GenerationItem] }>()
 
+/** The full file's URL and the small picture the grid shows (the full file for a video), '' when there is no file. */
+function mediaUrls(item: MediaCard): { url: string; preview: string } {
+  if (!item.file) return { url: '', preview: '' }
+  const url = chatMediaUrl(props.convId, item.file)
+  return { url, preview: item.kind === 'image' ? chatMediaPreviewUrl(props.convId, item.file) : url }
+}
+
+/** What the user typed (the parent message), as opposed to the prompt the model ended up with. */
+function typedPrompt(message: UiMessage, originals: ReadonlyMap<number | string, UiMessage>): string {
+  if (message.parent_id === null) return ''
+  return originals.get(message.parent_id)?.content ?? ''
+}
+
 function toCard(
   message: UiMessage,
   item: MediaCard,
   originals: ReadonlyMap<number | string, UiMessage>,
 ): GenerationItem {
-  const file = item.file ?? ''
-  const url = (f: string): string => chatMediaUrl(props.convId, f)
-  const thumb = (f: string): string => (item.kind === 'image' ? chatMediaPreviewUrl(props.convId, f) : url(f))
   return {
     ...item,
     message_id: typeof message.id === 'number' ? message.id : null,
     conversation_id: props.convId,
     model: item.model ?? message.model,
-    // What the user typed (the parent message), vs the prompt the model ended up with
-    original_prompt: (message.parent_id === null ? undefined : originals.get(message.parent_id)?.content) ?? '',
+    original_prompt: typedPrompt(message, originals),
     cost: message.cost,
     created_at: message.created_at,
-    url: file ? url(file) : '',
-    preview: file ? thumb(file) : '',
+    ...mediaUrls(item),
   }
 }
 

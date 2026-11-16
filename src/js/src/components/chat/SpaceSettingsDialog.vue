@@ -80,8 +80,12 @@ watch(
 )
 
 async function close(): Promise<void> {
-  const discard = await confirmDialog({ title: 'Discard unsaved changes?', confirmLabel: 'Discard', danger: true })
-  if (!dirty.value || discard) emit('close')
+  if (
+    dirty.value &&
+    !(await confirmDialog({ title: 'Discard unsaved changes?', confirmLabel: 'Discard', danger: true }))
+  )
+    return
+  emit('close')
 }
 
 async function save(): Promise<void> {

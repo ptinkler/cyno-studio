@@ -81,12 +81,16 @@ export function useStudioReuse({
 }) {
   const { selected, mode } = settings
 
+  const kindOf = (item: GenerationItem): MediaKind =>
+    item.kind === 'video' || item.kind === 'audio' ? item.kind : 'image'
+  const stringOrNull = (value: unknown): string | null => (typeof value === 'string' ? value : null)
+
   function applyGenerationSettings(item: GenerationItem): void {
-    const kind: MediaKind = item.kind === 'video' || item.kind === 'audio' ? item.kind : 'image'
+    const kind = kindOf(item)
     const text = item.original_prompt ?? item.prompt
     if (text) draft.value = text
     const params = asRecord(item.params)
-    const model = item.model ?? (typeof params['model'] === 'string' ? params['model'] : null)
+    const model = item.model ?? stringOrNull(params['model'])
     if (model) selected[kind] = model
     mode.value = kind satisfies Mode
     applyOptions(settings, kind, params)

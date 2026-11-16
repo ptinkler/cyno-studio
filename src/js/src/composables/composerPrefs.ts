@@ -126,23 +126,28 @@ export const PREFS_KEY = 'chat.prefs'
 
 const hasStep = (value: unknown): value is Step => value === null || typeof value === 'number'
 
-export function loadPrefs(): Prefs {
-  const stored = asRecord(readStored(PREFS_KEY))
+/** The model last picked per kind; a kind that was never picked, or holds something else, is left out. */
+function readModels(stored: Record<string, unknown>): Prefs['models'] {
   const models: Prefs['models'] = {}
   for (const kind of ['text', 'image', 'video', 'audio'] as const) {
     const pick = stored[kind]
     if (typeof pick === 'string') models[kind] = pick
   }
+  return models
+}
+
+export function loadPrefs(): Prefs {
+  const stored = asRecord(readStored(PREFS_KEY))
   const prefs: Prefs = {
-    models,
+    models: readModels(stored),
     mode: isMode(stored['mode']) ? stored['mode'] : 'auto',
     imageOpts: imageOptsFrom(stored['imageOpts']),
     videoOpts: videoOptsFrom(stored['videoOpts']),
     audioOpts: audioOptsFrom(stored['audioOpts']),
   }
   const { memory, images } = stored
-  if ('memory' in stored && hasStep(memory)) prefs.memory = memory
-  if ('images' in stored && hasStep(images)) prefs.images = images
+  if (hasStep(memory)) prefs.memory = memory
+  if (hasStep(images)) prefs.images = images
   return prefs
 }
 

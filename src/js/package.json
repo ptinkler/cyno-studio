@@ -13,7 +13,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "vue-tsc --noEmit -p .",
+    "typecheck": "vue-tsc --noEmit -p . && vue-tsc --noEmit -p tsconfig.node.json",
     "gen:api": "openapi-typescript --default-non-nullable false --output src/api/schema.d.ts"
   },
   "dependencies": {
@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.6",
     "@vitejs/plugin-vue": "^5.0.0",
     "@vitest/coverage-v8": "^1.6.1",
     "@vue/test-utils": "^2.4.0",
@@ -31,6 +32,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-vue": "^10.11.1",
     "globals": "^17.13.0",
+    "jiti": "^2.7.0",
     "jsdom": "^24.0.0",
     "openapi-typescript": "^7.13.0",
     "prettier": "^3.9.9",

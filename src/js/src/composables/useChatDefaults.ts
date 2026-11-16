@@ -61,15 +61,15 @@ export function useChatDefaults() {
 
   // What the chat in context gets from its defaults, per kind: [{ id, from }],
   // `from` naming the bucket ("All chats" wins when an id is in both)
+  function inheritedFor(kind: DefaultKind): InheritedDefault[] {
+    const seen = new Map<number, string>(globalSettings.value[key(kind)].map(id => [id, ALL_CHATS]))
+    const space = currentSpace.value
+    if (space) for (const id of space[key(kind)]) if (!seen.has(id)) seen.set(id, space.name)
+    return [...seen].map(([id, from]) => ({ id, from }))
+  }
   const inherited = computed(() => {
     const out = {} as Record<DefaultKind, InheritedDefault[]>
-    for (const kind of DEFAULT_KINDS) {
-      const seen = new Map<number, string>()
-      for (const id of globalSettings.value[key(kind)]) seen.set(id, ALL_CHATS)
-      const space = currentSpace.value
-      for (const id of space?.[key(kind)] ?? []) if (!seen.has(id)) seen.set(id, space?.name ?? '')
-      out[kind] = [...seen].map(([id, from]) => ({ id, from }))
-    }
+    for (const kind of DEFAULT_KINDS) out[kind] = inheritedFor(kind)
     return out
   })
 

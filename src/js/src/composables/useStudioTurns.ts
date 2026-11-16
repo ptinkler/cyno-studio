@@ -111,6 +111,12 @@ export function useStudioTurns({ state, composer, thread, used, polling, refresh
     if (i !== -1) messages.value.splice(i, 1, event.message)
   }
 
+  // What the turn used (its characters and instructions); an `error` ends with a `done` that carries the message
+  function onUsed(event: TurnEvent): void {
+    if (event.type === 'characters') used.onCharactersUsed(event.characters, event.character_ids)
+    else if (event.type === 'instructions') used.onInstructionUsed(event.instruction, event.instruction_ids)
+  }
+
   function handle(event: TurnEvent, tempUser: UiMessage | null): void {
     switch (event.type) {
       case 'start':
@@ -122,20 +128,14 @@ export function useStudioTurns({ state, composer, thread, used, polling, refresh
       case 'media':
         onMedia(event)
         break
-      case 'characters':
-        used.onCharactersUsed(event.characters, event.character_ids)
-        break
-      case 'instructions':
-        used.onInstructionUsed(event.instruction, event.instruction_ids)
-        break
       case 'title':
         onTitle(event)
         break
       case 'done':
         onDone(event)
         break
-      case 'error':
-        break // the turn ends with a `done` that carries the failed message
+      default:
+        onUsed(event)
     }
   }
 
@@ -162,30 +162,39 @@ export function useStudioTurns({ state, composer, thread, used, polling, refresh
     body: B,
     tempUser: UiMessage | null,
   ): Promise<void> {
-    const gallery = 'lane' in body && body.lane === 'gallery'
-    if (!gallery) setSending(id, true)
+    const gallery = 'lane' in body && body.lane === 'gallery' // runs in the background: no busy thread, no streamed text
     const controller = new AbortController()
-    if (!gallery) aborts.set(id, controller)
-    const progress = { started: false } // set from the stream's callback
-    // Once the user opens another thread the stream must not touch the shown
-    // messages; the server keeps going and polling picks the result up.
-    const onEvent = (event: TurnEvent): void => {
-      progress.started ||= event.type === 'start'
-      if (active.value === id && !(gallery && event.type === 'delta')) handle(event, tempUser)
+    if (!gallery) {
+      setSending(id, true)
+      aborts.set(id, controller)
     }
+    const progress = { started: false } // set from the stream's callback
     try {
-      await start(id, body, onEvent, controller.signal)
+      await start(id, body, eventHandler(id, gallery, tempUser, progress), controller.signal)
     } catch (e) {
-      if (!(e instanceof Error && e.name === 'AbortError') && !progress.started) onTurnFailed(e, id, body, tempUser)
+      if (!isAbort(e) && !progress.started) onTurnFailed(e, id, body, tempUser)
     } finally {
-      if (!gallery) {
-        setSending(id, false)
-        aborts.delete(id)
-        if (active.value === id) streamingId.value = null
-      }
+      if (!gallery) settleTurn(id)
       polling.ensure()
       refreshAfterBilling()
     }
+  }
+
+  // Once the user opens another thread the stream must not touch the shown messages; the server keeps
+  // going and polling picks the result up.
+  const eventHandler =
+    (id: string, gallery: boolean, tempUser: UiMessage | null, progress: { started: boolean }) =>
+    (event: TurnEvent): void => {
+      progress.started ||= event.type === 'start'
+      if (active.value === id && !(gallery && event.type === 'delta')) handle(event, tempUser)
+    }
+
+  const isAbort = (e: unknown): boolean => e instanceof Error && e.name === 'AbortError'
+
+  function settleTurn(id: string): void {
+    setSending(id, false)
+    aborts.delete(id)
+    if (active.value === id) streamingId.value = null
   }
 
   // --- Send / retry / edit / stop --------------------------------------------------------------------------------

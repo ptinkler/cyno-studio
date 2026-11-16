@@ -61,16 +61,21 @@ let keySeq = 0
 const isNew = computed(() => !props.character)
 const total = computed(() => images.value.length)
 
+// The form starts from the character being edited (or empty), plus any seed pictures for a new one
+function loadForm(): void {
+  name.value = props.character?.name ?? ''
+  description.value = props.character?.description ?? ''
+  images.value = [
+    ...(props.character?.images ?? []).map((saved): EditorImage => ({ kind: 'saved', saved, key: saved })),
+    ...props.seed.map((seed): EditorImage => ({ ...seed, key: ++keySeq })),
+  ]
+}
+
 watch(
   () => props.open,
   open => {
     if (!open) return
-    name.value = props.character?.name ?? ''
-    description.value = props.character?.description ?? ''
-    images.value = [
-      ...(props.character?.images ?? []).map((saved): EditorImage => ({ kind: 'saved', saved, key: saved })),
-      ...props.seed.map((seed): EditorImage => ({ ...seed, key: ++keySeq })),
-    ]
+    loadForm()
     void nextTick(() => nameInput.value?.focus())
   },
 )

@@ -59,14 +59,26 @@ export interface RefPlan {
   off: string[]
 }
 
+type Choices = NonNullable<RefPlanInput['choices']>
+
 export function planRefs({
   lead = [],
   chat = [],
   characters = [],
   imageLimit = null,
   maxRefs = null,
-  choices: { on = [], off: offList = [] } = {},
+  choices,
 }: RefPlanInput): RefPlan {
+  const { ordered, off } = orderRefs({ lead, chat, characters, imageLimit }, choices)
+  const sent = take(ordered, maxRefs)
+  return { sent, dropped: ordered.slice(sent.length), off }
+}
+
+/** Every ref in send order (before the model's maximum cuts it), and the ones the user switched off. */
+function orderRefs(
+  { lead, chat, characters, imageLimit }: Required<Pick<RefPlanInput, 'lead' | 'chat' | 'characters' | 'imageLimit'>>,
+  { on = [], off: offList = [] }: Choices = {},
+): { ordered: string[]; off: string[] } {
   const off = new Set(offList)
   const offChat = dedupe([...lead, ...chat]).filter(r => off.has(r))
   const kept = dedupe([...lead, ...chat]).filter(r => !off.has(r))
@@ -82,7 +94,5 @@ export function planRefs({
     ...chatRefs.slice(split),
     ...every,
   ])
-  const offChars = switchedOffCharacterRefs(characters, off)
-  const sent = take(ordered, maxRefs)
-  return { sent, dropped: ordered.slice(sent.length), off: [...offChat, ...offChars] }
+  return { ordered, off: [...offChat, ...switchedOffCharacterRefs(characters, off)] }
 }

@@ -18,7 +18,7 @@ export default [
     },
     rules: {
       'no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrors: 'none' }],
-      complexity: ['error', 10],
+      complexity: ['error', 7],
       eqeqeq: ['error', 'always', { null: 'ignore' }],
       'no-var': 'error',
       'prefer-const': 'error',
@@ -37,14 +37,14 @@ export default [
     rules: { complexity: 'off', 'max-lines': 'off' },
   },
   {
-    files: ['src/__tests__/**', 'vite.config.js', 'eslint.config.js'],
-    // vite.config.js runs Vitest with `globals: true`
+    files: ['src/__tests__/**', 'vite.config.ts', 'eslint.config.ts'],
+    // vite.config.ts runs Vitest with `globals: true`
     languageOptions: { globals: { ...globals.browser, ...globals.node, ...globals.vitest } },
   },
   ...defineConfig({
     // TypeScript: the strictest preset, type-aware. No `any`, no unsafe member access, no floating
     // promises. It is why the typed client reads server JSON in exactly one place (api/json.ts).
-    files: ['**/*.ts'],
+    files: ['src/**/*.ts'],
     extends: [...tseslint.configs.strictTypeChecked, ...tseslint.configs.stylisticTypeChecked],
     languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } },
     rules: {
@@ -52,6 +52,13 @@ export default [
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrors: 'none' }],
       '@typescript-eslint/consistent-type-imports': 'error',
     },
+  }),
+  ...defineConfig({
+    // The tooling configs aren't part of the app's TypeScript project (they have their own tsconfig.node.json,
+    // checked by `npm run typecheck`), so they get the strict rules that don't need type information.
+    files: ['*.config.ts'],
+    extends: [...tseslint.configs.strict, ...tseslint.configs.stylistic],
+    rules: { '@typescript-eslint/consistent-type-imports': 'error' },
   }),
   ...defineConfig({
     // Every component is <script setup lang="ts">: the same strict, type-aware rules as .ts files.

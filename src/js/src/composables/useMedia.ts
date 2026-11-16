@@ -46,11 +46,12 @@ export function useMediaFilters(
   const filters = reactive<MediaFilterState>({ kind, source: 'all', origin, q: '' })
   const filtered = computed(() => {
     const q = filters.q.trim().toLowerCase()
+    const wanted = (setting: string, actual: string | null): boolean => setting === 'all' || setting === actual
     return items.value.filter(
       i =>
-        (filters.kind === 'all' || i.kind === filters.kind) &&
-        (filters.source === 'all' || i.source === filters.source) &&
-        (filters.origin === 'all' || i.origin === filters.origin) &&
+        wanted(filters.kind, i.kind) &&
+        wanted(filters.source, i.source) &&
+        wanted(filters.origin, i.origin) &&
         (!q || [i.prompt, i.name, mediaOrigin(i)].some(s => s?.toLowerCase().includes(q))),
     )
   })

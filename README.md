@@ -110,9 +110,9 @@ Code standards, enforced in CI:
   Settings in `pyproject.toml`.
 - **Frontend** — everything under `src/js/src` is strict TypeScript (`vue-tsc`: `strict`,
   `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), with no `any` and no suppressions. ESLint
-  runs `typescript-eslint` `strictTypeChecked` (complexity limit 10, 600 lines per file) and Prettier
+  runs `typescript-eslint` `strictTypeChecked` (complexity limit 7, 600 lines per file) and Prettier
   (no semicolons, single quotes, 120 columns). API types are generated from the backend (`make gen-api`).
-  Settings in `src/js/eslint.config.js`, `src/js/tsconfig.json` and `.prettierrc.json`. See
+  Settings in `src/js/eslint.config.ts`, `src/js/tsconfig.json` and `.prettierrc.json`. See
   [src/js/README.md](src/js/README.md).
 - **Line endings** — LF everywhere (`.gitattributes`, `.editorconfig`).
 

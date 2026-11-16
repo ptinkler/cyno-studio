@@ -144,13 +144,15 @@ watch(
 
 /** Why this item can't be added to the pick, or null when it can. */
 function refusal(item: LibraryEntry): string | null {
-  if (props.limits) {
-    const cap = props.limits[item.kind ?? '']
-    if (cap === undefined || kindCount(item.kind) < cap) return null
-    return `Up to ${String(cap)} ${item.kind ?? 'item'}${cap === 1 ? '' : 's'}`
-  }
-  if (props.max !== null && picked.value.size >= props.max) return `Pick up to ${String(props.max)}`
-  return null
+  if (props.limits) return limitRefusal(item, props.limits)
+  return props.max !== null && picked.value.size >= props.max ? `Pick up to ${String(props.max)}` : null
+}
+
+/** The per-kind caps say no: this kind is full. */
+function limitRefusal(item: LibraryEntry, limits: Readonly<Record<string, number>>): string | null {
+  const cap = limits[item.kind ?? '']
+  if (cap === undefined || kindCount(item.kind) < cap) return null
+  return `Up to ${String(cap)} ${item.kind ?? 'item'}${cap === 1 ? '' : 's'}`
 }
 
 function toggle(item: LibraryEntry): void {

@@ -29,32 +29,39 @@ const capitalised = (text: string): string => text.charAt(0).toUpperCase() + tex
 
 const ALL_TYPES: readonly string[] = ['image', 'video', 'audio']
 
+/** Whether the model takes this attachment as its `n`th of that type: an allowed type, under its cap, finished uploading. */
+function refRules(refMode: RefMode): (attachment: RefAttachment, type: RefType, n: number) => boolean {
+  const types = new Set(refMode.types ?? ALL_TYPES)
+  const limits = refMode.limits ?? {}
+  return (attachment, type, n) => {
+    const limit = limits[type]
+    return !attachment.uploading && types.has(type) && !(limit && n > limit)
+  }
+}
+
+const refItem = (attachment: RefAttachment, type: RefType, n: number): RefItem => ({
+  key: attachment.key,
+  name: `${type}${String(n)}`,
+  label: `${capitalised(type)} ${String(n)}`,
+  type,
+  preview: attachment.preview,
+})
+
 // Reference-to-video: each allowed attachment becomes a mentionable ref named
 // by type + order (image1, video1, audio1…) — the handle the prompt uses as
 // [@name]. Caps come from the model's ref_mode ({ types, max, limits }); ordering matches the backend
 // (web/chat/turn.py _ref_items) so a pill always resolves to the same
 // attachment.
 export function buildRefItems(attachments: readonly RefAttachment[], refMode: RefMode): RefItem[] {
-  const types = new Set(refMode.types ?? ALL_TYPES)
-  const limits = refMode.limits ?? {}
+  const allowed = refRules(refMode)
   const counts: Partial<Record<RefType, number>> = {}
   const out: RefItem[] = []
-  const allowed = (attachment: RefAttachment, type: RefType, n: number): boolean => {
-    const limit = limits[type]
-    return !attachment.uploading && types.has(type) && !(limit && n > limit)
-  }
   for (const attachment of attachments) {
     const type = attType(attachment)
     const n = (counts[type] ?? 0) + 1
     if (!allowed(attachment, type, n)) continue
     counts[type] = n
-    out.push({
-      key: attachment.key,
-      name: `${type}${String(n)}`,
-      label: `${capitalised(type)} ${String(n)}`,
-      type,
-      preview: attachment.preview,
-    })
+    out.push(refItem(attachment, type, n))
     if (refMode.max && out.length >= refMode.max) break
   }
   return out

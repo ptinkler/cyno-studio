@@ -107,15 +107,18 @@ function fmtDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 }
 
+function applyStatus(data: Awaited<ReturnType<typeof fetchChatGptImport>>): void {
+  folder.value = data.folder
+  files.value = data.files
+  const was = job.value?.state
+  job.value = data.job
+  if (!files.value.some(f => f.name === selected.value)) selected.value = files.value[0]?.name ?? null
+  if (was === 'running' && data.job.state !== 'running') emit('imported')
+}
+
 async function refresh(): Promise<void> {
   try {
-    const data = await fetchChatGptImport()
-    folder.value = data.folder
-    files.value = data.files
-    const was = job.value?.state
-    job.value = data.job
-    if (!files.value.some(f => f.name === selected.value)) selected.value = files.value[0]?.name ?? null
-    if (was === 'running' && data.job.state !== 'running') emit('imported')
+    applyStatus(await fetchChatGptImport())
     error.value = ''
   } catch (e) {
     error.value = messageOf(e)

@@ -92,6 +92,38 @@ export function useChatAttachments({
     attachments.value = []
   }
 
+  // The chat to attach into; null (after telling the user) when it can't be made
+  async function chatId(): Promise<string | null> {
+    try {
+      return await ensureConversation()
+    } catch (e) {
+      showToast(messageOf(e), 'error')
+      return null
+    }
+  }
+
+  // The attachment is on screen already; it settles when the upload does, and goes again if that fails
+  function settle(attachment: Attachment, sending: Promise<{ file: string }>): void {
+    sending
+      .then(result => {
+        attachment.file = result.file
+      })
+      .catch((e: unknown) => {
+        showToast(messageOf(e), 'error')
+        remove(attachment)
+      })
+      .finally(() => {
+        attachment.uploading = false
+      })
+  }
+
+  // Images fill the room that is left (the user is told when some don't fit); a video or audio rides singly
+  function fitting<S>(sources: readonly S[], single: boolean): readonly S[] {
+    if (single) return sources
+    if (sources.length > room()) showToast(fullMessage(), 'error')
+    return sources.slice(0, Math.max(room(), 0))
+  }
+
   // Each source becomes an attachment at once; `send(source, chatId)` puts it on the server
   async function attachEach<S>(
     sources: readonly S[],
@@ -101,27 +133,10 @@ export function useChatAttachments({
     audio = false,
   ): Promise<void> {
     const single = video || audio // a video / audio rides singly, outside the image-count cap
-    let id: string
-    try {
-      id = await ensureConversation()
-    } catch (e) {
-      showToast(messageOf(e), 'error')
-      return
-    }
-    if (!single && sources.length > room()) showToast(fullMessage(), 'error')
-    for (const source of single ? sources : sources.slice(0, Math.max(room(), 0))) {
-      const attachment = add(preview(source), null, video, audio)
-      send(source, id)
-        .then(result => {
-          attachment.file = result.file
-        })
-        .catch((e: unknown) => {
-          showToast(messageOf(e), 'error')
-          remove(attachment)
-        })
-        .finally(() => {
-          attachment.uploading = false
-        })
+    const id = await chatId()
+    if (id === null) return
+    for (const source of fitting(sources, single)) {
+      settle(add(preview(source), null, video, audio), send(source, id))
     }
   }
 
@@ -182,7 +197,7 @@ export function useChatAttachments({
   function addChatMedia(file: string, kind = 'image', fromConv: string | null = null): boolean {
     const video = kind === 'video'
     const audio = kind === 'audio'
-    if (fromConv && fromConv !== convId.value) {
+    if (isOtherChat(fromConv)) {
       void attachEach(
         [{ id: `chat:${fromConv}:${file}`, thumb: chatMediaPreviewUrl(fromConv, file) }],
         source => source.thumb,
@@ -198,26 +213,33 @@ export function useChatAttachments({
     return true
   }
 
+  // The file lives in another thread, so it is copied in rather than pointed at
+  const isOtherChat = (fromConv: string | null): fromConv is string => !!fromConv && fromConv !== convId.value
+
+  function hasRoom(): boolean {
+    if (room() >= 1) return true
+    showToast(fullMessage(), 'error')
+    return false
+  }
+
+  function copyChatImage(file: string, fromConv: string): boolean {
+    if (!hasRoom()) return false
+    addFromLibrary([{ id: `chat:${fromConv}:${file}`, thumb_url: chatMediaPreviewUrl(fromConv, file) }])
+    return true
+  }
+
+  function addOwnChatImage(file: string): boolean {
+    if (attachments.value.some(a => a.file === file)) return true
+    if (convId.value === null || !hasRoom()) return false
+    add(chatMediaUrl(convId.value, file), file)
+    return true
+  }
+
   // An image already in this chat; false if there's no room for it
   // (`fromConv`: it lives in another thread, so copy it into this one)
   function addChatImage(file: string, fromConv: string | null = null): boolean {
     if (VIDEO_FILE.test(file)) return false // a video isn't an image reference
-    if (fromConv && fromConv !== convId.value) {
-      if (room() < 1) {
-        showToast(fullMessage(), 'error')
-        return false
-      }
-      addFromLibrary([{ id: `chat:${fromConv}:${file}`, thumb_url: chatMediaPreviewUrl(fromConv, file) }])
-      return true
-    }
-    if (attachments.value.some(a => a.file === file)) return true
-    if (convId.value === null) return false
-    if (room() < 1) {
-      showToast(fullMessage(), 'error')
-      return false
-    }
-    add(chatMediaUrl(convId.value, file), file)
-    return true
+    return isOtherChat(fromConv) ? copyChatImage(file, fromConv) : addOwnChatImage(file)
   }
 
   return { attachments, files, uploading, room, addFiles, addFromLibrary, addChatImage, addChatMedia, remove, clear }

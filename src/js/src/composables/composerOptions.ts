@@ -33,10 +33,14 @@ export function dropUnsupported(
   resolutions: readonly string[],
   durations: readonly number[] | null = null,
 ): void {
-  if (opts.aspect_ratio && !ratios.includes(opts.aspect_ratio)) opts.aspect_ratio = ''
-  if (opts.resolution && !resolutions.includes(opts.resolution)) opts.resolution = ''
-  if (durations && opts.duration && !durations.includes(Number(opts.duration))) opts.duration = ''
+  if (isUnsupported(opts.aspect_ratio, ratios)) opts.aspect_ratio = ''
+  if (isUnsupported(opts.resolution, resolutions)) opts.resolution = ''
+  if (durations && isUnsupported(opts.duration, durations)) opts.duration = ''
 }
+
+/** A pick was made (not auto) and the model doesn't offer it. */
+const isUnsupported = (pick: string | number | undefined, offered: readonly (string | number)[]): boolean =>
+  !!pick && !offered.map(String).includes(String(pick))
 
 // --- Audio ---------------------------------------------------------------------------------------------------
 

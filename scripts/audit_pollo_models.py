@@ -258,6 +258,12 @@ MODELS_FILE = _PY / "web" / "providers" / "pollo" / "models.py"
 ENGINE_FILE = _PY / "web" / "providers" / "pollo" / "engine" / "video" / "models.py"
 # A hide we may clear is one justified by enablement; a deliberate hide is kept.
 _ENABLEMENT_HIDE = re.compile(r"enabled|403|404|unavailable|access", re.IGNORECASE)
+# Only for these does the free estimate speak for the model itself. A media-input model (edit, extend, motion,
+# upscale, lip-sync, face swap) has its placeholder media refused before enablement is checked, so an ENABLED
+# there means nothing (six edit models answered ENABLED yet 403'd a real generation).
+_ESTIMATE_DECIDES = frozenset({"img2vid"})
+# The ref types our frontend and backend understand; the docs also list others (element, file, link)
+_REF_TYPES = ("image", "video", "audio")
 
 
 def py_literal(v: JsonValue) -> str:
@@ -393,7 +399,7 @@ def apply_edits(path: str, edits: Mapping[str, Mapping[str, EditValue]], warning
 def _plan_hidden(info: ModelInfo, verdict: str | None, today: str) -> str | _Remove | None:
     """The `hidden` edit the enablement probe calls for, if any."""
     hide = info.get("hidden")
-    if verdict == "ENABLED" and hide and _ENABLEMENT_HIDE.search(hide):
+    if verdict == "ENABLED" and hide and _ENABLEMENT_HIDE.search(hide) and info.get("type") in _ESTIMATE_DECIDES:
         return REMOVE
     if verdict == "DISABLED" and not hide:
         return f'"Not enabled for API access on this key (403)"  # audit {today}'
@@ -403,10 +409,28 @@ def _plan_hidden(info: ModelInfo, verdict: str | None, today: str) -> str | _Rem
 def _merged_ref_mode(info: ModelInfo, doc_refs: DocRefs) -> tuple[dict[str, JsonValue], dict[str, JsonValue]]:
     """Our current ref_mode, and it merged with the docs' numbers (curated keys survive)."""
     cur = _ref_mode_json(info.get("ref_mode") or {})
-    merged: dict[str, JsonValue] = {**cur, "types": doc_refs["types"], "max": doc_refs["max"]}
-    if doc_refs["limits"]:
-        merged["limits"] = {str(k): v for k, v in doc_refs["limits"].items()}
+    types = [t for t in doc_refs["types"] if t in _REF_TYPES] or cur.get("types") or []
+    merged: dict[str, JsonValue] = {**cur, "types": types, "max": doc_refs["max"]}
+    limits = {**as_object(cur.get("limits")), **{str(k): v for k, v in doc_refs["limits"].items()}}
+    if limits:
+        merged["limits"] = limits
     return cur, merged
+
+
+def _plan_refs(o: OurModel, doc_refs: DocRefs | None, edits: tuple[Edits, Edits], notes: list[str]) -> None:
+    """Plan the ref_mode / HAS_REFS edits (img2vid models only) or a note for a human, for one model."""
+    models_edits, engine_edits = edits
+    key, info = o["key"], o["info"]
+    if doc_refs and info.get("type") not in _ESTIMATE_DECIDES:
+        notes.append(f"{key}: docs show a refs branch but this is a {info.get('type')} model — not auto-applied")
+    elif doc_refs:
+        cur, merged = _merged_ref_mode(info, doc_refs)
+        if merged != cur:
+            models_edits.setdefault(key, {})["ref_mode"] = py_literal(merged)
+        if not o["cfg"].get("HAS_REFS"):
+            engine_edits.setdefault(key, {})["HAS_REFS"] = "True"
+    elif info.get("ref_mode"):
+        notes.append(f"{key}: we declare ref_mode but docs show none — review by hand (may be a docs gap)")
 
 
 def plan_writes(
@@ -422,21 +446,13 @@ def plan_writes(
     notes: list[str] = []
     today = datetime.now().astimezone().date().isoformat()
     for slug, o in ours.items():
-        key, info, d = o["key"], o["info"], docs.get(slug)
         # Enablement → hidden (needs the probe)
-        hidden = _plan_hidden(info, enabled.get(key), today)
+        hidden = _plan_hidden(o["info"], enabled.get(o["key"]), today)
         if hidden is not None:
-            models_edits.setdefault(key, {})["hidden"] = hidden
+            models_edits.setdefault(o["key"], {})["hidden"] = hidden
         # Features → ref_mode (+ engine HAS_REFS), merged so curated keys survive
-        doc_refs = d["refs"] if d else None
-        if doc_refs:
-            cur, merged = _merged_ref_mode(info, doc_refs)
-            if merged != cur:
-                models_edits.setdefault(key, {})["ref_mode"] = py_literal(merged)
-            if not o["cfg"].get("HAS_REFS"):
-                engine_edits.setdefault(key, {})["HAS_REFS"] = "True"
-        elif info.get("ref_mode"):
-            notes.append(f"{key}: we declare ref_mode but docs show none — review by hand (may be a docs gap)")
+        d = docs.get(slug)
+        _plan_refs(o, d["refs"] if d else None, (models_edits, engine_edits), notes)
     return models_edits, engine_edits, notes
 
 

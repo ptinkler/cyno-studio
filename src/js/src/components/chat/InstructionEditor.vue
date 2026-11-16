@@ -74,23 +74,31 @@ function removeMember(snippet: Instruction): void {
   memberIds.value = memberIds.value.filter(id => id !== snippet.id)
 }
 
+const newItemStarted = (): boolean => !!(name.value.trim() || content.value.trim() || memberIds.value.length)
+const groupChanged = (group: InstructionGroup): boolean =>
+  group.name !== name.value || !sameIds(memberIds.value, group.snippet_ids)
+const snippetChanged = (snippet: Instruction): boolean =>
+  snippet.name !== name.value || snippet.content !== content.value
 const fieldsDirty = computed(() => {
-  const group = currentGroup.value
-  const snippet = currentSnippet.value
-  if (!group && !snippet) return !!(name.value.trim() || content.value.trim() || memberIds.value.length)
-  if (group) return group.name !== name.value || !sameIds(memberIds.value, group.snippet_ids)
-  return snippet?.name !== name.value || snippet.content !== content.value
+  if (currentGroup.value) return groupChanged(currentGroup.value)
+  if (currentSnippet.value) return snippetChanged(currentSnippet.value)
+  return newItemStarted()
 })
 const dirty = computed(() => fieldsDirty.value || defaultsDirty.value)
+
+// The form starts from what is being edited (or empty for a new one)
+function loadFields(): void {
+  name.value = current.value?.name ?? ''
+  content.value = currentSnippet.value?.content ?? ''
+  memberIds.value = [...(currentGroup.value?.snippet_ids ?? [])]
+  memberQuery.value = ''
+}
 
 watch(
   () => props.target,
   async target => {
     if (!target) return
-    name.value = current.value?.name ?? ''
-    content.value = currentSnippet.value?.content ?? ''
-    memberIds.value = [...(currentGroup.value?.snippet_ids ?? [])]
-    memberQuery.value = ''
+    loadFields()
     if (!current.value) {
       await nextTick()
       nameInput.value?.focus()
@@ -98,20 +106,22 @@ watch(
   },
 )
 
+// Create the group or snippet (id null) or update it, from the form
+function persist(kind: Kind, id: number | null): Promise<Instruction | InstructionGroup> {
+  if (kind === 'group') {
+    const data = { name: name.value.trim(), snippet_ids: memberIds.value }
+    return id === null ? createInstructionGroup(data) : updateInstructionGroup(id, data)
+  }
+  const data = { name: name.value.trim(), content: content.value }
+  return id === null ? createInstruction(data) : updateInstruction(id, data)
+}
+
 async function save(): Promise<void> {
   const target = props.target
   if (!target || !name.value.trim() || saving.value) return
   saving.value = true
   try {
-    const id = editingId.value
-    let saved: Instruction | InstructionGroup
-    if (target.kind === 'group') {
-      const data = { name: name.value.trim(), snippet_ids: memberIds.value }
-      saved = id === null ? await createInstructionGroup(data) : await updateInstructionGroup(id, data)
-    } else {
-      const data = { name: name.value.trim(), content: content.value }
-      saved = id === null ? await createInstruction(data) : await updateInstruction(id, data)
-    }
+    const saved = await persist(target.kind, editingId.value)
     await toggles.value?.commit(saved.id)
     emit('changed', { kind: target.kind, item: saved })
     emit('close')
@@ -122,16 +132,22 @@ async function save(): Promise<void> {
   }
 }
 
+const deleteQuestion = (kind: Kind, itemName: string): string =>
+  kind === 'group'
+    ? `the group “${itemName}”? Its snippets are kept.`
+    : `“${itemName}”? It's also taken out of chats, groups and defaults.`
+
 async function remove(): Promise<void> {
   const target = props.target
   const id = editingId.value
   const existing = current.value
   if (!target || id === null || !existing) return
-  const what =
-    target.kind === 'group'
-      ? `the group “${existing.name}”? Its snippets are kept.`
-      : `“${existing.name}”? It's also taken out of chats, groups and defaults.`
-  const confirmed = await confirmDialog({ title: 'Delete', message: what, confirmLabel: 'Delete', danger: true })
+  const confirmed = await confirmDialog({
+    title: 'Delete',
+    message: deleteQuestion(target.kind, existing.name),
+    confirmLabel: 'Delete',
+    danger: true,
+  })
   if (!confirmed) return
   try {
     await (target.kind === 'group' ? deleteInstructionGroup(id) : deleteInstruction(id))
@@ -143,8 +159,12 @@ async function remove(): Promise<void> {
 }
 
 async function close(): Promise<void> {
-  const discard = await confirmDialog({ title: 'Discard unsaved changes?', confirmLabel: 'Discard', danger: true })
-  if (!dirty.value || discard) emit('close')
+  if (
+    dirty.value &&
+    !(await confirmDialog({ title: 'Discard unsaved changes?', confirmLabel: 'Discard', danger: true }))
+  )
+    return
+  emit('close')
 }
 </script>
 
