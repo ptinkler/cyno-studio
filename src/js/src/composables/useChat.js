@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPatch, apiDelete, apiUpload } from './useApi'
+import { apiGet, apiPost, apiDelete, apiUpload } from './useApi'
 import { useAuth } from './useAuth'
 
 const enc = encodeURIComponent
@@ -25,67 +25,43 @@ export {
   setTitleModel,
 } from './chatSettingsApi'
 
+// Conversations and their messages are typed in chatConversationsApi.ts
+export {
+  fetchConversations,
+  fetchConversationSpend,
+  fetchSpendBreakdown,
+  fetchConversation,
+  fetchConversationThumbs,
+  createConversation,
+  patchConversation,
+  deleteConversation,
+  fetchChatMessage,
+  switchChatBranch,
+  forkConversation,
+  deleteChatExchange,
+  fetchDeleteInfo,
+} from './chatConversationsApi'
+
+// Media-card actions: pin, favourite, regenerate, versions
+export {
+  regenerateChatMedia,
+  showChatTextVersion,
+  showChatMediaVersion,
+  pinChatMedia,
+  favouriteChatMedia,
+} from './chatMediaApi'
+
 export const fetchChatModels = (refresh = false) => apiGet(`/api/chat/models${refresh ? '?refresh=true' : ''}`)
-// Pinned + most recent ({ conversations, more }); with `q`, chats whose title or messages match (each with a `snippet`)
-export const fetchConversations = (q = '') => apiGet(`/api/chat/conversations${q ? `?q=${enc(q)}` : ''}`)
-// What a chat has cost: { usd, credits, inherited_usd, inherited_credits }
-export const fetchConversationSpend = id => apiGet(`/api/chat/conversations/${enc(id)}/spend`)
 // Pollo's official TTS voices: { voices: [{voiceId, voiceName, language, gender, ...}], total }
 export const fetchAudioVoices = (params = '') => apiGet(`/api/chat/audio/voices${params}`)
-export const fetchSpendBreakdown = days => apiGet(`/api/chat/spend/breakdown?days=${days}`)
 export const estimateChatCost = data => apiPost('/api/chat/estimate', data)
 export const enhanceChatPrompt = data => apiPost('/api/chat/enhance-prompt', data)
-export const fetchConversation = id => apiGet(`/api/chat/conversations/${enc(id)}`)
-// Newest image file per conversation id, for gallery cover thumbnails: { thumbs: {id: file} }
-export const fetchConversationThumbs = ids => apiGet(`/api/chat/conversations/thumbs?ids=${enc(ids.join(','))}`)
-export const createConversation = (data = {}) => apiPost('/api/chat/conversations', data)
-export const deleteConversation = (id, { deleteMedia = true } = {}) =>
-  apiDelete(`/api/chat/conversations/${enc(id)}?delete_media=${deleteMedia}`)
-export const fetchChatMessage = id => apiGet(`/api/chat/messages/${id}`)
 export const cancelChatMessage = id => apiPost(`/api/chat/messages/${id}/cancel`)
-// Show the branch through this message (edits/retries are kept as sibling branches)
-export const switchChatBranch = (convId, messageId) =>
-  apiPost(`/api/chat/conversations/${enc(convId)}/branch`, { message_id: messageId })
-// New chat from a prompt: the messages up to it, it and its reply — nothing after
-export const forkConversation = (convId, messageId) =>
-  apiPost(`/api/chat/conversations/${enc(convId)}/fork`, { message_id: messageId })
-// Make this image/video again. `prompt` overrides the one it was made with,
-// `edit` sends the picture itself back as the reference (change this image),
-// and `replace` swaps it in place, keeping the old one as an earlier version.
-export const regenerateChatMedia = (
-  messageId,
-  mediaId,
-  /** @type {{ model?: string | null, prompt?: string, edit?: boolean, replace?: boolean }} */ {
-    model = null,
-    prompt,
-    edit,
-    replace,
-  } = {},
-) => apiPost(`/api/chat/messages/${messageId}/media/${enc(mediaId)}/regenerate`, { model, prompt, edit, replace })
-// Show one of a reply's wordings (0 = first); its pictures are untouched
-export const showChatTextVersion = (messageId, index) =>
-  apiPost(`/api/chat/messages/${messageId}/text-version`, { index })
-// Make one of a card's pictures the real one (0 = first): the chat uses it from then on
-export const showChatMediaVersion = (messageId, mediaId, index) =>
-  apiPost(`/api/chat/messages/${messageId}/media/${enc(mediaId)}/version`, { index })
-// Pinned images go to the image model as references with every new image on this branch
-export const pinChatMedia = (messageId, mediaId, pinned) =>
-  apiPost(`/api/chat/messages/${messageId}/media/${enc(mediaId)}/pin`, { pinned })
-// Favourite (★) a generation: a bookmark that surfaces it in the Favourites gallery (images + videos)
-export const favouriteChatMedia = (messageId, mediaId, favourite) =>
-  apiPost(`/api/chat/messages/${messageId}/media/${enc(mediaId)}/favourite`, { favourite })
 // In-flight (and tracked) generations across every thread — powers the queue dock.
 // `known` = message ids to resolve even once they've left the pending set.
 export const fetchActiveGenerations = (known = []) => apiPost('/api/chat/generations/active', { known })
 // Every generated image/video across all threads, newest first (see /api/chat/library)
 export const fetchChatLibrary = () => apiGet('/api/chat/library')
-// Delete a prompt's turn (all versions of it and its replies); generated media moves to the library
-export const deleteChatExchange = (messageId, { deleteMedia = false } = {}) =>
-  apiDelete(`/api/chat/messages/${messageId}?delete_media=${deleteMedia}`)
-// What that would also remove: { other_versions, other_messages }
-export const fetchDeleteInfo = messageId => apiGet(`/api/chat/messages/${messageId}/delete-info`)
-
-export const patchConversation = (id, data) => apiPatch(`/api/chat/conversations/${enc(id)}`, data)
 
 // ChatGPT exports in the server's imports folder, and the last import's progress: { folder, files, job }
 export const fetchChatGptImport = () => apiGet('/api/chat/import/chatgpt')

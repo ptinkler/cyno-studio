@@ -245,10 +245,9 @@ def _new_conversation(data: Mapping[str, JsonValue], spaces: dict[str, int]) -> 
             space_id=_space_id(_str(data.get("space")), spaces),
         )
     )
-    made_id = made.get("id")
     settings = data.get("settings")
     conv = get_db().update_conversation(
-        str(made_id),
+        made.id,
         import_source=SOURCE,
         import_id=_str(data.get("id")),
         pinned=data.get("pinned") is True,
@@ -258,7 +257,7 @@ def _new_conversation(data: Mapping[str, JsonValue], spaces: dict[str, int]) -> 
         created_at=_when(data.get("created_at")) or datetime.now().astimezone().replace(tzinfo=None),
     )
     if conv is None:
-        raise LookupError(made_id)
+        raise LookupError(made.id)
     return conv
 
 

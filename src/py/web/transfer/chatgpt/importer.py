@@ -122,21 +122,18 @@ def _new_imported_conversation(data: Mapping[str, JsonValue], stats: ImportStats
     title_value = data.get("title")
     title = (title_value if isinstance(title_value, str) else DEFAULT_TITLE).strip()[:255] or DEFAULT_TITLE
     made = api_create_conversation(ConversationCreate(title=title, space_id=space_id))
-    made_id = made.get("id")
-    if not isinstance(made_id, str):
-        raise TypeError(made_id)
     create_time = data.get("create_time")
     timestamp = (
         float(create_time) if isinstance(create_time, int | float) and not isinstance(create_time, bool) else None
     )
     conv = db.update_conversation(
-        made_id,
+        made.id,
         import_source=SOURCE,
         import_id=import_id,
         created_at=_when(timestamp) or datetime.now().astimezone().replace(tzinfo=None),
     )
     if conv is None:
-        raise LookupError(made_id)
+        raise LookupError(made.id)
     return conv
 
 

@@ -26,10 +26,10 @@ from web.chat.helpers import (
     branch_to,
     chat_root,
     conversation_dir,
-    message_out,
     require_conv,
     require_idle,
     shown_branch,
+    shown_message,
     spend,
 )
 from web.chat.models import (
@@ -44,6 +44,20 @@ from web.chat.routes_settings import (
     require_instructions,
     require_paused,
     require_space,
+)
+from web.chat.schemas import (
+    Conversation,
+    ConversationList,
+    ConversationSummary,
+    ConversationThumbs,
+    ConversationView,
+    DeletedConversation,
+    DeleteInfo,
+    ShownBranch,
+    ShownMessage,
+    Spend,
+    SpendBreakdown,
+    SpendGroup,
 )
 from web.core import config
 from web.core.metadata import MetadataDB, get_db
@@ -61,7 +75,7 @@ class _SpendGroup(TypedDict):
 
 
 @router.get("/conversations")
-def api_list_conversations(q: str = "") -> dict[str, JsonValue]:
+def api_list_conversations(q: str = "") -> ConversationList:
     """Pinned chats, then the most recent (`more` = older ones left out).
 
     With `q`, chats whose title or messages contain it, each with a snippet
@@ -70,29 +84,29 @@ def api_list_conversations(q: str = "") -> dict[str, JsonValue]:
     db = get_db()
     q = q.strip()
     if q:
-        return {
-            "conversations": [
-                {**c.to_dict(), "snippet": _snippet(text, q) if text else None}
+        return ConversationList(
+            conversations=[
+                ConversationSummary.model_validate({**c.to_dict(), "snippet": _snippet(text, q) if text else None})
                 for c, text in db.search_conversations(q)
             ],
-            "more": False,
-        }
+            more=False,
+        )
     convs = db.list_conversations(limit=CONVERSATION_LIST_LIMIT + 1)
-    return {
-        "conversations": [c.to_dict() for c in convs[:CONVERSATION_LIST_LIMIT]],
-        "more": len(convs) > CONVERSATION_LIST_LIMIT,
-    }
+    return ConversationList(
+        conversations=[ConversationSummary.model_validate(c.to_dict()) for c in convs[:CONVERSATION_LIST_LIMIT]],
+        more=len(convs) > CONVERSATION_LIST_LIMIT,
+    )
 
 
 @router.get("/conversations/thumbs")
-def api_conversation_thumbs(ids: str = "") -> dict[str, JsonValue]:
+def api_conversation_thumbs(ids: str = "") -> ConversationThumbs:
     """Newest image file per conversation id (comma-separated), for gallery cover thumbnails.
 
     Declared before /conversations/{conv_id} so "thumbs"
     isn't read as an id.
     """
     conv_ids = [i for i in ids.split(",") if i]
-    return {"thumbs": get_db().conversation_thumbs(conv_ids)}
+    return ConversationThumbs(thumbs=get_db().conversation_thumbs(conv_ids))
 
 
 def _snippet(text: str, q: str) -> str:
@@ -115,7 +129,7 @@ def _clean_kind(kind: str | None) -> str:
 
 
 @router.post("/conversations")
-def api_create_conversation(data: ConversationCreate) -> dict[str, JsonValue]:
+def api_create_conversation(data: ConversationCreate) -> Conversation:
     """Create a conversation with validated model and settings references."""
     db = get_db()
     space = require_space(data.space_id) if data.space_id is not None else None
@@ -141,7 +155,7 @@ def api_create_conversation(data: ConversationCreate) -> dict[str, JsonValue]:
         hidden_defaults=hidden_defaults,
         paused_instructions=paused_instructions,
     )
-    return conv.to_dict()
+    return Conversation.model_validate(conv.to_dict())
 
 
 def _message_id(message: dict[str, JsonValue]) -> int:
@@ -151,7 +165,7 @@ def _message_id(message: dict[str, JsonValue]) -> int:
 
 
 @router.get("/conversations/{conv_id}")
-def api_get_conversation(conv_id: str) -> dict[str, JsonValue]:
+def api_get_conversation(conv_id: str) -> ConversationView:
     """Return a conversation and its currently shown messages."""
     conv = require_conv(conv_id)
     db = get_db()
@@ -169,14 +183,16 @@ def api_get_conversation(conv_id: str) -> dict[str, JsonValue]:
         if f.forked_from_message_id is None:
             continue
         forks.setdefault(f.forked_from_message_id, []).append({"id": f.id, "title": f.title})
-    return {
-        "conversation": {**conv.to_dict(), "forked_from": origin, "spend": spend(conv)},
-        "messages": [{**m, "forks": forks.get(_message_id(m), [])} for m in shown_branch(conv_id)],
-    }
+    return ConversationView.model_validate(
+        {
+            "conversation": {**conv.to_dict(), "forked_from": origin, "spend": spend(conv)},
+            "messages": [{**m, "forks": forks.get(_message_id(m), [])} for m in shown_branch(conv_id)],
+        }
+    )
 
 
 @router.get("/spend/breakdown")
-def api_spend_breakdown(days: int = 0) -> dict[str, int | list[_SpendGroup] | float]:
+def api_spend_breakdown(days: int = 0) -> SpendBreakdown:
     """What the user's money went on: per model (and kind) over the last `days` days (0 = all time).
 
     Pollo's credits are converted to USD at its fixed rate
@@ -204,17 +220,21 @@ def api_spend_breakdown(days: int = 0) -> dict[str, int | list[_SpendGroup] | fl
     rows = sorted(groups.values(), key=lambda g: -g["usd"])
     for g in rows:
         g["usd"] = round(g["usd"], 4)
-    return {"days": days, "total_usd": round(sum(g["usd"] for g in rows), 4), "rows": rows}
+    return SpendBreakdown(
+        days=days,
+        total_usd=round(sum(g["usd"] for g in rows), 4),
+        rows=[SpendGroup(**g) for g in rows],
+    )
 
 
 @router.get("/conversations/{conv_id}/spend")
-def api_conversation_spend(conv_id: str) -> dict[str, float | int]:
+def api_conversation_spend(conv_id: str) -> Spend:
     """Return the accumulated spend for one conversation."""
-    return spend(require_conv(conv_id))
+    return Spend.model_validate(spend(require_conv(conv_id)))
 
 
 @router.post("/conversations/{conv_id}/branch")
-def api_switch_branch(conv_id: str, data: SwitchBranch) -> dict[str, JsonValue]:
+def api_switch_branch(conv_id: str, data: SwitchBranch) -> ConversationView:
     """Show the branch through `message_id`, down to its newest message."""
     require_conv(conv_id)
     require_idle(conv_id)
@@ -233,7 +253,7 @@ def api_switch_branch(conv_id: str, data: SwitchBranch) -> dict[str, JsonValue]:
 
 
 @router.post("/conversations/{conv_id}/fork")
-def api_fork_conversation(conv_id: str, data: ForkConversation) -> dict[str, JsonValue]:
+def api_fork_conversation(conv_id: str, data: ForkConversation) -> Conversation:
     """Create a conversation branched at a prompt or reply.
 
     Copy the preceding messages, selected settings, and chat-owned characters.
@@ -309,7 +329,7 @@ def api_fork_conversation(conv_id: str, data: ForkConversation) -> dict[str, Jso
     forked = db.get_conversation(new.id)
     if not forked:
         raise HTTPException(500, "Could not load forked conversation")
-    return forked.to_dict()
+    return Conversation.model_validate(forked.to_dict())
 
 
 def _media_character_ids(params: dict[str, JsonValue]) -> set[int]:
@@ -421,7 +441,7 @@ def _clean_conv_update(data: ConversationUpdate, fields: dict[str, JsonValue]) -
 
 
 @router.patch("/conversations/{conv_id}")
-def api_update_conversation(conv_id: str, data: ConversationUpdate) -> dict[str, JsonValue]:
+def api_update_conversation(conv_id: str, data: ConversationUpdate) -> Conversation:
     """Update a conversation's mutable fields and return its saved record."""
     require_conv(conv_id)
     fields: dict[str, JsonValue] = data.model_dump(exclude_unset=True)
@@ -433,15 +453,15 @@ def api_update_conversation(conv_id: str, data: ConversationUpdate) -> dict[str,
         conversation = get_db().get_conversation(conv_id)
         if not conversation:
             raise HTTPException(404, "Conversation not found")
-        return conversation.to_dict()
+        return Conversation.model_validate(conversation.to_dict())
     conversation = get_db().update_conversation(conv_id, **fields)
     if not conversation:
         raise HTTPException(404, "Conversation not found")
-    return conversation.to_dict()
+    return Conversation.model_validate(conversation.to_dict())
 
 
 @router.delete("/conversations/{conv_id}")
-def api_delete_conversation(conv_id: str, *, delete_media: bool = True) -> dict[str, str]:
+def api_delete_conversation(conv_id: str, *, delete_media: bool = True) -> DeletedConversation:
     """Delete a chat.
 
     Its images/videos/uploads go with it unless delete_media=false
@@ -455,7 +475,7 @@ def api_delete_conversation(conv_id: str, *, delete_media: bool = True) -> dict[
     if delete_media and folder.exists():
         folder.rename(folder.with_name(f".deleting-{conv_id}"))  # out of the way at once
         threading.Thread(target=_empty_trash, daemon=True).start()
-    return {"deleted": conv_id}
+    return DeletedConversation(deleted=conv_id)
 
 
 def _empty_trash() -> None:
@@ -465,16 +485,16 @@ def _empty_trash() -> None:
 
 
 @router.get("/messages/{message_id}")
-def api_get_message(message_id: int) -> dict[str, JsonValue]:
+def api_get_message(message_id: int) -> ShownMessage:
     """Return one message with its branch siblings."""
     msg = get_db().get_chat_message(message_id)
     if not msg:
         raise HTTPException(404, "Message not found")
-    return message_out(msg)
+    return shown_message(msg)
 
 
 @router.get("/messages/{message_id}/delete-info")
-def api_delete_exchange_info(message_id: int) -> dict[str, int | dict[str, int]]:
+def api_delete_exchange_info(message_id: int) -> DeleteInfo:
     """What deleting this prompt would also remove, for the confirmation.
 
     That is other versions of it and the messages that followed them.
@@ -483,7 +503,7 @@ def api_delete_exchange_info(message_id: int) -> dict[str, int | dict[str, int]]
     info = msg and get_db().chat_exchange_delete_info(msg.conversation_id, message_id)
     if not info:
         raise HTTPException(404, "Prompt not found")
-    return info
+    return DeleteInfo.model_validate(info)
 
 
 def _delete_detached_media(db: MetadataDB, conv_id: str, detached: list[dict[str, JsonValue]]) -> None:
@@ -499,7 +519,7 @@ def _delete_detached_media(db: MetadataDB, conv_id: str, detached: list[dict[str
 
 
 @router.delete("/messages/{message_id}")
-def api_delete_exchange(message_id: int, *, delete_media: bool = False) -> dict[str, JsonValue]:
+def api_delete_exchange(message_id: int, *, delete_media: bool = False) -> ShownBranch:
     """Delete a prompt turn and return the updated conversation.
 
     Replies and alternate prompt versions are removed while later messages on
@@ -519,4 +539,6 @@ def api_delete_exchange(message_id: int, *, delete_media: bool = False) -> dict[
     conversation = db.get_conversation(msg.conversation_id)
     if not conversation:
         raise HTTPException(404, "Conversation not found")
-    return {"conversation": conversation.to_dict(), "messages": shown_branch(msg.conversation_id)}
+    return ShownBranch.model_validate(
+        {"conversation": conversation.to_dict(), "messages": shown_branch(msg.conversation_id)}
+    )

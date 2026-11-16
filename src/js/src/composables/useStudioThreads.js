@@ -54,10 +54,9 @@ export function useStudioThreads({ state, settings, link, polling, showToast }) 
       // GET returns { conversation, messages }; unwrap so activeThread holds the
       // conversation itself (its kind/settings/instructions live there, not on
       // the envelope). showChat does the same during a streamed turn.
-      const data = await fetchConversation(id)
-      const conv = data.conversation || data
+      const { conversation: conv, messages: shown } = await fetchConversation(id)
       activeThread.value = conv
-      messages.value = data.messages || []
+      messages.value = shown
       applyChat(conv)
       instructionIds.value = conv.instruction_ids || []
       instructionGroupIds.value = conv.instruction_group_ids || []

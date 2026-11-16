@@ -2007,6 +2007,52 @@ export interface components {
             venice: boolean;
         };
         /**
+         * Conversation
+         * @description A chat and its settings.
+         */
+        Conversation: {
+            /** Character Ids */
+            character_ids: number[];
+            /** Created At */
+            created_at: string | null;
+            /** Current Leaf Id */
+            current_leaf_id: number | null;
+            /** Forked From Id */
+            forked_from_id: string | null;
+            /** Forked From Message Id */
+            forked_from_message_id: number | null;
+            hidden_defaults: components["schemas"]["HiddenDefaults"];
+            /** Id */
+            id: string;
+            /** Image Model */
+            image_model: string | null;
+            /** Import Source */
+            import_source: string | null;
+            /** Instruction Group Ids */
+            instruction_group_ids: number[];
+            /** Instruction Ids */
+            instruction_ids: number[];
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "chat" | "gallery";
+            paused_instructions: components["schemas"]["PausedInstructions"];
+            /** Pinned */
+            pinned: boolean;
+            settings: components["schemas"]["JsonObject"] | null;
+            /** Space Id */
+            space_id: number | null;
+            /** Text Model */
+            text_model: string | null;
+            /** Title */
+            title: string;
+            /** Updated At */
+            updated_at: string | null;
+            /** Video Model */
+            video_model: string | null;
+        };
+        /**
          * ConversationCreate
          * @description Fields for creating a chat and its attached settings.
          */
@@ -2054,6 +2100,117 @@ export interface components {
             video_model?: string | null;
         };
         /**
+         * ConversationList
+         * @description Pinned chats, then the most recent.
+         */
+        ConversationList: {
+            /** Conversations */
+            conversations: components["schemas"]["ConversationSummary"][];
+            /** More */
+            more: boolean;
+        };
+        /**
+         * ConversationMessage
+         * @description A shown message and the chats that were branched from it.
+         */
+        ConversationMessage: {
+            /** Content */
+            content: string;
+            /** Conversation Id */
+            conversation_id: string;
+            /** Cost */
+            cost: number | null;
+            /** Created At */
+            created_at: string | null;
+            /** Error */
+            error: string | null;
+            /** Forks */
+            forks: components["schemas"]["ForkRef"][];
+            /** Id */
+            id: number;
+            /** Lane */
+            lane: string | null;
+            /** Media */
+            media: components["schemas"]["MediaCard"][];
+            /** Mode */
+            mode: string | null;
+            /** Model */
+            model: string | null;
+            /** Parent Id */
+            parent_id: number | null;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "user" | "assistant";
+            /** Siblings */
+            siblings: number[];
+            /** Status */
+            status: string;
+            /** Text Shown */
+            text_shown: number;
+            /** Text Versions */
+            text_versions: number;
+        };
+        /**
+         * ConversationSummary
+         * @description A row of the chat list; `snippet` is the matching text when the list was searched.
+         */
+        ConversationSummary: {
+            /** Character Ids */
+            character_ids: number[];
+            /** Created At */
+            created_at: string | null;
+            /** Current Leaf Id */
+            current_leaf_id: number | null;
+            /** Forked From Id */
+            forked_from_id: string | null;
+            /** Forked From Message Id */
+            forked_from_message_id: number | null;
+            hidden_defaults: components["schemas"]["HiddenDefaults"];
+            /** Id */
+            id: string;
+            /** Image Model */
+            image_model: string | null;
+            /** Import Source */
+            import_source: string | null;
+            /** Instruction Group Ids */
+            instruction_group_ids: number[];
+            /** Instruction Ids */
+            instruction_ids: number[];
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "chat" | "gallery";
+            paused_instructions: components["schemas"]["PausedInstructions"];
+            /** Pinned */
+            pinned: boolean;
+            settings: components["schemas"]["JsonObject"] | null;
+            /** Snippet */
+            snippet?: string | null;
+            /** Space Id */
+            space_id: number | null;
+            /** Text Model */
+            text_model: string | null;
+            /** Title */
+            title: string;
+            /** Updated At */
+            updated_at: string | null;
+            /** Video Model */
+            video_model: string | null;
+        };
+        /**
+         * ConversationThumbs
+         * @description The newest image file of each chat that has one, by chat id.
+         */
+        ConversationThumbs: {
+            /** Thumbs */
+            thumbs: {
+                [key: string]: string;
+            };
+        };
+        /**
          * ConversationUpdate
          * @description Fields that can be changed on an existing chat.
          */
@@ -2088,6 +2245,15 @@ export interface components {
             video_model?: string | null;
         };
         /**
+         * ConversationView
+         * @description A conversation with its shown messages.
+         */
+        ConversationView: {
+            conversation: components["schemas"]["OpenConversation"];
+            /** Messages */
+            messages: components["schemas"]["ConversationMessage"][];
+        };
+        /**
          * CopyFromChat
          * @description Reference to an image stored in a chat.
          */
@@ -2119,12 +2285,34 @@ export interface components {
             default_instruction_ids?: number[];
         };
         /**
+         * DeleteInfo
+         * @description What deleting a prompt would also remove, for the confirmation.
+         */
+        DeleteInfo: {
+            /** Media */
+            media: {
+                [key: string]: number;
+            };
+            /** Other Messages */
+            other_messages: number;
+            /** Other Versions */
+            other_versions: number;
+        };
+        /**
          * Deleted
          * @description The id of what a delete removed.
          */
         Deleted: {
             /** Deleted */
             deleted: number;
+        };
+        /**
+         * DeletedConversation
+         * @description The chat a delete removed.
+         */
+        DeletedConversation: {
+            /** Deleted */
+            deleted: string;
         };
         /**
          * EditMessage
@@ -2234,10 +2422,46 @@ export interface components {
             /** Message Id */
             message_id: number;
         };
+        /**
+         * ForkOrigin
+         * @description The chat this one was branched from (which may since have been deleted).
+         */
+        ForkOrigin: {
+            /** Exists */
+            exists: boolean;
+            /** Id */
+            id: string;
+            /** Message Id */
+            message_id: number | null;
+            /** Title */
+            title: string | null;
+        };
+        /**
+         * ForkRef
+         * @description A chat branched from a message.
+         */
+        ForkRef: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HiddenDefaults
+         * @description Defaults switched off in one chat only, by kind.
+         */
+        HiddenDefaults: {
+            /** Character */
+            character: number[];
+            /** Instruction */
+            instruction: number[];
+            /** Instruction Group */
+            instruction_group: number[];
         };
         /**
          * ImportMedia
@@ -2324,6 +2548,9 @@ export interface components {
             /** Instructions */
             instructions: components["schemas"]["Instruction"][];
         };
+        JsonObject: {
+            [key: string]: components["schemas"]["JsonValue"];
+        };
         JsonValue: string | number | boolean | components["schemas"]["JsonValue"][] | {
             [key: string]: components["schemas"]["JsonValue"];
         } | null;
@@ -2382,6 +2609,56 @@ export interface components {
             ok: boolean;
         };
         /**
+         * MediaCard
+         * @description An image, video or audio card on a message: uploaded, or generated (pending, done or failed).
+         *
+         *     `params` is the model-specific generation settings, and `request` / `response` are the provider
+         *     exchange for the "Request" view; all three are open JSON by nature.
+         */
+        MediaCard: {
+            /** Cost */
+            cost?: number | null;
+            /** Credits */
+            credits?: number | null;
+            /** Error */
+            error?: string | null;
+            /** Favourite */
+            favourite?: boolean | null;
+            /** File */
+            file?: string | null;
+            /** Id */
+            id: string;
+            /** Job Id */
+            job_id?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "image" | "video" | "audio";
+            /** Model */
+            model?: string | null;
+            /** Moderated */
+            moderated?: boolean | null;
+            params?: components["schemas"]["JsonObject"] | null;
+            /** Pinned */
+            pinned?: boolean | null;
+            /** Prompt */
+            prompt?: string | null;
+            request?: components["schemas"]["JsonObject"] | null;
+            response?: components["schemas"]["JsonObject"] | null;
+            /** Source */
+            source: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "done" | "error";
+            /** Version Shown */
+            version_shown?: number | null;
+            /** Versions */
+            versions?: components["schemas"]["MediaVersion"][] | null;
+        };
+        /**
          * MediaIds
          * @description Request body containing media item IDs for bulk operations.
          */
@@ -2391,6 +2668,25 @@ export interface components {
         };
         MediaItem: {
             [key: string]: components["schemas"]["JsonValue"];
+        };
+        /**
+         * MediaVersion
+         * @description What a card keeps about a picture it has replaced (Edit / Redo).
+         */
+        MediaVersion: {
+            /** Cost */
+            cost?: number | null;
+            /** Credits */
+            credits?: number | null;
+            /** File */
+            file?: string | null;
+            /** Model */
+            model?: string | null;
+            params?: components["schemas"]["JsonObject"] | null;
+            /** Prompt */
+            prompt?: string | null;
+            request?: components["schemas"]["JsonObject"] | null;
+            response?: components["schemas"]["JsonObject"] | null;
         };
         ModelEntry: {
             [key: string]: components["schemas"]["JsonValue"];
@@ -2404,6 +2700,54 @@ export interface components {
             ok: boolean;
         };
         /**
+         * OpenConversation
+         * @description A conversation as the chat view opens it.
+         */
+        OpenConversation: {
+            /** Character Ids */
+            character_ids: number[];
+            /** Created At */
+            created_at: string | null;
+            /** Current Leaf Id */
+            current_leaf_id: number | null;
+            forked_from: components["schemas"]["ForkOrigin"] | null;
+            /** Forked From Id */
+            forked_from_id: string | null;
+            /** Forked From Message Id */
+            forked_from_message_id: number | null;
+            hidden_defaults: components["schemas"]["HiddenDefaults"];
+            /** Id */
+            id: string;
+            /** Image Model */
+            image_model: string | null;
+            /** Import Source */
+            import_source: string | null;
+            /** Instruction Group Ids */
+            instruction_group_ids: number[];
+            /** Instruction Ids */
+            instruction_ids: number[];
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "chat" | "gallery";
+            paused_instructions: components["schemas"]["PausedInstructions"];
+            /** Pinned */
+            pinned: boolean;
+            settings: components["schemas"]["JsonObject"] | null;
+            /** Space Id */
+            space_id: number | null;
+            spend: components["schemas"]["Spend"];
+            /** Text Model */
+            text_model: string | null;
+            /** Title */
+            title: string;
+            /** Updated At */
+            updated_at: string | null;
+            /** Video Model */
+            video_model: string | null;
+        };
+        /**
          * OpenRouterCredits
          * @description An OpenRouter account's credits, in dollars.
          */
@@ -2414,6 +2758,16 @@ export interface components {
             total_credits: number;
             /** Total Usage */
             total_usage: number;
+        };
+        /**
+         * PausedInstructions
+         * @description Instructions still attached to a chat but temporarily not sent.
+         */
+        PausedInstructions: {
+            /** Instruction */
+            instruction: number[];
+            /** Instruction Group */
+            instruction_group: number[];
         };
         /**
          * PinMedia
@@ -2666,6 +3020,56 @@ export interface components {
             index: number;
         };
         /**
+         * ShownBranch
+         * @description A conversation's record and its shown messages, after a delete.
+         */
+        ShownBranch: {
+            conversation: components["schemas"]["Conversation"];
+            /** Messages */
+            messages: components["schemas"]["ShownMessage"][];
+        };
+        /**
+         * ShownMessage
+         * @description A message on the shown branch, with the ids of its sibling versions (the < 1/2 > arrows).
+         */
+        ShownMessage: {
+            /** Content */
+            content: string;
+            /** Conversation Id */
+            conversation_id: string;
+            /** Cost */
+            cost: number | null;
+            /** Created At */
+            created_at: string | null;
+            /** Error */
+            error: string | null;
+            /** Id */
+            id: number;
+            /** Lane */
+            lane: string | null;
+            /** Media */
+            media: components["schemas"]["MediaCard"][];
+            /** Mode */
+            mode: string | null;
+            /** Model */
+            model: string | null;
+            /** Parent Id */
+            parent_id: number | null;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "user" | "assistant";
+            /** Siblings */
+            siblings: number[];
+            /** Status */
+            status: string;
+            /** Text Shown */
+            text_shown: number;
+            /** Text Versions */
+            text_versions: number;
+        };
+        /**
          * Space
          * @description A chat space and its own defaults.
          */
@@ -2715,6 +3119,48 @@ export interface components {
         SpaceList: {
             /** Spaces */
             spaces: components["schemas"]["Space"][];
+        };
+        /**
+         * Spend
+         * @description What a chat has cost, and how much of that came with the messages copied in by a branch.
+         */
+        Spend: {
+            /** Credits */
+            credits: number;
+            /** Inherited Credits */
+            inherited_credits: number;
+            /** Inherited Usd */
+            inherited_usd: number;
+            /** Usd */
+            usd: number;
+        };
+        /**
+         * SpendBreakdown
+         * @description Where the user's money went over the last `days` days (0 = all time), in USD.
+         */
+        SpendBreakdown: {
+            /** Days */
+            days: number;
+            /** Rows */
+            rows: components["schemas"]["SpendGroup"][];
+            /** Total Usd */
+            total_usd: number;
+        };
+        /**
+         * SpendGroup
+         * @description What one model (and kind) cost.
+         */
+        SpendGroup: {
+            /** Count */
+            count: number;
+            /** Credits */
+            credits: number;
+            /** Kind */
+            kind: string;
+            /** Model */
+            model: string;
+            /** Usd */
+            usd: number;
         };
         /**
          * StartImport
@@ -2863,19 +3309,6 @@ export interface components {
         VpnCountryRequest: {
             /** Country */
             country: string;
-        };
-        /** _SpendGroup */
-        _SpendGroup: {
-            /** Count */
-            count: number;
-            /** Credits */
-            credits: number;
-            /** Kind */
-            kind: string;
-            /** Model */
-            model: string;
-            /** Usd */
-            usd: number;
         };
     };
     responses: never;
@@ -3502,9 +3935,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["ConversationList"];
                 };
             };
             /** @description Validation Error */
@@ -3539,9 +3970,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["Conversation"];
                 };
             };
             /** @description Validation Error */
@@ -3574,9 +4003,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["ConversationThumbs"];
                 };
             };
             /** @description Validation Error */
@@ -3609,9 +4036,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["ConversationView"];
                 };
             };
             /** @description Validation Error */
@@ -3646,9 +4071,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
+                    "application/json": components["schemas"]["DeletedConversation"];
                 };
             };
             /** @description Validation Error */
@@ -3685,9 +4108,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["Conversation"];
                 };
             };
             /** @description Validation Error */
@@ -3877,9 +4298,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["ConversationView"];
                 };
             };
             /** @description Validation Error */
@@ -3953,9 +4372,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["Conversation"];
                 };
             };
             /** @description Validation Error */
@@ -4099,9 +4516,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: number;
-                    };
+                    "application/json": components["schemas"]["Spend"];
                 };
             };
             /** @description Validation Error */
@@ -4905,9 +5320,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["ShownMessage"];
                 };
             };
             /** @description Validation Error */
@@ -4942,9 +5355,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["ShownBranch"];
                 };
             };
             /** @description Validation Error */
@@ -5012,11 +5423,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: number | {
-                            [key: string]: number;
-                        };
-                    };
+                    "application/json": components["schemas"]["DeleteInfo"];
                 };
             };
             /** @description Validation Error */
@@ -5054,9 +5461,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["ShownMessage"];
                 };
             };
             /** @description Validation Error */
@@ -5094,9 +5499,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["ShownMessage"];
                 };
             };
             /** @description Validation Error */
@@ -5134,9 +5537,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["ShownMessage"];
                 };
             };
             /** @description Validation Error */
@@ -5174,9 +5575,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["ShownMessage"];
                 };
             };
             /** @description Validation Error */
@@ -5213,9 +5612,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["ShownMessage"];
                 };
             };
             /** @description Validation Error */
@@ -5584,9 +5981,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: number | components["schemas"]["_SpendGroup"][];
-                    };
+                    "application/json": components["schemas"]["SpendBreakdown"];
                 };
             };
             /** @description Validation Error */

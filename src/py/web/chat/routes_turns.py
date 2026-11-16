@@ -29,8 +29,10 @@ from web.chat.helpers import (
     require_idle,
     require_text_provider,
     saved_media,
+    shown_message,
 )
 from web.chat.models import EditMessage, EnhancePrompt, EstimateRequest, RetryMessage, SendMessage, TurnSettings
+from web.chat.schemas import ShownMessage
 from web.chat.turn import Turn
 from web.chat.turn_base import Reword, TurnLink
 from web.chat.workers import ctx_thread
@@ -361,7 +363,7 @@ class ShowTextVersion(BaseModel):
 
 
 @router.post("/messages/{message_id}/text-version")
-def api_show_text_version(message_id: int, data: ShowTextVersion) -> dict[str, JsonValue]:
+def api_show_text_version(message_id: int, data: ShowTextVersion) -> ShownMessage:
     """Switch a reply to one of its earlier (or later) wordings.
 
     The chosen words become the reply's text — what's shown and what the chat
@@ -384,4 +386,4 @@ def api_show_text_version(message_id: int, data: ShowTextVersion) -> dict[str, J
     )
     if not updated:
         raise HTTPException(404, "Message not found")
-    return message_out(updated)
+    return shown_message(updated)

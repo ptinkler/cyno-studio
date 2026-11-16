@@ -33,9 +33,10 @@ from web.chat.helpers import (
     add_message_cost,
     branch_to,
     find_media,
-    message_out,
     saved_media,
+    shown_message,
 )
+from web.chat.schemas import ShownMessage
 from web.chat.workers import with_owner_keys
 from web.core.metadata import get_db, iso
 from web.core.metadata.models import ChatMessage
@@ -60,7 +61,7 @@ def _require_message(msg: ChatMessage | None) -> ChatMessage:
 
 
 @router.post("/messages/{message_id}/media/{media_id}/pin")
-def api_pin_media(message_id: int, media_id: str, data: PinMedia) -> dict[str, JsonValue]:
+def api_pin_media(message_id: int, media_id: str, data: PinMedia) -> ShownMessage:
     """Pin an image as a reference.
 
     It is sent with every image generated later on this branch of the chat, until unpinned.
@@ -70,7 +71,7 @@ def api_pin_media(message_id: int, media_id: str, data: PinMedia) -> dict[str, J
     item = find_media(msg, media_id)
     if not item or item["kind"] != "image" or not item.get("file") or item.get("status", "done") != "done":
         raise HTTPException(404, "Image not found")
-    return message_out(_require_message(db.update_chat_media_item(message_id, media_id, pinned=data.pinned)))
+    return shown_message(_require_message(db.update_chat_media_item(message_id, media_id, pinned=data.pinned)))
 
 
 class FavouriteMedia(BaseModel):
@@ -80,7 +81,7 @@ class FavouriteMedia(BaseModel):
 
 
 @router.post("/messages/{message_id}/media/{media_id}/favourite")
-def api_favourite_media(message_id: int, media_id: str, data: FavouriteMedia) -> dict[str, JsonValue]:
+def api_favourite_media(message_id: int, media_id: str, data: FavouriteMedia) -> ShownMessage:
     """Star/un-star a generation.
 
     Unlike pinning (which re-sends an image as a
@@ -93,7 +94,7 @@ def api_favourite_media(message_id: int, media_id: str, data: FavouriteMedia) ->
     item = find_media(msg, media_id)
     if not item or not item.get("file") or item.get("status", "done") != "done":
         raise HTTPException(404, "Generation not found")
-    return message_out(_require_message(db.update_chat_media_item(message_id, media_id, favourite=data.favourite)))
+    return shown_message(_require_message(db.update_chat_media_item(message_id, media_id, favourite=data.favourite)))
 
 
 class RegenerateMedia(BaseModel):
@@ -145,7 +146,7 @@ def _as_version(item: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
 
 
 @router.post("/messages/{message_id}/media/{media_id}/regenerate")
-def api_regenerate_media(message_id: int, media_id: str, data: RegenerateMedia) -> dict[str, JsonValue]:
+def api_regenerate_media(message_id: int, media_id: str, data: RegenerateMedia) -> ShownMessage:
     """Retry or re-roll a generated image or video.
 
     The retry runs in the background while the UI polls the message.
@@ -217,7 +218,7 @@ def _regeneration_inputs(message_id: int, media_id: str, data: RegenerateMedia) 
     return item, _Rerun(model, prompt, params)
 
 
-def _regenerate_media(message_id: int, media_id: str, data: RegenerateMedia) -> dict[str, JsonValue]:
+def _regenerate_media(message_id: int, media_id: str, data: RegenerateMedia) -> ShownMessage:
     db = get_db()
     item, rerun = _regeneration_inputs(message_id, media_id, data)
     model, prompt, params = rerun.model, rerun.prompt, rerun.params
@@ -247,7 +248,7 @@ def _regenerate_media(message_id: int, media_id: str, data: RegenerateMedia) -> 
         daemon=True,
         name=f"chat-regen-{media_id}",
     ).start()
-    return message_out(msg)
+    return shown_message(msg)
 
 
 def _replace_item(
@@ -308,7 +309,7 @@ class ShowMediaVersion(BaseModel):
 
 
 @router.post("/messages/{message_id}/media/{media_id}/version")
-def api_show_media_version(message_id: int, media_id: str, data: ShowMediaVersion) -> dict[str, JsonValue]:
+def api_show_media_version(message_id: int, media_id: str, data: ShowMediaVersion) -> ShownMessage:
     """Make one of a card's pictures the real one.
 
     It becomes the item's file, prompt, model and settings — what the chat
@@ -345,7 +346,7 @@ def api_show_media_version(message_id: int, media_id: str, data: ShowMediaVersio
         )
         if not updated:
             raise HTTPException(404, "Message not found")
-        return message_out(updated)
+        return shown_message(updated)
 
 
 class ActiveQuery(BaseModel):

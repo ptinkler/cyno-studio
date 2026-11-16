@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from fastapi import HTTPException
 
 from web.chat.constants import KINDS, REMEMBERED_SETTINGS
+from web.chat.schemas import ShownMessage
 from web.core import config
 from web.core.metadata import get_db
 from web.providers import openrouter, venice
@@ -72,6 +73,11 @@ def branch_to(messages: list[ChatMessage], leaf_id: int | None) -> list[ChatMess
 def message_out(msg: ChatMessage) -> dict[str, JsonValue]:
     """A message for the UI, with its siblings for the < 1/2 > branch arrows."""
     return {**msg.to_dict(), "siblings": get_db().get_chat_sibling_ids(msg.conversation_id, msg.parent_id, msg.lane)}
+
+
+def shown_message(msg: ChatMessage) -> ShownMessage:
+    """A message for the UI as the API's response model."""
+    return ShownMessage.model_validate(message_out(msg))
 
 
 def shown_branch(conv_id: str) -> list[dict[str, JsonValue]]:
