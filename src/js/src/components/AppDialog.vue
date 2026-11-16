@@ -68,7 +68,7 @@ watch(
 .ad-back {
   position: fixed;
   inset: 0;
-  z-index: 1400;
+  z-index: var(--z-confirm);
   display: grid;
   place-items: center;
   padding: 1.0667rem;

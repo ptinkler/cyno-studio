@@ -62,107 +62,116 @@ onBeforeUnmount(() => {
       <div class="gm-card" role="dialog" aria-modal="true" aria-label="Generation" @click.stop>
         <button class="gm-x" title="Close" aria-label="Close" @click="emit('close')">×</button>
 
-        <div class="gm-media" :class="{ 'is-error': isError }">
-          <div v-if="isError" class="gm-err">
-            <div class="gm-err-title">{{ item.moderated ? 'Blocked by moderation' : 'Generation failed' }}</div>
-            <div class="gm-err-msg">{{ item.error || 'Unknown error' }}</div>
-          </div>
-          <template v-else-if="isVideo">
-            <video :src="item.url" controls :loop="loop" playsinline></video>
-            <label class="gm-loop"><input v-model="loop" type="checkbox" /> Loop</label>
-          </template>
-          <img v-else :src="item.url" alt="" />
-        </div>
-
-        <div class="gm-side">
-          <div class="gm-scroll">
-            <div class="gm-prompt">{{ item.original_prompt || item.prompt || 'No prompt' }}</div>
-            <details v-if="item.original_prompt && item.prompt && item.prompt !== item.original_prompt" class="gm-sent">
-              <summary>Prompt sent to the model</summary>
-              <div class="gm-prompt">{{ item.prompt }}</div>
-            </details>
-            <dl class="gm-meta">
-              <template v-if="item.model">
-                <dt>Model</dt>
-                <dd>{{ shortModel(item.model) }}</dd>
-              </template>
-              <template v-if="costLabel">
-                <dt>Cost</dt>
-                <dd>{{ costLabel }}</dd>
-              </template>
-              <template v-if="when">
-                <dt>Created</dt>
-                <dd>{{ when }}</dd>
-              </template>
-              <template v-if="item.conversation_title">
-                <dt>Thread</dt>
-                <dd>{{ item.conversation_title }}</dd>
-              </template>
-            </dl>
-          </div>
-
-          <div class="gm-actions">
-            <div class="gm-icons">
-              <button
-                v-if="!isError"
-                class="gm-btn icon"
-                :class="{ on: item.favourite }"
-                :title="item.favourite ? 'Unfavourite' : 'Favourite'"
-                @click="emit('favourite', item)"
-              >
-                <svg class="ic"><use href="#s-star" /></svg>
-              </button>
-              <a v-if="!isError" class="gm-btn icon" title="Download" :href="item.url" :download="item.file">
-                <svg class="ic"><use href="#s-download" /></svg>
-              </a>
-              <button
-                v-if="canManage"
-                class="gm-btn icon danger"
-                title="Delete"
-                aria-label="Delete"
-                @click="emit('delete', item)"
-              >
-                <svg class="ic"><use href="#s-trash" /></svg>
-              </button>
-              <button v-if="item.request" class="gm-btn icon req" title="View request" @click="requestOpen = true">
-                { }
-              </button>
+        <div class="gm-layout">
+          <div class="gm-media" :class="{ 'is-error': isError }">
+            <div v-if="isError" class="gm-err">
+              <div class="gm-err-title">{{ item.moderated ? 'Blocked by moderation' : 'Generation failed' }}</div>
+              <div class="gm-err-msg">{{ item.error || 'Unknown error' }}</div>
             </div>
-            <div class="gm-grid">
-              <!-- Only a picture can start another picture, a video or a character -->
-              <template v-if="!isError && item.kind === 'image'">
-                <button
-                  class="gm-btn"
-                  title="Use in Image mode"
-                  @click="emit('use-image', { file: item.file, mode: 'image', conversation_id: item.conversation_id })"
-                >
-                  <svg class="ic"><use href="#s-image" /></svg>Edit
-                </button>
-                <button
-                  class="gm-btn"
-                  title="Use in Video mode"
-                  @click="emit('use-image', { file: item.file, mode: 'video', conversation_id: item.conversation_id })"
-                >
-                  <svg class="ic"><use href="#s-film" /></svg>Animate
-                </button>
-                <button class="gm-btn" title="Make character" @click="emit('make-character', item)">
-                  <svg class="ic"><use href="#s-user" /></svg>Character
-                </button>
-              </template>
-              <button v-if="canManage" class="gm-btn" title="Reuse settings" @click="emit('use-settings', item)">
-                <svg class="ic"><use href="#s-cog" /></svg>Settings
-              </button>
-              <button v-if="canManage" class="gm-btn" :class="{ primary: isError }" @click="emit('regenerate', item)">
-                <svg class="ic"><use href="#s-refresh" /></svg>{{ isError ? 'Retry' : 'Regenerate' }}
-              </button>
-              <a
-                v-if="!canManage && item.conversation_id"
-                class="gm-btn"
-                :href="`/${item.conversation_id}`"
-                @click.prevent="emit('open-thread', item.conversation_id)"
+            <template v-else-if="isVideo">
+              <video :src="item.url" controls :loop="loop" playsinline></video>
+              <label class="gm-loop"><input v-model="loop" type="checkbox" /> Loop</label>
+            </template>
+            <img v-else :src="item.url" alt="" />
+          </div>
+
+          <div class="gm-side">
+            <div class="gm-scroll">
+              <div class="gm-prompt">{{ item.original_prompt || item.prompt || 'No prompt' }}</div>
+              <details
+                v-if="item.original_prompt && item.prompt && item.prompt !== item.original_prompt"
+                class="gm-sent"
               >
-                <svg class="ic"><use href="#s-chat" /></svg>Open thread
-              </a>
+                <summary>Prompt sent to the model</summary>
+                <div class="gm-prompt">{{ item.prompt }}</div>
+              </details>
+              <dl class="gm-meta">
+                <template v-if="item.model">
+                  <dt>Model</dt>
+                  <dd>{{ shortModel(item.model) }}</dd>
+                </template>
+                <template v-if="costLabel">
+                  <dt>Cost</dt>
+                  <dd>{{ costLabel }}</dd>
+                </template>
+                <template v-if="when">
+                  <dt>Created</dt>
+                  <dd>{{ when }}</dd>
+                </template>
+                <template v-if="item.conversation_title">
+                  <dt>Thread</dt>
+                  <dd>{{ item.conversation_title }}</dd>
+                </template>
+              </dl>
+            </div>
+
+            <div class="gm-actions">
+              <div class="gm-icons">
+                <button
+                  v-if="!isError"
+                  class="gm-btn icon"
+                  :class="{ on: item.favourite }"
+                  :title="item.favourite ? 'Unfavourite' : 'Favourite'"
+                  @click="emit('favourite', item)"
+                >
+                  <svg class="ic"><use href="#s-star" /></svg>
+                </button>
+                <a v-if="!isError" class="gm-btn icon" title="Download" :href="item.url" :download="item.file">
+                  <svg class="ic"><use href="#s-download" /></svg>
+                </a>
+                <button
+                  v-if="canManage"
+                  class="gm-btn icon danger"
+                  title="Delete"
+                  aria-label="Delete"
+                  @click="emit('delete', item)"
+                >
+                  <svg class="ic"><use href="#s-trash" /></svg>
+                </button>
+                <button v-if="item.request" class="gm-btn icon req" title="View request" @click="requestOpen = true">
+                  { }
+                </button>
+              </div>
+              <div class="gm-grid">
+                <!-- Only a picture can start another picture, a video or a character -->
+                <template v-if="!isError && item.kind === 'image'">
+                  <button
+                    class="gm-btn"
+                    title="Use in Image mode"
+                    @click="
+                      emit('use-image', { file: item.file, mode: 'image', conversation_id: item.conversation_id })
+                    "
+                  >
+                    <svg class="ic"><use href="#s-image" /></svg>Edit
+                  </button>
+                  <button
+                    class="gm-btn"
+                    title="Use in Video mode"
+                    @click="
+                      emit('use-image', { file: item.file, mode: 'video', conversation_id: item.conversation_id })
+                    "
+                  >
+                    <svg class="ic"><use href="#s-film" /></svg>Animate
+                  </button>
+                  <button class="gm-btn" title="Make character" @click="emit('make-character', item)">
+                    <svg class="ic"><use href="#s-user" /></svg>Character
+                  </button>
+                </template>
+                <button v-if="canManage" class="gm-btn" title="Reuse settings" @click="emit('use-settings', item)">
+                  <svg class="ic"><use href="#s-cog" /></svg>Settings
+                </button>
+                <button v-if="canManage" class="gm-btn" :class="{ primary: isError }" @click="emit('regenerate', item)">
+                  <svg class="ic"><use href="#s-refresh" /></svg>{{ isError ? 'Retry' : 'Regenerate' }}
+                </button>
+                <a
+                  v-if="!canManage && item.conversation_id"
+                  class="gm-btn"
+                  :href="`/${item.conversation_id}`"
+                  @click.prevent="emit('open-thread', item.conversation_id)"
+                >
+                  <svg class="ic"><use href="#s-chat" /></svg>Open thread
+                </a>
+              </div>
             </div>
           </div>
         </div>
@@ -211,6 +220,8 @@ a.gm-btn {
   position: relative;
   display: flex;
   gap: 0;
+  /* The card, not the window, decides when the picture and its details stack (see the @container below) */
+  container-type: inline-size;
   width: min(73.3333rem, 100% - 1.5rem);
   max-height: 90dvh;
   background: var(--sbg);
@@ -218,6 +229,12 @@ a.gm-btn {
   border-radius: var(--r-xl);
   box-shadow: var(--shadow-modal);
   overflow: hidden;
+}
+.gm-layout {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
 }
 .gm-x {
   position: absolute;
@@ -391,10 +408,10 @@ a.gm-btn {
   color: var(--sdanger);
   border-color: var(--sdanger);
 }
-@media (max-width: 760px) {
-  .gm-card {
+/* rem here follows Settings → Text size (in an @media it would not): a larger size stacks sooner */
+@container (max-width: 44rem) {
+  .gm-layout {
     flex-direction: column;
-    max-height: 92dvh;
   }
   .gm-side {
     flex: 1 1 auto;

@@ -276,6 +276,7 @@ function confirm(): void {
 }
 
 .dialog {
+  container-type: inline-size;
   width: min(60rem, 100%);
   height: min(48rem, calc(100dvh - 2.1333rem));
   display: flex;
@@ -343,7 +344,8 @@ function confirm(): void {
   flex: 1;
 }
 
-@media (max-width: 640px) {
+/* rem in a container query follows Settings → Text size, which an @media breakpoint would not */
+@container (max-width: 36rem) {
   .hint {
     display: none;
   }

@@ -127,13 +127,13 @@ const byModel = computed(() => {
 .pop-back {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  z-index: var(--z-overlay);
 }
 .pop {
   position: absolute;
   top: calc(100% + 0.4rem);
   right: 0;
-  z-index: 41;
+  z-index: var(--z-overlay-top);
   min-width: 17.3333rem;
   background: var(--spanel2);
   border: 1px solid var(--sborder);
