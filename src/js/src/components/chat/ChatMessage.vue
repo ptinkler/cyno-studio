@@ -4,9 +4,10 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import type { GenerationItem, ImagePick, RegenerateRequest, UiMessage } from '../../composables/studioTypes'
 import { useCopy } from '../../composables/useClipboard'
-import { shortModel, fmtCost } from '../../utils/format'
+import { shortModel } from '../../utils/format'
 import ChatAttachments from './ChatAttachments.vue'
 import ChatMediaCard from './ChatMediaCard.vue'
+import CostChip from './CostChip.vue'
 import ForkList from './ForkList.vue'
 import PromptBox from './PromptBox.vue'
 import ReplyControls from './ReplyControls.vue'
@@ -327,12 +328,7 @@ const { copiedKey, copy } = useCopy()
           <span v-if="showModel" class="meta-info model" :title="message.model ?? undefined">
             <svg class="ic sm"><use href="#s-chat" /></svg>{{ modelShort }}
           </span>
-          <span
-            v-if="message.cost && !hasMedia"
-            class="meta-info"
-            title="Total OpenRouter cost for this reply (text + media)"
-            >total {{ fmtCost(message.cost) }}</span
-          >
+          <CostChip v-if="message.cost && !hasMedia" :total="message.cost" :media="message.media" />
         </div>
         <PromptBox
           v-if="textBox"
@@ -379,9 +375,7 @@ const { copiedKey, copy } = useCopy()
             @open-chat="id => emit('open-chat', id)"
           />
           <span class="meta-spacer"></span>
-          <span v-if="message.cost" class="meta-info" title="Total OpenRouter cost for this reply (text + media)"
-            >total {{ fmtCost(message.cost) }}</span
-          >
+          <CostChip v-if="message.cost" :total="message.cost" :media="message.media" />
         </div>
       </template>
     </div>

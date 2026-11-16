@@ -85,3 +85,25 @@ describe('cardRefFiles', () => {
     expect(cardRefFiles({ first_frame: null, refs: [] })).toEqual([])
   })
 })
+
+describe('refsLabel with images that no longer exist', () => {
+  const p = cardParams({ refs: ['a.png', 'char:7/b.png', 'char:7/c.png'] })
+
+  it("doesn't count them", () => {
+    expect(refsLabel(p, 2)).toBe('1 ref')
+    expect(refsLabel(p, 1)).toBe('2 refs')
+  })
+
+  it('says so when none are left', () => {
+    expect(refsLabel(p, 3)).toBe('refs unavailable')
+  })
+
+  it('names how many are gone in the hover title', () => {
+    expect(refsTitle(p, 2)).toBe('Based on these images (2 no longer available):')
+    expect(refsTitle(p)).toBe('Based on these images:')
+  })
+
+  it('still reports the model taking fewer than there are', () => {
+    expect(refsLabel(cardParams({ refs: ['a', 'b', 'c', 'd'], refs_used: 2 }), 1)).toBe('2 of 3 refs')
+  })
+})

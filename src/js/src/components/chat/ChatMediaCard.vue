@@ -7,9 +7,8 @@ import type { GenerationItem, ImagePick, RegenerateRequest, UiMessage } from '..
 import { useCopy } from '../../composables/useClipboard'
 import { videoImageLimit } from '../../composables/useStudioAttachments'
 import { bigView, canPinMedia } from '../../utils/chatMedia'
-import { cardParams, cardRefFiles, cardSpecs, refUrl, refsLabel, refsTitle } from '../../utils/cardSpecs'
-import type { CardParams } from '../../utils/cardSpecs'
-import { shortModel, fmtCost } from '../../utils/format'
+import { cardParams, cardRefFiles, cardSpecs } from '../../utils/cardSpecs'
+import MediaMadeWith from './MediaMadeWith.vue'
 import ModelPicker from './ModelPicker.vue'
 import PinButton from './PinButton.vue'
 import PromptBox from './PromptBox.vue'
@@ -37,7 +36,6 @@ const emit = defineEmits<{
 
 // Model catalogues, provided by ChatView, for "Try another model"
 const KIND_LABEL: Readonly<Record<string, string>> = { image: 'Image', video: 'Video', audio: 'Audio' }
-const KIND_ICON: Readonly<Record<string, string>> = { image: '#s-image', video: '#s-film', audio: '#s-audio' }
 const chatModels = inject(chatModelsKey, { text: [], image: [], video: [], audio: [] })
 
 // Ticking clock for "rendering 1:23" on pending videos
@@ -64,15 +62,6 @@ function elapsed(): string {
 // The settings this item was made with (see utils/cardSpecs)
 const params = computed(() => cardParams(props.item.params))
 const specs = computed(() => cardSpecs(props.item.kind, params.value))
-
-// Hovering "🔗 4 refs" shows the reference images. Teleported and fixed so
-// the caption's overflow clipping doesn't cut it off.
-const refsPeek = ref<{ params: CardParams; x: number; y: number } | null>(null)
-function showRefs(event: MouseEvent, shown: CardParams): void {
-  if (!(event.currentTarget instanceof HTMLElement)) return
-  const rect = event.currentTarget.getBoundingClientRect()
-  refsPeek.value = { params: shown, x: rect.left, y: rect.top }
-}
 
 const mediaUrl = (item: MediaCard): string => chatMediaUrl(props.convId, item.file ?? '')
 // What's shown in the chat: a scaled-down copy (a big chat's full images add up)
@@ -254,30 +243,7 @@ const requestItem = ref<MediaCard | null>(null)
 
     <!-- Which model made this and with what — the footer only names the chat model -->
     <div v-if="item.model || item.prompt" class="media-caption">
-      <div class="foot-info" :title="[item.model, ...specs].join(' · ')">
-        <span class="foot-model">
-          <svg class="ic sm"><use :href="KIND_ICON[item.kind] || '#s-film'" /></svg>{{ shortModel(item.model) }}
-        </span>
-        <span v-if="specs.length" class="foot-specs">{{ specs.join(' · ') }}</span>
-        <span v-if="item.cost" class="chip">{{ fmtCost(item.cost) }}</span>
-        <span v-if="item.credits" class="chip" title="Billed to your Pollo account"
-          >{{ item.credits }} credit{{ item.credits === 1 ? '' : 's' }}</span
-        >
-        <span v-if="params.context" class="chip" title="The image model was given the conversation">
-          <svg class="ic sm"><use href="#s-chat" /></svg>context
-        </span>
-        <span
-          v-if="params.refs.length"
-          class="chip caption-refs"
-          @mouseenter="showRefs($event, params)"
-          @mouseleave="refsPeek = null"
-        >
-          <svg class="ic sm"><use href="#s-link" /></svg>{{ refsLabel(params) }}
-        </span>
-        <span v-if="params.upload_notice" class="chip caption-warn" :title="params.upload_notice">
-          <svg class="ic sm"><use href="#s-warn" /></svg>backup upload host
-        </span>
-      </div>
+      <MediaMadeWith :item="item" :conv-id="convId" :params="params" :specs="specs" />
       <div class="foot-actions">
         <button
           v-if="canRemake(item) && item.kind === 'image' && item.file"
@@ -335,20 +301,6 @@ const requestItem = ref<MediaCard | null>(null)
     :error="requestItem.status === 'error' ? (requestItem.error ?? '') : ''"
     @close="requestItem = null"
   />
-  <Teleport to="body">
-    <div v-if="refsPeek" class="refs-peek" :style="{ left: `${refsPeek.x}px`, top: `${refsPeek.y}px` }">
-      <div class="refs-peek-title">{{ refsTitle(refsPeek.params) }}</div>
-      <div class="refs-peek-grid">
-        <img
-          v-for="(r, i) in refsPeek.params.refs"
-          :key="r"
-          :src="refUrl(convId, r)"
-          :alt="r"
-          :class="{ unused: refsPeek.params.refs_used != null && i >= refsPeek.params.refs_used }"
-        />
-      </div>
-    </div>
-  </Teleport>
 </template>
 
 <style scoped>
@@ -410,83 +362,10 @@ const requestItem = ref<MediaCard | null>(null)
   color: var(--smuted);
   border-top: 1px solid var(--sborder);
 }
-.foot-info {
-  display: flex;
-  flex: 1 1 200px;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  min-width: 0;
-}
-.foot-model {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  color: var(--sfg);
-  font-size: 13px;
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-.foot-specs {
-  color: var(--smuted);
-}
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 1px 7px;
-  border: 1px solid var(--sborder);
-  border-radius: 6px;
-  background: var(--shover);
-  color: var(--smuted);
-  font-size: 11.5px;
-  white-space: nowrap;
-}
 .foot-actions {
   display: flex;
   gap: 6px;
   margin-left: auto;
-}
-.chip.caption-warn {
-  color: var(--swarn);
-  border-color: color-mix(in srgb, var(--swarn) 45%, transparent);
-  cursor: help;
-}
-.chip.caption-refs {
-  cursor: default;
-}
-.refs-peek {
-  position: fixed;
-  z-index: 1000;
-  transform: translateY(calc(-100% - 6px));
-  max-width: 340px;
-  padding: 8px;
-  background: var(--spanel2);
-  border: 1px solid var(--sborder);
-  border-radius: var(--r);
-  box-shadow: var(--shadow-pop);
-  font-size: 0.72rem;
-  color: var(--text2);
-  pointer-events: none;
-}
-.refs-peek-title {
-  margin-bottom: 6px;
-}
-.refs-peek-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.refs-peek-grid img {
-  width: 72px;
-  height: 72px;
-  object-fit: cover;
-  border-radius: 4px;
-  background: var(--surface2);
-}
-.refs-peek-grid img.unused {
-  opacity: 0.35;
 }
 .media-pending {
   position: relative;

@@ -377,6 +377,58 @@ describe('ChatMessage refs sent', () => {
     expect(all.find('.media-caption').text()).toContain('2 refs')
   })
 
+  describe('when a character image is not on this server', () => {
+    // Character images stay behind when a chat is exported, so the card points at one that isn't here
+    const withGone = { ...image, params: { refs: ['a.png', 'char:7/gone.png', 'char:7/here.png'] } }
+    const asks: string[] = []
+
+    beforeEach(() => {
+      asks.length = 0
+      vi.stubGlobal(
+        'Image',
+        class {
+          onload: (() => void) | null = null
+          onerror: (() => void) | null = null
+          set src(url: string) {
+            asks.push(url)
+            queueMicrotask(() => (url.includes('gone') ? this.onerror : this.onload)?.())
+          }
+        },
+      )
+    })
+
+    const mountIt = () =>
+      mount(ChatMessage, {
+        attachTo: document.body,
+        props: {
+          convId: 'c1',
+          message: uiMessage({ id: 12, role: 'assistant', content: '', status: 'done', media: [withGone] }),
+        },
+      })
+
+    it("asks about only the character's images, and leaves the missing one out of the count", async () => {
+      const w = mountIt()
+      await flushPromises()
+      expect(asks).toEqual(['/api/characters/7/images/gone.png', '/api/characters/7/images/here.png'])
+      expect(w.find('.media-caption').text()).toContain('2 refs')
+      expect(w.find('.media-caption').text()).not.toContain('3 refs')
+      w.unmount()
+    })
+
+    it('shows a gap, not a broken picture, in the hover preview', async () => {
+      const w = mountIt()
+      await flushPromises()
+      await w.find('.caption-refs').trigger('mouseenter')
+      expect(document.querySelectorAll('.refs-peek .ref-gone')).toHaveLength(1)
+      expect([...document.querySelectorAll('.refs-peek img')].map(i => i.getAttribute('src'))).toEqual([
+        '/api/chat/media/c1/a.png',
+        '/api/characters/7/images/here.png',
+      ])
+      expect(document.querySelector('.refs-peek-title')?.textContent).toContain('1 no longer available')
+      w.unmount()
+    })
+  })
+
   it('shows thumbnails of the refs on hover, dimming the ones not sent', async () => {
     const item = { ...image, params: { refs: ['a.png', 'char:7/b.png'], refs_used: 1 } }
     const w = mount(ChatMessage, {
@@ -517,6 +569,55 @@ describe('ChatMessage edit and redo a picture in place', () => {
     const w = mount(ChatMessage, reply([image], { status: 'streaming' }))
     expect(w.find('button[title^="Edit this picture"]').exists()).toBe(false)
     expect(w.find('button[title^="Make it again"]').exists()).toBe(false)
+  })
+})
+
+describe('ChatMessage cost', () => {
+  const priced = { ...image, model: 'venice/seedream-v5-pro', cost: 0.06 }
+  interface Hoverable {
+    find: (selector: string) => { trigger: (event: string) => Promise<void> }
+    findAll: (selector: string) => { element: Element }[]
+  }
+  const hover = async (w: Hoverable) => {
+    await w.find('.msg-meta .cost').trigger('mouseenter')
+    return w.findAll('.pop-row').map(r => [...r.element.children].map(c => c.textContent).join(' '))
+  }
+
+  it('shows one cost, the total, and nothing of the breakdown until asked', () => {
+    const w = mount(ChatMessage, reply([priced], { cost: 0.07 }))
+    expect(w.find('.msg-meta .cost').text()).toBe('$0.07')
+    expect(w.find('.pop').exists()).toBe(false)
+  })
+
+  it('opens what the cost is made of on hover, and closes it again', async () => {
+    const w = mount(ChatMessage, reply([priced], { cost: 0.07 }))
+    expect(await hover(w)).toEqual(['Text $0.01', 'seedream-v5-pro $0.06', 'Total $0.07'])
+    await w.find('.msg-meta .cost').trigger('mouseleave')
+    expect(w.find('.pop').exists()).toBe(false)
+  })
+
+  it('opens on a tap or keyboard focus too', async () => {
+    const w = mount(ChatMessage, reply([priced], { cost: 0.07 }))
+    await w.find('.msg-meta .chip-btn').trigger('click')
+    expect(w.find('.pop').exists()).toBe(true)
+  })
+
+  it("doesn't repeat the picture's cost on its own card", () => {
+    const w = mount(ChatMessage, reply([priced], { cost: 0.07 }))
+    expect(w.find('.media-caption').text()).not.toContain('$0.06')
+  })
+
+  it('has no cost when the reply cost nothing', () => {
+    expect(
+      mount(ChatMessage, reply([image]))
+        .find('.cost')
+        .exists(),
+    ).toBe(false)
+  })
+
+  it('sits in the text bar when there are no pictures', () => {
+    const w = mount(ChatMessage, reply([], { cost: 0.002 }))
+    expect(w.find('.text-bar .cost').text()).toBe('$0.0020')
   })
 })
 
