@@ -18,6 +18,8 @@ Originally built for rapid on-the-fly D&D resource creation — generating atmos
 
 ## Quick Start
 
+Local or LAN try-out (for a real server with HTTPS, see [Deploy on an Ubuntu server](#deploy-on-an-ubuntu-server)):
+
 ```bash
 cp .env.example .env
 # Edit .env — set ADMIN_EMAILS, the three secrets, CYNO_HOST_DATA_DIR, PUID/PGID
@@ -30,9 +32,132 @@ Create the admin account from the CLI (it can't be done through the app):
 docker compose exec app python -m web.provision_admin --email you@gmail.com --set-password
 ```
 
-Then open `http://localhost:<APP_PORT>` (default `8080`) and sign in with that email + password (or an OAuth provider, if configured). Provider keys (Pollo, OpenRouter, Venice) are entered per-user in **Settings → Keys** and stored encrypted — never in `.env`.
+Then open `http://localhost:<APP_PORT>` (default `8080`) and sign in with that email + password (or an OAuth provider, if configured). From another machine over plain HTTP, also set `COOKIE_SECURE=false`. Provider keys (Pollo, OpenRouter, Venice) are entered per-user in **Settings → Keys** and stored encrypted — never in `.env`.
 
 Upgrading an existing single-user install? See [Users & access](#users--access) for the one ordering gotcha and `provision_admin`.
+
+## Deploy on an Ubuntu server
+
+Production setup on a dedicated Ubuntu Server (22.04 or 24.04) with Docker. Traffic flows:
+
+```
+browser --HTTPS:443--> Caddy (on the host) --HTTP--> nginx container (127.0.0.1:APP_PORT) --> app
+```
+
+Images are built by CI and pulled from `ghcr.io/ptinkler/cyno-studio` (and `-nginx`); nothing is built on the server. Database migrations run automatically on every container start.
+
+### 1. Prerequisites
+
+- A DNS name (e.g. `cyno.example.com`) pointing at the server's public IP, and ports **80** and **443** forwarded to it (router) and allowed by the firewall. Caddy needs both to get and renew its certificate. OAuth sign-in needs a real public HTTPS name.
+- Docker Engine with the compose plugin:
+
+  ```bash
+  curl -fsSL https://get.docker.com | sudo sh
+  sudo usermod -aG docker $USER   # log out and back in
+  ```
+
+- Caddy (automatic HTTPS): follow the [official apt instructions](https://caddyserver.com/docs/install#debian-ubuntu-raspbian).
+- If the GHCR packages are private: `docker login ghcr.io` with a personal access token that has `read:packages`.
+
+### 2. Install
+
+The server only needs `docker-compose.yml` and `.env`, not the whole repo:
+
+```bash
+sudo mkdir -p /opt/cyno-studio/data && sudo chown $USER: /opt/cyno-studio && cd /opt/cyno-studio
+curl -fsSLO https://raw.githubusercontent.com/ptinkler/cyno-studio/main/docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/ptinkler/cyno-studio/main/.env.example -o .env
+chmod 600 .env
+```
+
+(Or `git clone` the repo there if you prefer.) Edit `.env`:
+
+- `ADMIN_EMAILS`, `PUBLIC_BASE_URL=https://cyno.example.com`, plus any OAuth ids/secrets.
+- Three long random secrets: `SESSION_SECRET`, `PASSWORD_PEPPER`, `KEYS_SECRET` (`openssl rand -hex 32` for each). `PASSWORD_PEPPER` and `KEYS_SECRET` are set once and never changed: changing them locks out passwords and makes stored provider keys unreadable.
+- `CYNO_HOST_DATA_DIR=/opt/cyno-studio/data`, and `PUID` / `PGID` from `id -u` / `id -g` (the data dir must be owned by that user).
+- `COMPOSE_PROFILES=novpn`, or `vpn` plus the Gluetun settings (see [VPN Stack](#vpn-stack)). The VPN profile needs `/dev/net/tun`, which a normal Ubuntu host has.
+
+### 3. Start
+
+```bash
+docker compose up -d
+docker compose exec app python -m web.provision_admin --email you@gmail.com --set-password
+```
+
+(Use `app-vpn` instead of `app` on the VPN profile.) The containers have `restart: unless-stopped` and Docker starts on boot, so the stack comes back after a reboot with no extra script. If a migration fails the container restart-loops: see `docker compose logs app`.
+
+### 4. HTTPS with Caddy
+
+`/etc/caddy/Caddyfile`:
+
+```
+cyno.example.com {
+    reverse_proxy 127.0.0.1:8080 {
+        flush_interval -1
+    }
+}
+```
+
+```bash
+sudo systemctl reload caddy
+```
+
+Caddy sends `X-Forwarded-Proto`, which the app uses to mark the sign-in cookie `Secure`, and has no short proxy timeout (streamed chat replies and 200 MB uploads work). Set `APP_PORT` to match the port above.
+
+Docker publishes `APP_PORT` on all interfaces and bypasses `ufw`, so the plain-HTTP port is reachable from the LAN. To bind it to the host only, add `docker-compose.override.yml` (Compose 2.24+):
+
+```yaml
+services:
+  nginx:
+    ports: !override
+      - "127.0.0.1:${APP_PORT:-8080}:80"
+  gluetun:
+    ports: !override
+      - "127.0.0.1:${APP_PORT:-8080}:80"
+```
+
+### 5. Check it
+
+```bash
+docker compose ps
+curl -I http://127.0.0.1:8080        # 200 from the app
+curl -I https://cyno.example.com     # 200 over HTTPS (Caddy redirects http to https itself)
+```
+
+### Updating
+
+```bash
+cd /opt/cyno-studio
+docker compose pull && docker compose up -d
+docker image prune -f
+```
+
+`pull_policy: always` also refreshes the images on every `up`.
+
+### Backup
+
+Everything lives in `CYNO_HOST_DATA_DIR` (SQLite DB, videos, images). Also keep a copy of `.env`: without the original `KEYS_SECRET` and `PASSWORD_PEPPER`, a restored database is unusable. Stop the stack for a consistent copy:
+
+```bash
+docker compose stop
+sudo rsync -a /opt/cyno-studio/data/ /mnt/backup/cyno-studio/data/
+docker compose start
+```
+
+### Moving from the Synology NAS
+
+1. On the NAS: `docker compose down` (stops writes to the SQLite DB).
+2. Copy the data dir and `.env` across, keeping permissions:
+
+   ```bash
+   rsync -aH --info=progress2 nas:/path/to/cyno-studio/data/ /opt/cyno-studio/data/
+   scp nas:/path/to/cyno-studio/.env /opt/cyno-studio/.env
+   ```
+
+3. Edit `.env` for the new host: `CYNO_HOST_DATA_DIR`, `PUID` / `PGID` (then `sudo chown -R PUID:PGID /opt/cyno-studio/data`), `PUBLIC_BASE_URL`. **Keep the three secrets exactly as they were.** `APP_HOSTNAME` and `synology-boot.sh` are Synology-only and can be ignored.
+4. `docker compose up -d`, then sign in with your existing admin account (no need to run `provision_admin`).
+5. Point DNS (or the router's port forward) at the new server. If the hostname is unchanged the OAuth redirect URIs keep working; if not, update them at each provider and `PUBLIC_BASE_URL`.
+6. Keep the NAS data until you have used the new server for a few days.
 
 ## Configuration
 
@@ -52,7 +177,7 @@ See `.env.example` for the full list.
 | `APP_PORT`                                    | Host port to expose the app on (default `8080`)                               |
 | `COMPOSE_PROFILES`                            | `novpn` (default) or `vpn` — selects the stack                                |
 | `PUID` / `PGID`                               | User/group the app container runs as (run `id` to find values)                |
-| `APP_HOSTNAME`                                | Hostname for HTTPS redirect (Synology boot script)                            |
+| `APP_HOSTNAME`                                | Synology only: hostname for the HTTPS redirect in the boot script             |
 | `GLUETUN_API_KEY`                             | Gluetun control server API key (VPN stack only)                               |
 
 Provider keys (`POLLO_API_KEY`, `OPENROUTER_API_KEY`, `VENICE_API_KEY`) are entered per-user in the UI and are never read from the environment.
@@ -122,7 +247,7 @@ All data (videos, source images, chat media, character images, SQLite DB) is sto
 
 ## NAS / Synology
 
-See [SYNOLOGY-README.md](SYNOLOGY-README.md) for Synology DSM setup, boot automation, and HTTPS reverse proxy configuration.
+The previous production host. See [SYNOLOGY-README.md](SYNOLOGY-README.md) for DSM setup, boot automation and the DSM reverse proxy.
 
 ## Security
 
