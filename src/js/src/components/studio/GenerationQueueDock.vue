@@ -103,7 +103,7 @@ function label(entry: Generation): string {
   position: fixed;
   bottom: 1.0667rem;
   right: 1.0667rem;
-  z-index: 60;
+  z-index: var(--z-dock);
   width: 20rem;
   max-width: calc(100vw - 2.1333rem);
   display: flex;
@@ -158,7 +158,7 @@ function label(entry: Generation): string {
   box-shadow: var(--shadow-pop);
 }
 .qbody {
-  max-height: min(55vh, 28rem);
+  max-height: min(55dvh, 28rem);
   overflow-y: auto;
   padding: 0.4rem;
   display: flex;

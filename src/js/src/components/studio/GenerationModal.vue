@@ -200,7 +200,7 @@ a.gm-btn {
 .gm-back {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: var(--z-modal);
   background: rgba(0, 0, 0, 0.82);
   display: flex;
   align-items: center;
@@ -211,8 +211,8 @@ a.gm-btn {
   position: relative;
   display: flex;
   gap: 0;
-  width: min(73.3333rem, 95vw);
-  max-height: 90vh;
+  width: min(73.3333rem, 100% - 1.5rem);
+  max-height: 90dvh;
   background: var(--sbg);
   border: 1px solid var(--sborder);
   border-radius: var(--r-xl);
@@ -246,7 +246,7 @@ a.gm-btn {
 .gm-media img,
 .gm-media video {
   max-width: 100%;
-  max-height: calc(90vh - 1.3333rem);
+  max-height: calc(90dvh - 1.3333rem);
   object-fit: contain;
   border-radius: 0.5333rem;
 }
@@ -394,7 +394,7 @@ a.gm-btn {
 @media (max-width: 760px) {
   .gm-card {
     flex-direction: column;
-    max-height: 92vh;
+    max-height: 92dvh;
   }
   .gm-side {
     flex: 1 1 auto;
@@ -406,7 +406,7 @@ a.gm-btn {
   }
   .gm-media video,
   .gm-media img {
-    max-height: 50vh;
+    max-height: 50dvh;
   }
 }
 </style>

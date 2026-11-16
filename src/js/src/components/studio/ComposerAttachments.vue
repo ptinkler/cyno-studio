@@ -227,7 +227,7 @@ const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, R
   left: 50%;
   transform: translateX(-50%);
   display: none;
-  z-index: 30;
+  z-index: var(--z-popover);
   padding: 0.2rem;
   background: var(--spanel2);
   border: 1px solid var(--sborder);

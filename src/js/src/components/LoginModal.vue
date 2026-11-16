@@ -109,7 +109,7 @@ const providerLabels: Readonly<Record<string, string>> = { google: 'Google', mic
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-modal);
 }
 
 .modal-box {
@@ -119,7 +119,7 @@ const providerLabels: Readonly<Record<string, string>> = { google: 'Google', mic
   box-shadow: var(--shadow-modal);
   padding: 1.2rem 1.3333rem 1.3333rem;
   width: 22.6667rem;
-  max-width: 90vw;
+  max-width: calc(100% - 2rem);
   display: flex;
   flex-direction: column;
   gap: 0.6667rem;

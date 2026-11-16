@@ -74,7 +74,7 @@ onBeforeUnmount(release)
 .backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: var(--z-modal);
   background: rgba(0, 0, 0, 0.6);
   display: grid;
   place-items: center;
@@ -82,7 +82,7 @@ onBeforeUnmount(release)
 }
 
 .dialog {
-  max-height: calc(100vh - 2.1333rem);
+  max-height: calc(100dvh - 2.1333rem);
   display: flex;
   flex-direction: column;
   background: var(--sbg);

@@ -217,7 +217,7 @@ defineExpose({ commit, dirty })
 
 .menu {
   position: absolute;
-  z-index: 20;
+  z-index: var(--z-menu);
   bottom: calc(100% + 0.2667rem); /* opens upwards: it sits at the foot of the editors */
   left: 0;
   width: min(18.6667rem, 100%);

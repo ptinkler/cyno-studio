@@ -107,7 +107,7 @@ watch(
   color: var(--sfaint);
 }
 .finner {
-  max-width: 54.6667rem;
+  max-width: var(--measure);
   margin: 0 auto;
   display: flex;
   flex-direction: column;

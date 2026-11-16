@@ -1,7 +1,7 @@
 .msg {
   display: flex;
   gap: 0.8rem;
-  max-width: 54.6667rem;
+  max-width: var(--measure);
   width: 100%;
   margin: 0 auto;
 }
@@ -74,7 +74,7 @@
   padding: 0 0.4rem;
 }
 .edit-box {
-  width: min(42.6667rem, 80vw);
+  width: min(42.6667rem, 100%);
   background: var(--spanel2);
   border: 1px solid var(--saccent);
   border-radius: var(--r-lg);
@@ -223,7 +223,7 @@
 }
 .media-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--tile-l), 1fr));
   gap: 0.6667rem;
   margin: 0.5333rem 0 0.2667rem;
 }

@@ -183,7 +183,7 @@ const share = (usd: number): string =>
 <style scoped>
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(var(--tile-s), 1fr));
   gap: 0.6667rem;
   margin-bottom: 1.2rem;
 }

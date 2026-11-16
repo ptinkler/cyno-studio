@@ -36,6 +36,31 @@
   --swarn: #e2a03f;
   --sstar: #ffd25a;
 
+  /* Layout measures: one source for widths that several screens must agree on. They are rem, so they
+     grow with Settings → Text size and keep the same number of characters to a line. */
+  --measure: 54.6667rem; /* the chat column: messages, composer, feed */
+  --page-narrow: 48rem; /* settings-style pages */
+  --page: 54.6667rem;
+  --page-wide: 66.6667rem; /* galleries */
+  --tile-xs: 8.5rem; /* thumbnail grids (picker, media) */
+  --tile-s: 12rem; /* cards in a page grid */
+  --tile-m: 14rem;
+  --tile-l: 16rem; /* a picture in a reply */
+
+  /* Stacking, lowest to highest: menus and popovers, then the queue dock, then dialogs (a dialog opened from
+     another goes above it), then confirmations, then toasts. Local overlap inside one component stays 1-5. */
+  --z-menu: 20;
+  --z-popover: 30;
+  --z-overlay: 40;
+  --z-overlay-top: 41;
+  --z-dock: 60;
+  --z-picker: 100;
+  --z-modal: 1000;
+  --z-modal-raised: 1200;
+  --z-modal-top: 1300;
+  --z-confirm: 1400;
+  --z-toast: 2000;
+
   /* Shape + elevation */
   --r-sm: 6px; /* tags, tiny chips */
   --r: 8px; /* buttons, inputs, menu rows */
@@ -117,7 +142,7 @@ body {
   line-height: 1.45;
   background: var(--sbg2);
   color: var(--sfg);
-  min-height: 100vh;
+  min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
 }
 

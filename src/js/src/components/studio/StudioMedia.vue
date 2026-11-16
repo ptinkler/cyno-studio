@@ -242,7 +242,7 @@ h1 {
 .ovl {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: var(--z-modal);
   display: grid;
   place-items: center;
   background: rgba(0, 0, 0, 0.82);
@@ -251,7 +251,7 @@ h1 {
 }
 .pv {
   max-width: 92vw;
-  max-height: 92vh;
+  max-height: 92dvh;
   border-radius: var(--r);
   cursor: default;
 }

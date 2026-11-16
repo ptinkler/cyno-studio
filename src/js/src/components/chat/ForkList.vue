@@ -58,7 +58,7 @@ function pick(id: string): void {
   position: absolute;
   top: 100%;
   left: 0;
-  z-index: 20;
+  z-index: var(--z-menu);
   display: flex;
   flex-direction: column;
   min-width: 12rem;

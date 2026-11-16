@@ -52,7 +52,7 @@ function edit(preset: StoredPreset | null): void {
 <style scoped>
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(12.6667rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--tile-s), 1fr));
   gap: 0.6667rem;
 }
 .card {

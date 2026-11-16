@@ -138,7 +138,7 @@ function onThumbError(item: LibraryEntry, event: Event): void {
 <style scoped>
 .media-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(8.6667rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--tile-xs), 1fr));
   gap: 0.5333rem;
 }
 

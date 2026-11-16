@@ -311,7 +311,7 @@ function onKeydown(event: KeyboardEvent): void {
 
 .picker-pop {
   position: fixed;
-  z-index: 100;
+  z-index: var(--z-picker);
   width: min(28rem, 92vw);
   display: flex;
   flex-direction: column;

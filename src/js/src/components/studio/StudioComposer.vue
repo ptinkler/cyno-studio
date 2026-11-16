@@ -212,7 +212,7 @@ defineExpose({ focusPrompt })
 }
 .cbox {
   position: relative;
-  max-width: 54.6667rem;
+  max-width: var(--measure);
   margin: 0 auto;
   border: 1px solid var(--sborder);
   background: var(--sbg);
@@ -237,7 +237,7 @@ defineExpose({ focusPrompt })
   min-width: 0;
   min-height: 1.4667rem;
   color: var(--sfg);
-  max-height: 45vh;
+  max-height: 45dvh;
   overflow-y: auto;
   padding: 0.3333rem 0.4667rem;
   border: 1px solid var(--sborder2);
@@ -301,7 +301,7 @@ defineExpose({ focusPrompt })
   position: absolute;
   bottom: 2.6667rem;
   left: 0;
-  z-index: 20;
+  z-index: var(--z-menu);
   min-width: 10rem;
   max-height: 16rem;
   overflow-y: auto;

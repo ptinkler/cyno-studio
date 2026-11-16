@@ -268,7 +268,7 @@ function confirm(): void {
 .backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1200;
+  z-index: var(--z-modal-raised);
   background: rgba(0, 0, 0, 0.6);
   display: grid;
   place-items: center;
@@ -277,7 +277,7 @@ function confirm(): void {
 
 .dialog {
   width: min(60rem, 100%);
-  height: min(48rem, calc(100vh - 2.1333rem));
+  height: min(48rem, calc(100dvh - 2.1333rem));
   display: flex;
   flex-direction: column;
   gap: 0.6667rem;

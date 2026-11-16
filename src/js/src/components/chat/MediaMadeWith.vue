@@ -130,7 +130,7 @@ function showRefs(event: MouseEvent, shown: CardParams): void {
 }
 .refs-peek {
   position: fixed;
-  z-index: 1000;
+  z-index: var(--z-modal);
   transform: translateY(calc(-100% - 6px));
   max-width: 22.6667rem;
   padding: 0.5333rem;

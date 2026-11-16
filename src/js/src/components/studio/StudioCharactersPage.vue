@@ -138,7 +138,7 @@ onMounted(load)
 <style scoped>
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(11.3333rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--tile-s), 1fr));
   gap: 0.6667rem;
 }
 .card {

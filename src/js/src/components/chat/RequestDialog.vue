@@ -60,7 +60,7 @@ onBeforeUnmount(() => {
 .req-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1300;
+  z-index: var(--z-modal-top);
   display: grid;
   place-items: center;
   padding: 1.0667rem;
@@ -69,7 +69,7 @@ onBeforeUnmount(() => {
 
 .req-dialog {
   width: min(50.6667rem, 100%);
-  max-height: 85vh;
+  max-height: 85dvh;
   display: flex;
   flex-direction: column;
   background: var(--sbg);

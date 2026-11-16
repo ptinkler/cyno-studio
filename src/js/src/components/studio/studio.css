@@ -88,14 +88,14 @@
   padding: 1.6rem 1.4667rem 2.1333rem;
 }
 .studio .pwrap {
-  max-width: 54.6667rem;
+  max-width: var(--page);
   margin: 0 auto;
 }
 .studio .pwrap.narrow {
-  max-width: 48rem;
+  max-width: var(--page-narrow);
 }
 .studio .pwrap.wide {
-  max-width: 66.6667rem;
+  max-width: var(--page-wide);
 }
 .studio .pwrap.full {
   width: 100%;

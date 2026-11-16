@@ -158,7 +158,7 @@ const onCount = computed(() => props.items.filter(i => i.on).length)
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(8.2667rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--tile-xs), 1fr));
   gap: 0.5333rem;
 }
 

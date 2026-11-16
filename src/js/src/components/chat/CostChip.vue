@@ -70,7 +70,7 @@ const rows = computed<CostRow[]>(() => costRows(props.total, props.media))
   position: absolute;
   right: 0;
   bottom: calc(100% + 0.4rem);
-  z-index: 30;
+  z-index: var(--z-popover);
   min-width: 14rem;
   max-width: 21.3333rem;
   padding: 0.5333rem 0.8rem 0.6667rem;

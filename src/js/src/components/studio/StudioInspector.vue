@@ -107,7 +107,7 @@ defineEmits<{
 
 <style scoped>
 .side {
-  width: 19.2rem;
+  width: clamp(16rem, 20vw, 22rem);
   background: var(--sbg);
   border-left: 1px solid var(--sborder);
 }
