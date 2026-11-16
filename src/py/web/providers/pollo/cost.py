@@ -12,10 +12,10 @@ from web.providers.pollo.engine import video_generator as get_video_generator
 from web.providers.pollo.errors import PolloError
 from web.providers.pollo.models import MODEL_INFO
 from web.providers.specs import CostQuery
-from web.types import JsonValue
+from web.types import CreditEstimate
 
 
-def estimate_cost(model_id: str, query: CostQuery) -> dict[str, JsonValue] | None:
+def estimate_cost(model_id: str, query: CostQuery) -> CreditEstimate | None:
     """Return Pollo's credit estimate, or ``None`` when it cannot be priced.
 
     Estimates are free and use stand-in media URLs, so no files are uploaded.

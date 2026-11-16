@@ -1936,6 +1936,14 @@ export interface components {
             file: string;
         };
         /**
+         * Cancelled
+         * @description Whether a running reply was found and told to stop.
+         */
+        Cancelled: {
+            /** Cancelled */
+            cancelled: boolean;
+        };
+        /**
          * Catalogue
          * @description Every provider's models by kind, plus the providers that failed to list.
          */
@@ -1952,6 +1960,28 @@ export interface components {
             text?: components["schemas"]["ModelEntry"][];
             /** Video */
             video?: components["schemas"]["ModelEntry"][];
+        };
+        /**
+         * Character
+         * @description A reusable character with reference images.
+         */
+        Character: {
+            /** Adhoc */
+            adhoc: boolean;
+            /** Conversation Id */
+            conversation_id: string | null;
+            /** Created At */
+            created_at: string | null;
+            /** Description */
+            description: string;
+            /** Id */
+            id: number;
+            /** Images */
+            images: string[];
+            /** Name */
+            name: string;
+            /** Updated At */
+            updated_at: string | null;
         };
         /**
          * CharacterIn
@@ -1979,6 +2009,21 @@ export interface components {
             images?: string[] | null;
             /** Name */
             name?: string | null;
+        };
+        /**
+         * CharactersEvent
+         * @description The chat model made characters: the chat's own character ids now, and those characters.
+         */
+        CharactersEvent: {
+            /** Character Ids */
+            character_ids: number[];
+            /** Characters */
+            characters: components["schemas"]["Character"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "characters";
         };
         /**
          * ChatSettings
@@ -2264,6 +2309,16 @@ export interface components {
             file: string;
         };
         /**
+         * CreditEstimate
+         * @description Pollo's estimated cost of a generation: after any discount, and before it.
+         */
+        CreditEstimate: {
+            /** Credits */
+            credits: number;
+            /** Full Credits */
+            full_credits: number;
+        };
+        /**
          * DefaultsIn
          * @description Default character, instruction, and group IDs for a settings bucket.
          */
@@ -2313,6 +2368,31 @@ export interface components {
         DeletedConversation: {
             /** Deleted */
             deleted: string;
+        };
+        /**
+         * DeltaEvent
+         * @description More of the reply's text.
+         */
+        DeltaEvent: {
+            /** Text */
+            text: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "delta";
+        };
+        /**
+         * DoneEvent
+         * @description The turn ended; `message` is the saved reply (null if it has gone).
+         */
+        DoneEvent: {
+            message: components["schemas"]["ShownMessage"] | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "done";
         };
         /**
          * EditMessage
@@ -2375,6 +2455,36 @@ export interface components {
             model: string;
             /** Prompt */
             prompt: string;
+        };
+        /**
+         * Enhanced
+         * @description A prompt rewritten by the chat model, and what that cost.
+         */
+        Enhanced: {
+            /** Cost */
+            cost: number;
+            /** Prompt */
+            prompt: string;
+        };
+        /**
+         * ErrorEvent
+         * @description The turn failed; a `done` follows.
+         */
+        ErrorEvent: {
+            /** Message */
+            message: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "error";
+        };
+        /**
+         * Estimate
+         * @description Pollo's credit estimate for a generation; null for other providers or when it can't be priced.
+         */
+        Estimate: {
+            estimate: components["schemas"]["CreditEstimate"] | null;
         };
         /**
          * EstimateRequest
@@ -2548,6 +2658,20 @@ export interface components {
             /** Instructions */
             instructions: components["schemas"]["Instruction"][];
         };
+        /**
+         * InstructionsEvent
+         * @description The chat model saved an instruction and attached it to the chat.
+         */
+        InstructionsEvent: {
+            instruction: components["schemas"]["Instruction"];
+            /** Instruction Ids */
+            instruction_ids: number[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "instructions";
+        };
         JsonObject: {
             [key: string]: components["schemas"]["JsonValue"];
         };
@@ -2657,6 +2781,20 @@ export interface components {
             version_shown?: number | null;
             /** Versions */
             versions?: components["schemas"]["MediaVersion"][] | null;
+        };
+        /**
+         * MediaEvent
+         * @description A card was added to the reply, or its state changed.
+         */
+        MediaEvent: {
+            item: components["schemas"]["MediaCard"];
+            /** Message Id */
+            message_id: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "media";
         };
         /**
          * MediaIds
@@ -3163,6 +3301,21 @@ export interface components {
             usd: number;
         };
         /**
+         * StartEvent
+         * @description The turn began: the prompt that was saved (if any) and the reply being written.
+         */
+        StartEvent: {
+            assistant_message: components["schemas"]["ShownMessage"];
+            /** Replaces */
+            replaces?: number | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "start";
+            user_message: components["schemas"]["ShownMessage"] | null;
+        };
+        /**
          * StartImport
          * @description Name of an export zip already stored in the imports folder.
          */
@@ -3187,6 +3340,19 @@ export interface components {
         SwitchBranch: {
             /** Message Id */
             message_id: number;
+        };
+        /**
+         * TitleEvent
+         * @description The chat got its title.
+         */
+        TitleEvent: {
+            /** Title */
+            title: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "title";
         };
         /**
          * TitleModelIn
@@ -3301,6 +3467,40 @@ export interface components {
             generate_audio?: boolean | null;
             /** Resolution */
             resolution?: string | null;
+        };
+        /**
+         * Voice
+         * @description One of Pollo's official text-to-speech voices (field names are Pollo's, passed straight through).
+         */
+        Voice: {
+            /** Accent */
+            accent: string | null;
+            /** Age */
+            age: string | null;
+            /** Enginecode */
+            engineCode: string | null;
+            /** Gender */
+            gender: string | null;
+            /** Language */
+            language: string | null;
+            /** Sampleaudio */
+            sampleAudio: string | null;
+            /** Voiceid */
+            voiceId: string | null;
+            /** Voicename */
+            voiceName: string | null;
+            /** Voicestyle */
+            voiceStyle: string | null;
+        };
+        /**
+         * VoiceList
+         * @description A page of voices and how many there are in all.
+         */
+        VoiceList: {
+            /** Total */
+            total: number;
+            /** Voices */
+            voices: components["schemas"]["Voice"][];
         };
         /**
          * VpnCountryRequest
@@ -3900,9 +4100,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["VoiceList"];
                 };
             };
             /** @description Validation Error */
@@ -4329,13 +4527,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description Server-sent events: one `TurnEvent` as JSON per `data:` line. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "text/event-stream": components["schemas"]["StartEvent"] | components["schemas"]["DeltaEvent"] | components["schemas"]["MediaEvent"] | components["schemas"]["CharactersEvent"] | components["schemas"]["InstructionsEvent"] | components["schemas"]["TitleEvent"] | components["schemas"]["ErrorEvent"] | components["schemas"]["DoneEvent"];
                 };
             };
             /** @description Validation Error */
@@ -4403,13 +4601,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description Server-sent events: one `TurnEvent` as JSON per `data:` line. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "text/event-stream": components["schemas"]["StartEvent"] | components["schemas"]["DeltaEvent"] | components["schemas"]["MediaEvent"] | components["schemas"]["CharactersEvent"] | components["schemas"]["InstructionsEvent"] | components["schemas"]["TitleEvent"] | components["schemas"]["ErrorEvent"] | components["schemas"]["DoneEvent"];
                 };
             };
             /** @description Validation Error */
@@ -4440,13 +4638,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description Server-sent events: one `TurnEvent` as JSON per `data:` line. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "text/event-stream": components["schemas"]["StartEvent"] | components["schemas"]["DeltaEvent"] | components["schemas"]["MediaEvent"] | components["schemas"]["CharactersEvent"] | components["schemas"]["InstructionsEvent"] | components["schemas"]["TitleEvent"] | components["schemas"]["ErrorEvent"] | components["schemas"]["DoneEvent"];
                 };
             };
             /** @description Validation Error */
@@ -4477,13 +4675,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description Server-sent events: one `TurnEvent` as JSON per `data:` line. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "text/event-stream": components["schemas"]["StartEvent"] | components["schemas"]["DeltaEvent"] | components["schemas"]["MediaEvent"] | components["schemas"]["CharactersEvent"] | components["schemas"]["InstructionsEvent"] | components["schemas"]["TitleEvent"] | components["schemas"]["ErrorEvent"] | components["schemas"]["DoneEvent"];
                 };
             };
             /** @description Validation Error */
@@ -4582,9 +4780,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: string | number;
-                    };
+                    "application/json": components["schemas"]["Enhanced"];
                 };
             };
             /** @description Validation Error */
@@ -4619,9 +4815,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["JsonValue"];
-                    };
+                    "application/json": components["schemas"]["Estimate"];
                 };
             };
             /** @description Validation Error */
@@ -5388,9 +5582,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: boolean;
-                    };
+                    "application/json": components["schemas"]["Cancelled"];
                 };
             };
             /** @description Validation Error */

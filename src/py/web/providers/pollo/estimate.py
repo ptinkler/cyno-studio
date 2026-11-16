@@ -22,7 +22,7 @@ from web.jsonutil import body_of
 if TYPE_CHECKING:
     from web.providers.pollo.engine._shared import Payload
     from web.providers.pollo.engine.registry import PolloGenerator
-    from web.types import JsonValue
+    from web.types import CreditEstimate, JsonValue
 
 log = logging.getLogger(__name__)
 
@@ -40,10 +40,10 @@ TIMEOUT = 15
 
 # A refusal is cached too (it won't change while the form does), so a cached
 # None is a real answer — hence MISS to tell it from a miss.
-_cache: TTLCache[str, dict[str, JsonValue] | None] = TTLCache(CACHE_SECONDS, maxsize=1024)
+_cache: TTLCache[str, CreditEstimate | None] = TTLCache(CACHE_SECONDS, maxsize=1024)
 
 
-def estimate(generator: PolloGenerator) -> dict[str, JsonValue] | None:
+def estimate(generator: PolloGenerator) -> CreditEstimate | None:
     """Return the request's estimated and undiscounted credit costs, if known.
 
     Returns ``None`` if Pollo has no estimate endpoint or cannot be reached.
@@ -70,7 +70,7 @@ def clear_cache() -> None:
     _cache.clear()
 
 
-def _ask(url: str, payload: Payload, api_key: str | None) -> tuple[dict[str, JsonValue] | None, bool]:
+def _ask(url: str, payload: Payload, api_key: str | None) -> tuple[CreditEstimate | None, bool]:
     """Return the estimate and whether it can be cached.
 
     Refusals can be cached; server hiccups and Cloudflare blocks cannot.
@@ -89,7 +89,7 @@ def _ask(url: str, payload: Payload, api_key: str | None) -> tuple[dict[str, Jso
     return _credits(body.get("data", body) if isinstance(body, Mapping) else None), True
 
 
-def _credits(data: JsonValue) -> dict[str, JsonValue] | None:
+def _credits(data: JsonValue) -> CreditEstimate | None:
     """Extract discounted and undiscounted credit costs from an estimate.
 
     ``discountCost`` is used when available; ``totalCost`` is an older name
@@ -99,10 +99,11 @@ def _credits(data: JsonValue) -> dict[str, JsonValue] | None:
         return None
     full = _number(data.get("totalCost")) if data.get("totalCost") is not None else _number(data.get("cost"))
     discounted = _number(data.get("discountCost"))
-    if full is None and discounted is None:
-        return None
-    credit_cost = discounted if discounted is not None else full
-    return {"credits": credit_cost, "full_credits": full if full is not None else credit_cost}
+    if discounted is not None:
+        return {"credits": discounted, "full_credits": full if full is not None else discounted}
+    if full is not None:
+        return {"credits": full, "full_credits": full}
+    return None
 
 
 def _number(value: JsonValue) -> int | float | None:

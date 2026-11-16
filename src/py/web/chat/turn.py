@@ -25,7 +25,8 @@ from web.chat.errors import (
     VideoInputRequiredError,
 )
 from web.chat.generation import RefLimits, plan_refs
-from web.chat.helpers import message_out
+from web.chat.helpers import shown_message
+from web.chat.schemas import DoneEvent, ErrorEvent, TitleEvent
 from web.chat.turn_generation import ImageSpec, VideoSpec
 from web.chat.turn_tools import ToolsTurn
 from web.chat.workers import ctx_thread
@@ -69,8 +70,8 @@ class Turn(ToolsTurn):
             cost=round(self.cost, 6) if self.cost else None,
         )
         if error:
-            self.emit({"type": "error", "message": error})
-        self.emit({"type": "done", "message": message_out(msg) if msg else None})
+            self.emit(ErrorEvent(type="error", message=error))
+        self.emit(DoneEvent(type="done", message=shown_message(msg) if msg else None))
 
     def _run_mode(self) -> None:
         """Do the turn's work in the composer's mode (explicit media, or chat with tools)."""
@@ -213,4 +214,4 @@ class Turn(ToolsTurn):
         if not conv or conv.title != DEFAULT_TITLE:  # renamed meanwhile
             return
         self.db.update_conversation(self.conv_id, title=title)
-        self.emit({"type": "title", "title": title})
+        self.emit(TitleEvent(type="title", title=title))

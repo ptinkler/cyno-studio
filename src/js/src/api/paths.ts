@@ -91,5 +91,20 @@ export type ResponseOf<P extends keyof paths, M extends Method> = JsonResponseOf
 /** The JSON a request to `E` answers with. */
 export type ResponseFor<M extends Method, E extends string> = ResponseOf<RouteFor<M, E>, M>
 
+type EventStreamOf<O> = O extends { responses: { 200: { content: { 'text/event-stream': infer E } } } } ? E : never
+
+/** The events a streaming route sends, one per `data:` line (`never` for a route that isn't a stream). */
+export type StreamEventsFor<E extends string> = EventStreamOf<Operation<RouteFor<'post', E>, 'post'>>
+
 /** The JSON body to send to `E`. */
 export type BodyFor<M extends Method, E extends string> = RequestBody<RouteFor<M, E>, M>
+
+/**
+ * The arguments after the endpoint of a write: the route's JSON body (none when it takes none), or the
+ * unsatisfiable `KnownEndpoint` argument when no route matches.
+ */
+export type SendArgs<M extends Method, E extends string> = [RouteFor<M, E>] extends [never]
+  ? [endpointIsNotABackendRoute: never]
+  : [BodyFor<M, E>] extends [never]
+    ? []
+    : [body: BodyFor<M, E>]

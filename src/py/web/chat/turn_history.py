@@ -18,6 +18,8 @@ from web.chat.generation import (
     plan_refs,
 )
 from web.chat.helpers import effective_ids
+from web.chat.schemas import Character as SchemaCharacter
+from web.chat.schemas import CharactersEvent
 from web.chat.tools import (
     SYSTEM_PROMPT,
 )
@@ -165,11 +167,11 @@ class HistoryTurn(TurnBase):
         own = [*own, *(c.id for c in new if c.id not in own)]  # the chat's own; its defaults' stay inherited
         self.db.update_conversation(self.conv_id, character_ids=own)
         self.emit(
-            {
-                "type": "characters",
-                "character_ids": own,
-                "characters": [c.to_dict() for c in self.characters],
-            }
+            CharactersEvent(
+                type="characters",
+                character_ids=own,
+                characters=[SchemaCharacter.model_validate(c.to_dict()) for c in self.characters],
+            )
         )
 
     def build_ref_items(self, ref_mode: RefMode) -> list[dict[str, str]]:

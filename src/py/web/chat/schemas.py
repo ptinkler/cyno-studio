@@ -4,11 +4,12 @@ The frontend's generated types come from these (see TODO.md, TypeScript migratio
 ISO 8601 strings, as `core.metadata.models.iso` writes them.
 """
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic.alias_generators import to_camel
 
-from web.types import JsonValue
+from web.types import CreditEstimate, JsonValue
 
 
 class ChatStatus(BaseModel):
@@ -296,3 +297,157 @@ class ShownBranch(BaseModel):
 
     conversation: Conversation
     messages: list[ShownMessage]
+
+
+# --- Prompt tools, estimates and voices ---------------------------------------------------------
+
+
+class Enhanced(BaseModel):
+    """A prompt rewritten by the chat model, and what that cost."""
+
+    prompt: str
+    cost: float
+
+
+class Estimate(BaseModel):
+    """Pollo's credit estimate for a generation; null for other providers or when it can't be priced."""
+
+    estimate: CreditEstimate | None
+
+
+class Voice(BaseModel):
+    """One of Pollo's official text-to-speech voices (field names are Pollo's, passed straight through)."""
+
+    # Pollo's attributes may arrive as numbers; the camelCase names are on the wire, both ways
+    model_config = ConfigDict(coerce_numbers_to_str=True, alias_generator=to_camel, populate_by_name=True)
+
+    voice_id: str | None
+    voice_name: str | None
+    sample_audio: str | None
+    language: str | None
+    gender: str | None
+    age: str | None
+    voice_style: str | None
+    accent: str | None
+    engine_code: str | None
+
+
+class VoiceList(BaseModel):
+    """A page of voices and how many there are in all."""
+
+    voices: list[Voice]
+    total: int
+
+
+class Cancelled(BaseModel):
+    """Whether a running reply was found and told to stop."""
+
+    cancelled: bool
+
+
+# --- The server-sent events of a turn --------------------------------------------------------------
+# A turn streams `data: {json}` lines. OpenAPI can't describe a stream, so these models are the contract:
+# the routes list them as the event-stream schema, the engine emits them, and the frontend's types come
+# from them. Every event names itself in `type`, so they form a discriminated union.
+
+
+class Character(BaseModel):
+    """A reusable character with reference images."""
+
+    id: int
+    name: str
+    description: str
+    images: list[str]  # file names, main one first
+    conversation_id: str | None  # set for an ad hoc character that belongs to that chat
+    adhoc: bool
+    created_at: str | None
+    updated_at: str | None
+
+
+class StartEvent(BaseModel):
+    """The turn began: the prompt that was saved (if any) and the reply being written."""
+
+    type: Literal["start"]
+    user_message: ShownMessage | None
+    assistant_message: ShownMessage
+    replaces: int | None = None  # a reword: the reply whose words are being written again
+
+
+class DeltaEvent(BaseModel):
+    """More of the reply's text."""
+
+    type: Literal["delta"]
+    text: str
+
+
+class MediaEvent(BaseModel):
+    """A card was added to the reply, or its state changed."""
+
+    type: Literal["media"]
+    message_id: int
+    item: MediaCard
+
+
+class CharactersEvent(BaseModel):
+    """The chat model made characters: the chat's own character ids now, and those characters."""
+
+    type: Literal["characters"]
+    character_ids: list[int]
+    characters: list[Character]
+
+
+class InstructionsEvent(BaseModel):
+    """The chat model saved an instruction and attached it to the chat."""
+
+    type: Literal["instructions"]
+    instruction_ids: list[int]
+    instruction: Instruction
+
+
+class TitleEvent(BaseModel):
+    """The chat got its title."""
+
+    type: Literal["title"]
+    title: str
+
+
+class ErrorEvent(BaseModel):
+    """The turn failed; a `done` follows."""
+
+    type: Literal["error"]
+    message: str
+
+
+class DoneEvent(BaseModel):
+    """The turn ended; `message` is the saved reply (null if it has gone)."""
+
+    type: Literal["done"]
+    message: ShownMessage | None
+
+
+_Event = (
+    StartEvent | DeltaEvent | MediaEvent | CharactersEvent | InstructionsEvent | TitleEvent | ErrorEvent | DoneEvent
+)
+TurnEvent = Annotated[_Event, Field(discriminator="type")]
+
+_EVENT_ADAPTER: TypeAdapter[_Event] = TypeAdapter(TurnEvent)
+
+
+def _event_schema() -> dict[str, object]:
+    """The `TurnEvent` union as an OpenAPI schema of `$ref`s into the components."""
+    schema: dict[str, object] = dict(_EVENT_ADAPTER.json_schema(ref_template="#/components/schemas/{model}"))
+    # the models themselves are registered through `model` below, so don't repeat their `$defs`
+    schema.pop("$defs", None)
+    return schema
+
+
+# The `responses=` of a streaming turn route: it lists the event models in the OpenAPI schema. `model` is
+# what registers them; the `application/json` entry that comes with it is removed again by
+# `web.core.openapi` once the schema is built, because the body is an event stream.
+TURN_STREAM: dict[int | str, dict[str, object]] = {
+    200: {
+        "description": "Server-sent events: one `TurnEvent` as JSON per `data:` line.",
+        "model": TurnEvent,
+        "content": {"text/event-stream": {"schema": _event_schema()}},
+    }
+}

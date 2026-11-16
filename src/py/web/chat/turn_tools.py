@@ -18,6 +18,8 @@ from web.chat.generation import (
     is_moderation_error,
 )
 from web.chat.helpers import conversation_dir
+from web.chat.schemas import Instruction as SchemaInstruction
+from web.chat.schemas import InstructionsEvent
 from web.chat.tools import (
     AUDIO_TOOL_RESULT,
     IMAGE_TOOL_RESULT,
@@ -361,7 +363,11 @@ class ToolsTurn(GenerationTurn):
         conv = self.db.get_conversation(self.conv_id)
         ids = [*(conv.instruction_ids if conv else []), item.id]
         self.db.update_conversation(self.conv_id, instruction_ids=ids)
-        self.emit({"type": "instructions", "instruction_ids": ids, "instruction": item.to_dict()})
+        self.emit(
+            InstructionsEvent(
+                type="instructions", instruction_ids=ids, instruction=SchemaInstruction.model_validate(item.to_dict())
+            )
+        )
         return {
             "ok": True,
             "result": f"Instruction “{name}” saved and attached to this chat; it applies from your next reply. "

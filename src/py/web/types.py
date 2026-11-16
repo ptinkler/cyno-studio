@@ -16,6 +16,13 @@ class PolloBalance(TypedDict):
     totalCredits: float
 
 
+class CreditEstimate(TypedDict):
+    """Pollo's estimated cost of a generation: after any discount, and before it."""
+
+    credits: float
+    full_credits: float
+
+
 class OpenRouterCredits(TypedDict):
     """An OpenRouter account's credits, in dollars."""
 

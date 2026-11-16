@@ -1,6 +1,6 @@
 import { fetchWithRetry, statusError } from '../api/http'
 import { errorMessage, readJson } from '../api/json'
-import type { BodyFor, EndpointPattern, KnownEndpoint, ResponseFor } from '../api/paths'
+import type { EndpointPattern, KnownEndpoint, ResponseFor, SendArgs } from '../api/paths'
 
 // Endpoints whose backend response has no model yet; see legacyApi.js.
 export { apiDelete, apiGet, apiPatch, apiPost, apiPut, apiUpload } from './legacyApi'
@@ -39,18 +39,11 @@ async function send<M extends 'post' | 'put' | 'patch' | 'delete', E extends str
 /** The typed client: every call names a route the backend serves, and its types come from the generated schema. */
 export const api = {
   get,
-  post: <E extends EndpointPattern<'post'>>(
-    endpoint: E,
-    body: BodyFor<'post', E>,
-    ..._known: KnownEndpoint<'post', E>
-  ) => send('post', endpoint, body),
-  put: <E extends EndpointPattern<'put'>>(endpoint: E, body: BodyFor<'put', E>, ..._known: KnownEndpoint<'put', E>) =>
-    send('put', endpoint, body),
-  patch: <E extends EndpointPattern<'patch'>>(
-    endpoint: E,
-    body: BodyFor<'patch', E>,
-    ..._known: KnownEndpoint<'patch', E>
-  ) => send('patch', endpoint, body),
+  post: <E extends EndpointPattern<'post'>>(endpoint: E, ...args: SendArgs<'post', E>) =>
+    send('post', endpoint, args[0]),
+  put: <E extends EndpointPattern<'put'>>(endpoint: E, ...args: SendArgs<'put', E>) => send('put', endpoint, args[0]),
+  patch: <E extends EndpointPattern<'patch'>>(endpoint: E, ...args: SendArgs<'patch', E>) =>
+    send('patch', endpoint, args[0]),
   delete: <E extends EndpointPattern<'delete'>>(endpoint: E, ..._known: KnownEndpoint<'delete', E>) =>
     send('delete', endpoint, undefined),
 }

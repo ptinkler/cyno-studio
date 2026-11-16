@@ -15,7 +15,7 @@ watch(
   async want => {
     if (!want || voices.value.length) return
     try {
-      voices.value = (await fetchAudioVoices('?page_size=100')).voices
+      voices.value = (await fetchAudioVoices(100)).voices
       voicesError.value = ''
     } catch (e) {
       voicesError.value = e.message || 'Could not load voices'

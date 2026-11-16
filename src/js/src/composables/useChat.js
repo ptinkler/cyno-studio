@@ -1,5 +1,4 @@
 import { apiGet, apiPost, apiDelete, apiUpload } from './useApi'
-import { useAuth } from './useAuth'
 
 const enc = encodeURIComponent
 
@@ -52,11 +51,6 @@ export {
 } from './chatMediaApi'
 
 export const fetchChatModels = (refresh = false) => apiGet(`/api/chat/models${refresh ? '?refresh=true' : ''}`)
-// Pollo's official TTS voices: { voices: [{voiceId, voiceName, language, gender, ...}], total }
-export const fetchAudioVoices = (params = '') => apiGet(`/api/chat/audio/voices${params}`)
-export const estimateChatCost = data => apiPost('/api/chat/estimate', data)
-export const enhanceChatPrompt = data => apiPost('/api/chat/enhance-prompt', data)
-export const cancelChatMessage = id => apiPost(`/api/chat/messages/${id}/cancel`)
 // In-flight (and tracked) generations across every thread — powers the queue dock.
 // `known` = message ids to resolve even once they've left the pending set.
 export const fetchActiveGenerations = (known = []) => apiPost('/api/chat/generations/active', { known })
@@ -100,62 +94,8 @@ export const chatMediaUrl = (convId, file) => `/api/chat/media/${enc(convId)}/${
 // A chat image scaled down for showing in the chat (the full file is for the lightbox)
 export const chatMediaPreviewUrl = (convId, file) => `${chatMediaUrl(convId, file)}/preview`
 
-/**
- * POST a turn and feed each SSE event to `onEvent`. Resolves when the
- * stream ends. Aborting `signal` only stops listening — the server keeps
- * the turn running (use cancelChatMessage to actually stop it).
- */
-export async function streamTurn(path, body, onEvent, signal) {
-  const res = await fetch(path, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-    body: JSON.stringify(body),
-    signal,
-  })
-  if (res.status === 401) {
-    useAuth().promptLogin()
-    throw new Error('API key required')
-  }
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.detail || `API error: ${res.status}`)
-  }
-  await readSSE(res.body, onEvent)
-}
+// Composer helpers: estimate, enhance, voices, cancel
+export { fetchAudioVoices, estimateChatCost, enhanceChatPrompt, cancelChatMessage } from './chatToolsApi'
 
-export async function readSSE(stream, onEvent) {
-  const reader = stream.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  for (;;) {
-    const { value, done } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    let sep
-    while ((sep = buffer.indexOf('\n\n')) !== -1) {
-      const block = buffer.slice(0, sep)
-      buffer = buffer.slice(sep + 2)
-      const data = block
-        .split('\n')
-        .filter(l => l.startsWith('data: '))
-        .map(l => l.slice(6))
-        .join('\n')
-      if (data) onEvent(JSON.parse(data))
-    }
-  }
-}
-
-export const sendChatMessage = (convId, body, onEvent, signal) =>
-  streamTurn(`/api/chat/conversations/${enc(convId)}/messages`, body, onEvent, signal)
-
-export const retryChatMessage = (convId, body, onEvent, signal) =>
-  streamTurn(`/api/chat/conversations/${enc(convId)}/retry`, body, onEvent, signal)
-
-export const editChatMessage = (convId, body, onEvent, signal) =>
-  streamTurn(`/api/chat/conversations/${enc(convId)}/edit`, body, onEvent, signal)
-
-// Write a reply's words again, keeping the pictures it already made.
-// Body: turn settings + message_id, and `instruction` to edit the words (empty = redo them)
-export const rewordChatMessage = (convId, body, onEvent, signal) =>
-  streamTurn(`/api/chat/conversations/${enc(convId)}/reword`, body, onEvent, signal)
+// The streamed turns (send, retry, edit, reword) and their event types are in chatStreamApi.ts
+export { readSSE, sendChatMessage, retryChatMessage, editChatMessage, rewordChatMessage } from './chatStreamApi'

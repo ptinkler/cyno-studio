@@ -13,6 +13,7 @@ from web.chat.generation import (
 )
 from web.chat.helpers import branch_to, effective_ids
 from web.chat.models import TurnSettings
+from web.chat.schemas import DeltaEvent, MediaCard, MediaEvent, TurnEvent
 from web.core.metadata import get_db
 from web.core.metadata.models import ChatMessage
 from web.types import JsonValue
@@ -27,7 +28,7 @@ log = logging.getLogger(__name__)
 class TurnLink:
     """How a running turn talks to whoever started it: events out (`emit`), cancellation in (`cancel`)."""
 
-    emit: Callable[[dict[str, JsonValue]], None]
+    emit: Callable[[TurnEvent], None]
     cancel: threading.Event
 
 
@@ -87,19 +88,22 @@ class TurnBase:
 
     def _append(self, text: str) -> None:
         self.content += text
-        self.emit({"type": "delta", "text": text})
+        self.emit(DeltaEvent(type="delta", text=text))
 
     def _add_media(self, item: dict[str, JsonValue]) -> None:
         self.media.append(item)
         self.db.append_chat_media_item(self.message_id, item)
-        self.emit({"type": "media", "message_id": self.message_id, "item": dict(item)})
+        self._emit_media(item)
 
     def _update_media(self, item: dict[str, JsonValue], **fields: JsonValue) -> None:
         item.update(fields)
         media_id = item.get("id")
         if isinstance(media_id, str):
             self.db.update_chat_media_item(self.message_id, media_id, **fields)
-        self.emit({"type": "media", "message_id": self.message_id, "item": dict(item)})
+        self._emit_media(item)
+
+    def _emit_media(self, item: dict[str, JsonValue]) -> None:
+        self.emit(MediaEvent(type="media", message_id=self.message_id, item=MediaCard.model_validate(item)))
 
     def _characters_usable(self) -> bool:
         """Return whether this turn's selected models can use characters.

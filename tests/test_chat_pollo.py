@@ -38,7 +38,7 @@ from web.providers.pollo import uploads as pollo_uploads
 from web.providers.pollo.engine._shared import Payload
 from web.providers.pollo.engine.registry import ModelSpec, PolloGenerator
 from web.providers.specs import CostQuery
-from web.types import JsonValue
+from web.types import CreditEstimate, JsonValue
 
 pytest_plugins = ["tests.chat_fixtures"]
 
@@ -435,6 +435,27 @@ class TestPolloImageModels:
         assert jp.dig(msg, "media", 0, "job_id") == "pollo:task-1"
         assert pollo.generators[0][1]["prompt"] == "Hello there"
 
+    def test_audio_voices_keep_pollos_camel_case_names(
+        self, client: TestClient, chat: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that voices are served under Pollo's own field names, with numbers as text."""
+        voice: dict[str, JsonValue] = dict.fromkeys(
+            ("voiceId", "voiceName", "sampleAudio", "language", "gender", "age", "voiceStyle", "accent", "engineCode")
+        ) | {"voiceId": "v1", "voiceName": "Ada", "age": 30, "language": "en"}
+
+        def voices(page: int, page_size: int, **filters: str) -> dict[str, JsonValue]:
+            _ = page, page_size, filters
+            return {"voices": [voice], "total": 1}
+
+        monkeypatch.setattr(pollo_provider, "is_configured", lambda: True)
+        monkeypatch.setattr(pollo_provider, "list_voices", voices)
+        got = jp.decode(client.get("/api/chat/audio/voices"))
+        assert jp.dig(got, "total") == 1
+        assert jp.dig(got, "voices", 0, "voiceId") == "v1"
+        assert jp.dig(got, "voices", 0, "voiceName") == "Ada"
+        assert jp.dig(got, "voices", 0, "age") == "30"
+        assert jp.dig(got, "voices", 0, "accent") is None
+
     def test_audio_estimate_prices_by_the_text(
         self, client: TestClient, chat: None, monkeypatch: pytest.MonkeyPatch, pollo: PolloCalls
     ) -> None:
@@ -442,18 +463,18 @@ class TestPolloImageModels:
         kinds: list[str] = []
         options: list[dict[str, JsonValue]] = []
 
-        def fake(model: str, query: CostQuery) -> dict[str, JsonValue]:
+        def fake(model: str, query: CostQuery) -> CreditEstimate:
             _ = model
             kinds.append(query.kind)
             options.append({"prompt": query.prompt, "audio": dict(query.audio or {})})
-            return {"credits": 3}
+            return {"credits": 3, "full_credits": 3}
 
         monkeypatch.setattr(pollo_provider, "estimate_cost", fake)
         r = client.post(
             "/api/chat/estimate",
             json={"model": "pollo/elevenv3", "kind": "audio", "prompt": "hi", "audio_options": {"voice": "v1"}},
         )
-        assert jp.decode(r) == {"estimate": {"credits": 3}}
+        assert jp.decode(r) == {"estimate": {"credits": 3, "full_credits": 3}}
         assert kinds[-1] == "audio"
         assert options[-1]["prompt"] == "hi"
         assert options[-1]["audio"] == {"voice": "v1"}

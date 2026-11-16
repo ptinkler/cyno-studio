@@ -23,7 +23,6 @@ from web.chat.generation import (
 )
 from web.chat.helpers import (
     conversation_dir,
-    message_out,
     remember_settings,
     require_conv,
     require_idle,
@@ -32,7 +31,17 @@ from web.chat.helpers import (
     shown_message,
 )
 from web.chat.models import EditMessage, EnhancePrompt, EstimateRequest, RetryMessage, SendMessage, TurnSettings
-from web.chat.schemas import ShownMessage
+from web.chat.schemas import (
+    TURN_STREAM,
+    Cancelled,
+    DoneEvent,
+    Enhanced,
+    Estimate,
+    ShownMessage,
+    StartEvent,
+    TurnEvent,
+    VoiceList,
+)
 from web.chat.turn import Turn
 from web.chat.turn_base import Reword, TurnLink
 from web.chat.workers import ctx_thread
@@ -52,7 +61,7 @@ _cancel_events: dict[int, threading.Event] = {}
 
 
 @router.post("/enhance-prompt")
-def api_enhance_prompt(data: EnhancePrompt) -> dict[str, str | float]:
+def api_enhance_prompt(data: EnhancePrompt) -> Enhanced:
     """Rewrite a prompt with the chat model.
 
     Only ever called by the user's
@@ -62,22 +71,22 @@ def api_enhance_prompt(data: EnhancePrompt) -> dict[str, str | float]:
         prompt, cost = enhance_prompt(data.model, data.prompt, "video" if data.kind == "video" else "image")
     except (openrouter.OpenRouterError, ValueError) as e:
         raise HTTPException(502, str(e)) from e
-    return {"prompt": prompt, "cost": cost}
+    return Enhanced(prompt=prompt, cost=cost)
 
 
 @router.post("/estimate")
-def api_estimate(data: EstimateRequest) -> dict[str, JsonValue]:
+def api_estimate(data: EstimateRequest) -> Estimate:
     """Estimate a Pollo generation's credit cost for the composer.
 
     Returns a null estimate for other providers or when Pollo cannot price it.
     """
     if not pollo.is_pollo(data.model):
-        return {"estimate": None}
+        return Estimate(estimate=None)
     duration, ratio, resolution = data.duration, data.aspect_ratio, data.resolution
     if data.kind == "video":
         duration, ratio, resolution = fit_video_params(data.model, duration, ratio, resolution)
-    return {
-        "estimate": pollo.estimate_cost(
+    return Estimate(
+        estimate=pollo.estimate_cost(
             data.model,
             CostQuery(
                 data.kind if data.kind in ("video", "audio") else "image",
@@ -90,27 +99,27 @@ def api_estimate(data: EstimateRequest) -> dict[str, JsonValue]:
                 audio=audio_params(data.audio_options),
             ),
         )
-    }
+    )
 
 
 @router.get("/audio/voices")
-def api_audio_voices(page: int = 1, page_size: int = 50, language: str = "", gender: str = "") -> dict[str, JsonValue]:
+def api_audio_voices(page: int = 1, page_size: int = 50, language: str = "", gender: str = "") -> VoiceList:
     """Pollo's official TTS voices, for the speech models' voice picker."""
     if not pollo.is_configured():
         raise HTTPException(503, "No Pollo API key set — add one in Settings → Keys")
     try:
-        return pollo.list_voices(page, min(page_size, 100), language=language, gender=gender)
+        return VoiceList.model_validate(pollo.list_voices(page, min(page_size, 100), language=language, gender=gender))
     except openrouter.OpenRouterError as e:
         raise HTTPException(502, str(e)) from e
 
 
 @router.post("/messages/{message_id}/cancel")
-def api_cancel_message(message_id: int) -> dict[str, bool]:
+def api_cancel_message(message_id: int) -> Cancelled:
     """Request cancellation of a running assistant message."""
     ev = _cancel_events.get(message_id)
     if ev:
         ev.set()
-    return {"cancelled": bool(ev)}
+    return Cancelled(cancelled=bool(ev))
 
 
 def _prompt_optional(settings: TurnSettings) -> bool:
@@ -122,7 +131,7 @@ def _prompt_optional(settings: TurnSettings) -> bool:
     return False
 
 
-@router.post("/conversations/{conv_id}/messages")
+@router.post("/conversations/{conv_id}/messages", responses=TURN_STREAM)
 def api_send_message(conv_id: str, data: SendMessage) -> StreamingResponse:
     """Create a user message and stream its assistant turn."""
     require_text_provider(data.mode)
@@ -151,7 +160,7 @@ def api_send_message(conv_id: str, data: SendMessage) -> StreamingResponse:
         return _start_turn(conv_id, data, user_msg, parent_id=user_msg.id, lane=lane)
 
 
-@router.post("/conversations/{conv_id}/retry")
+@router.post("/conversations/{conv_id}/retry", responses=TURN_STREAM)
 def api_retry(conv_id: str, data: RetryMessage) -> StreamingResponse:
     """Generate another version of an assistant reply, as a new branch beside it.
 
@@ -171,7 +180,7 @@ def api_retry(conv_id: str, data: RetryMessage) -> StreamingResponse:
         return _start_turn(conv_id, data, None, parent_id=msg.parent_id, lane=msg.lane)
 
 
-@router.post("/conversations/{conv_id}/edit")
+@router.post("/conversations/{conv_id}/edit", responses=TURN_STREAM)
 def api_edit(conv_id: str, data: EditMessage) -> StreamingResponse:
     """Resend a user message with new text, as a new branch beside it (same attachments), and stream a fresh reply.
 
@@ -197,8 +206,8 @@ def api_edit(conv_id: str, data: EditMessage) -> StreamingResponse:
         return _start_turn(conv_id, data, user_msg, parent_id=user_msg.id, lane=msg.lane)
 
 
-def _sse(event: dict[str, JsonValue]) -> str:
-    return f"data: {json.dumps(event)}\n\n"
+def _sse(event: TurnEvent) -> str:
+    return f"data: {event.model_dump_json()}\n\n"
 
 
 def _start_turn(
@@ -210,11 +219,11 @@ def _start_turn(
     assistant = get_db().add_chat_message(
         conv_id, "assistant", "", model=model, status="streaming", parent_id=parent_id, mode=settings.mode, lane=lane
     )
-    start: dict[str, JsonValue] = {
-        "type": "start",
-        "user_message": message_out(user_msg) if user_msg else None,
-        "assistant_message": message_out(assistant),
-    }
+    start = StartEvent(
+        type="start",
+        user_message=shown_message(user_msg) if user_msg else None,
+        assistant_message=shown_message(assistant),
+    )
     return _stream_turn(conv_id, settings, assistant.id, start)
 
 
@@ -222,7 +231,7 @@ def _stream_turn(
     conv_id: str,
     settings: TurnSettings,
     assistant_id: int,
-    start: dict[str, JsonValue],
+    start: StartEvent,
     reword: Reword | None = None,
 ) -> StreamingResponse:
     """Run a Turn against `assistant_id` and stream its events as SSE.
@@ -233,7 +242,7 @@ def _stream_turn(
     A `reword` has an `after` that runs once the Turn has finished and saved; if it returns a message
     that goes out as a final "done", so the UI ends on its state.
     """
-    events: queue.Queue[dict[str, JsonValue] | None] = queue.Queue()
+    events: queue.Queue[TurnEvent | None] = queue.Queue()
     cancel = threading.Event()
     _cancel_events[assistant_id] = cancel
 
@@ -241,7 +250,7 @@ def _stream_turn(
         try:
             Turn(conv_id, settings, assistant_id, TurnLink(events.put, cancel), reword).run()
             if reword and reword.after and (msg := reword.after()):
-                events.put({"type": "done", "message": message_out(msg)})
+                events.put(DoneEvent(type="done", message=shown_message(msg)))
         finally:
             _cancel_events.pop(assistant_id, None)
             events.put(None)
@@ -313,7 +322,7 @@ def _reword_finisher(
     return after
 
 
-@router.post("/conversations/{conv_id}/reword")
+@router.post("/conversations/{conv_id}/reword", responses=TURN_STREAM)
 def api_reword(conv_id: str, data: RewordMessage) -> StreamingResponse:
     """Write this reply's words again, keeping the pictures it already made.
 
@@ -346,12 +355,12 @@ def api_reword(conv_id: str, data: RewordMessage) -> StreamingResponse:
             raise HTTPException(409, "Wait for the reply to finish first")
         remember_settings(conv, data)
         db.update_chat_message(message_id, content="", status="streaming", error=None)
-        start: dict[str, JsonValue] = {
-            "type": "start",
-            "user_message": None,
-            "assistant_message": {**message_out(msg), "content": "", "status": "streaming"},
-            "replaces": msg.id,
-        }
+        start = StartEvent(
+            type="start",
+            user_message=None,
+            assistant_message=shown_message(msg).model_copy(update={"content": "", "status": "streaming"}),
+            replaces=msg.id,
+        )
         reword = Reword(spent, (previous, instruction) if instruction else None, after)
         return _stream_turn(conv_id, settings, message_id, start, reword)
 

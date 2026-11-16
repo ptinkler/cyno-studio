@@ -8,6 +8,7 @@ import { describe, expectTypeOf, it } from 'vitest'
 import type { components } from '../api/schema'
 import type { BodyFor, EndpointPattern, KnownEndpoint, ResponseFor, RouteFor } from '../api/paths'
 import { api } from '../composables/useApi'
+import type { TurnEvent, TurnEventOf } from '../composables/chatStreamApi'
 
 type Schemas = components['schemas']
 
@@ -97,5 +98,21 @@ describe('the client', () => {
       .parameter(1)
       .toEqualTypeOf<Schemas['KeysUpdate']>()
     expectTypeOf<{ keys: { pollo: number } }>().not.toMatchTypeOf<Schemas['KeysUpdate']>()
+  })
+})
+
+describe('streamed turns', () => {
+  it('carry the backend event union, told apart by `type`', () => {
+    expectTypeOf<TurnEvent['type']>().toEqualTypeOf<
+      'start' | 'delta' | 'media' | 'characters' | 'instructions' | 'title' | 'error' | 'done'
+    >()
+    expectTypeOf<TurnEventOf<'delta'>>().toEqualTypeOf<Schemas['DeltaEvent']>()
+    expectTypeOf<TurnEventOf<'media'>['item']>().toEqualTypeOf<Schemas['MediaCard']>()
+    expectTypeOf<TurnEventOf<'done'>['message']>().toEqualTypeOf<Schemas['ShownMessage'] | null>()
+  })
+
+  it('narrow on `type`', () => {
+    const text = (event: TurnEvent): string | undefined => (event.type === 'delta' ? event.text : undefined)
+    expectTypeOf(text).returns.toEqualTypeOf<string | undefined>()
   })
 })

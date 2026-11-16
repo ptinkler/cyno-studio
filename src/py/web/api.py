@@ -40,10 +40,12 @@ from web.chat import startup_resume_chat
 from web.core.env import bool_env
 from web.core.metadata import get_db, reset_tenant, set_tenant
 from web.core.metadata.schema import ensure_schema
+from web.core.openapi import event_stream_only
 from web.media.public import router as public_media_router
 from web.media.routes import router as media_router
 from web.transfer.chatgpt import router as chatgpt_import_router
 from web.transfer.export import router as chat_export_router
+from web.types import JsonValue
 from web.uploads.settings import router as upload_settings_router
 
 log = logging.getLogger(__name__)
@@ -86,6 +88,19 @@ app = FastAPI(
     redoc_url="/redoc" if _docs_on else None,
     openapi_url="/openapi.json" if _docs_on else None,
 )
+
+_build_openapi = app.openapi
+_schema: dict[str, JsonValue] = {}
+
+
+def _openapi() -> dict[str, JsonValue]:
+    """The OpenAPI schema (built once), with event-stream routes described only as event streams."""
+    if not _schema:
+        _schema.update(event_stream_only(_build_openapi()))
+    return _schema
+
+
+app.openapi = _openapi
 
 # CORS - allow frontend dev server
 app.add_middleware(
