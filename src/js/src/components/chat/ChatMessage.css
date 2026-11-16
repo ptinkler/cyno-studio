@@ -33,20 +33,20 @@
 .user-actions {
   display: flex;
   align-items: center;
-  gap: 2px;
-  margin-top: 2px;
+  gap: 6px;
+  margin-top: 6px;
 }
 /* Action buttons fade in on hover; the branch arrows always show */
-.user-actions > .meta-btn {
+.user-actions > .iconbtn {
   opacity: 0;
   transition: opacity 0.15s;
 }
-.msg-user:hover .user-actions > .meta-btn,
-.user-actions:focus-within > .meta-btn {
+.msg-user:hover .user-actions > .iconbtn,
+.user-actions:focus-within > .iconbtn {
   opacity: 1;
 }
 @media (hover: none) {
-  .user-actions > .meta-btn {
+  .user-actions > .iconbtn {
     opacity: 1;
   }
 }
@@ -54,23 +54,6 @@
   font-size: 0.7rem;
   color: var(--text2);
   padding: 0 6px;
-}
-.branch-nav {
-  display: inline-flex;
-  align-items: center;
-  font-size: 0.75rem;
-  color: var(--text2);
-  font-variant-numeric: tabular-nums;
-}
-.branch-nav .meta-btn {
-  padding: 3px 6px;
-  font-size: 0.9rem;
-  line-height: 1;
-}
-.branch-nav .meta-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
-  background: none;
 }
 .edit-box {
   width: min(640px, 80vw);
@@ -239,19 +222,25 @@
   border: 1px solid color-mix(in srgb, var(--sdanger) 30%, transparent);
   word-break: break-word;
 }
-.msg-meta {
+/* A row of icon buttons: under the words, and under the pictures */
+.act-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px 4px;
+  gap: 6px;
+  margin-top: 8px;
+  min-height: 30px;
+}
+.media-grid + .act-row {
   margin-top: 6px;
-  min-height: 24px;
 }
 .meta-info {
-  font-size: 0.72rem;
-  color: var(--text2);
-  padding: 0 6px;
-  opacity: 0.7;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--smuted);
+  padding: 0 4px;
   white-space: nowrap;
 }
 /* Model and cost sit at the right end; a long model name is cut short */
@@ -262,15 +251,6 @@
   max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-/* ‹ text 2/3 › — the reply's wordings, apart from the pictures' own versions */
-.text-ver {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin: 2px 0 6px;
-  font-size: 11px;
-  color: var(--text2);
 }
 .text-box {
   margin: 4px 0 8px;

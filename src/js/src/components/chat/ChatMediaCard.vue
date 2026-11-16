@@ -36,7 +36,7 @@ const emit = defineEmits<{
 
 // Model catalogues, provided by ChatView, for "Try another model"
 const KIND_LABEL: Readonly<Record<string, string>> = { image: 'Image', video: 'Video', audio: 'Audio' }
-const KIND_ICON: Readonly<Record<string, string>> = { image: '🖼', video: '🎬', audio: '🔊' }
+const KIND_ICON: Readonly<Record<string, string>> = { image: '#s-image', video: '#s-film', audio: '#s-audio' }
 const chatModels = inject(chatModelsKey, { text: [], image: [], video: [], audio: [] })
 
 // Ticking clock for "rendering 1:23" on pending videos
@@ -229,61 +229,67 @@ const requestItem = ref<MediaCard | null>(null)
       </div>
     </div>
 
-    <!-- Which model made this — the footer only names the chat model -->
+    <!-- Which model made this and with what — the footer only names the chat model -->
     <div v-if="item.model || item.prompt" class="media-caption">
-      <span class="caption-text" :title="[item.model, ...specs].join(' · ')">
-        {{ KIND_ICON[item.kind] || '🎬' }} {{ shortModel(item.model)
-        }}<template v-if="specs.length">
-          · <span class="caption-specs">{{ specs.join(' · ') }}</span></template
-        ><template v-if="item.cost"> · {{ fmtCost(item.cost) }}</template
-        ><template v-if="item.credits">
-          ·
-          <span title="Billed to your Pollo account"
-            >{{ item.credits }} credit{{ item.credits === 1 ? '' : 's' }}</span
-          ></template
-        ><template v-if="params.context">
-          · <span title="The image model was given the conversation">💬 context</span></template
-        ><template v-if="params.refs.length">
-          ·
-          <span class="caption-refs" title="" @mouseenter="showRefs($event, params)" @mouseleave="refsPeek = null"
-            >🔗 {{ refsLabel(params) }}</span
-          ></template
-        ><template v-if="params.upload_notice">
-          · <span class="caption-warn" :title="params.upload_notice">⚠ backup upload host</span></template
+      <div class="foot-info" :title="[item.model, ...specs].join(' · ')">
+        <span class="foot-model">
+          <svg class="ic sm"><use :href="KIND_ICON[item.kind] || '#s-film'" /></svg>{{ shortModel(item.model) }}
+        </span>
+        <span v-if="specs.length" class="foot-specs">{{ specs.join(' · ') }}</span>
+        <span v-if="item.cost" class="chip">{{ fmtCost(item.cost) }}</span>
+        <span v-if="item.credits" class="chip" title="Billed to your Pollo account"
+          >{{ item.credits }} credit{{ item.credits === 1 ? '' : 's' }}</span
         >
-      </span>
-      <button
-        v-if="canRemake(item) && item.kind === 'image' && item.file"
-        class="caption-btn"
-        title="Edit this picture: describe the change and it is replaced here"
-        @click="openPrompt(item, true)"
-      >
-        ✎ Edit
-      </button>
-      <button
-        v-if="canRemake(item)"
-        class="caption-btn"
-        title="Make it again: tweak the prompt and it is replaced here"
-        @click="openPrompt(item, false)"
-      >
-        ↻ Redo
-      </button>
-      <button
-        v-if="item.prompt"
-        class="caption-btn"
-        :title="`Copy the prompt sent to the ${item.kind} model:\n${item.prompt}`"
-        @click="copy(item.prompt, item.id)"
-      >
-        {{ copiedKey === item.id ? '✓ Copied' : '⧉ Prompt' }}
-      </button>
-      <button
-        v-if="item.request"
-        class="caption-btn"
-        title="Show exactly what was sent to the provider"
-        @click="requestItem = item"
-      >
-        { } Request
-      </button>
+        <span v-if="params.context" class="chip" title="The image model was given the conversation">
+          <svg class="ic sm"><use href="#s-chat" /></svg>context
+        </span>
+        <span
+          v-if="params.refs.length"
+          class="chip caption-refs"
+          @mouseenter="showRefs($event, params)"
+          @mouseleave="refsPeek = null"
+        >
+          <svg class="ic sm"><use href="#s-link" /></svg>{{ refsLabel(params) }}
+        </span>
+        <span v-if="params.upload_notice" class="chip caption-warn" :title="params.upload_notice">
+          <svg class="ic sm"><use href="#s-warn" /></svg>backup upload host
+        </span>
+      </div>
+      <div class="foot-actions">
+        <button
+          v-if="canRemake(item) && item.kind === 'image' && item.file"
+          class="iconbtn boxed"
+          title="Edit this picture: describe the change and it is replaced here"
+          @click="openPrompt(item, true)"
+        >
+          <svg class="ic"><use href="#s-pencil" /></svg>
+        </button>
+        <button
+          v-if="canRemake(item)"
+          class="iconbtn boxed"
+          title="Make it again: tweak the prompt and it is replaced here"
+          @click="openPrompt(item, false)"
+        >
+          <svg class="ic"><use href="#s-refresh" /></svg>
+        </button>
+        <button
+          v-if="item.prompt"
+          class="iconbtn boxed"
+          :class="{ on: copiedKey === item.id }"
+          :title="`Copy the prompt sent to the ${item.kind} model:\n${item.prompt}`"
+          @click="copy(item.prompt, item.id)"
+        >
+          <svg class="ic"><use :href="copiedKey === item.id ? '#s-check' : '#s-copy'" /></svg>
+        </button>
+        <button
+          v-if="item.request"
+          class="iconbtn boxed"
+          title="Show exactly what was sent to the provider"
+          @click="requestItem = item"
+        >
+          <svg class="ic"><use href="#s-code" /></svg>
+        </button>
+      </div>
     </div>
     <PromptBox
       v-if="promptBox?.mediaId === item.id"
@@ -365,27 +371,62 @@ const requestItem = ref<MediaCard | null>(null)
   text-decoration: none;
   font-size: 1rem;
 }
+/* Under the picture: what made it (left), what you can do with it (right).
+   The two wrap onto separate lines on a narrow card. */
 .media-caption {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding: 4px 6px 4px 10px;
-  font-size: 0.72rem;
-  color: var(--text2);
-  border-top: 1px solid var(--border);
+  gap: 6px 10px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--smuted);
+  border-top: 1px solid var(--sborder);
 }
-.caption-text {
-  flex: 1;
+.foot-info {
+  display: flex;
+  flex: 1 1 200px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
   min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
-.caption-warn {
-  color: var(--yellow);
+.foot-model {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--sfg);
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.foot-specs {
+  color: var(--smuted);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border: 1px solid var(--sborder);
+  border-radius: 6px;
+  background: var(--shover);
+  color: var(--smuted);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.foot-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.chip.caption-warn {
+  color: var(--swarn);
+  border-color: color-mix(in srgb, var(--swarn) 45%, transparent);
   cursor: help;
 }
-.caption-refs {
+.chip.caption-refs {
   cursor: default;
 }
 .refs-peek {
@@ -419,20 +460,6 @@ const requestItem = ref<MediaCard | null>(null)
 }
 .refs-peek-grid img.unused {
   opacity: 0.35;
-}
-.caption-btn {
-  flex-shrink: 0;
-  background: none;
-  border: none;
-  color: var(--text2);
-  font-size: 0.72rem;
-  padding: 3px 7px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.caption-btn:hover {
-  background: var(--surface2);
-  color: var(--text);
 }
 .media-pending {
   position: relative;
@@ -474,9 +501,6 @@ const requestItem = ref<MediaCard | null>(null)
   position: relative;
   font-size: 0.75rem;
   color: var(--accent2);
-}
-.caption-specs {
-  color: var(--text);
 }
 .pending-prompt {
   position: relative;

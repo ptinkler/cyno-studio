@@ -97,7 +97,7 @@ describe('ChatMessage media settings', () => {
         media: [{ ...pending, status: 'done', file: 'vid.mp4' }],
       }),
     })
-    expect(w.find('.caption-specs').text()).toBe('from image · 5s · 480p · audio')
+    expect(w.find('.foot-specs').text()).toBe('from image · 5s · 480p · audio')
   })
 
   it('shows ratio and resolution for images', () => {
@@ -113,7 +113,7 @@ describe('ChatMessage media settings', () => {
         }),
       },
     })
-    expect(w.find('.caption-specs').text()).toBe('2K · 16:9')
+    expect(w.find('.foot-specs').text()).toBe('2K · 16:9')
   })
 })
 
@@ -360,7 +360,7 @@ describe('ChatMessage refs sent', () => {
         }),
       },
     })
-    expect(w.find('.media-caption').text()).toContain('🔗 1 of 3 refs')
+    expect(w.find('.media-caption').text()).toContain('1 of 3 refs')
     const all = mount(ChatMessage, {
       props: {
         convId: 'c1',
@@ -373,7 +373,7 @@ describe('ChatMessage refs sent', () => {
         }),
       },
     })
-    expect(all.find('.media-caption').text()).toContain('🔗 2 refs')
+    expect(all.find('.media-caption').text()).toContain('2 refs')
   })
 
   it('shows thumbnails of the refs on hover, dimming the ones not sent', async () => {
@@ -581,6 +581,13 @@ describe('ChatMessage edit and redo the text in place', () => {
   it('Redo text is offered on a reply that made media, and emits reword with no instruction', async () => {
     const w = mount(ChatMessage, rewordable([image]))
     await w.find('button[title^="Redo text"]').trigger('click')
+    expect(w.emitted('reword')).toEqual([['']])
+  })
+
+  it('a picture-only reply keeps Redo text under the picture, not in a bar above it', async () => {
+    const w = mount(ChatMessage, rewordable([image], { content: '' }))
+    expect(w.find('.text-bar').exists()).toBe(false)
+    await w.find('.msg-meta button[title^="Redo text"]').trigger('click')
     expect(w.emitted('reword')).toEqual([['']])
   })
 

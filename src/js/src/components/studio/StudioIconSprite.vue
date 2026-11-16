@@ -51,6 +51,29 @@
       <rect x="3" y="5" width="18" height="14" rx="2" />
       <path d="M7 5v14M17 5v14M3 12h18" />
     </symbol>
+    <symbol id="s-copy" viewBox="0 0 24 24">
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M5 15V6a2 2 0 0 1 2-2h8" />
+    </symbol>
+    <symbol id="s-branch" viewBox="0 0 24 24">
+      <circle cx="6" cy="5.5" r="2" />
+      <circle cx="6" cy="18.5" r="2" />
+      <circle cx="18" cy="8.5" r="2" />
+      <path d="M6 7.5v9M18 10.5c0 4-6 3-11 6.2" />
+    </symbol>
+    <symbol id="s-code" viewBox="0 0 24 24"><path d="m8 8-4 4 4 4M16 8l4 4-4 4" /></symbol>
+    <symbol id="s-link" viewBox="0 0 24 24">
+      <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
+    </symbol>
+    <symbol id="s-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" /></symbol>
+    <symbol id="s-warn" viewBox="0 0 24 24"><path d="M12 4 3 20h18zM12 10v4M12 17v.5" /></symbol>
+    <symbol id="s-audio" viewBox="0 0 24 24"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2" /></symbol>
+    <symbol id="s-textedit" viewBox="0 0 24 24">
+      <path d="M4 6h16M4 11h7M4 16h5M13.5 20.5l.8-3 5.2-5.2 2.2 2.2-5.2 5.2z" />
+    </symbol>
+    <symbol id="s-textredo" viewBox="0 0 24 24">
+      <path d="M4 6h16M4 11h7M4 16h4M21 16a4 4 0 1 0-1.2 2.8M21 12.5V16h-3.5" />
+    </symbol>
     <symbol id="s-user" viewBox="0 0 24 24">
       <circle cx="12" cy="8" r="3.5" />
       <path d="M5 20a7 7 0 0 1 14 0" />

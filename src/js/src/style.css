@@ -341,6 +341,33 @@ a {
   color: var(--sfg);
 }
 
+.iconbtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Boxed: the chat's message actions, so each icon reads as its own button */
+.iconbtn.boxed {
+  border: 1px solid var(--sborder);
+  background: var(--spanel2);
+}
+
+.iconbtn.boxed:hover:not(:disabled) {
+  background: var(--shover);
+  border-color: var(--sfaint);
+}
+
+.iconbtn.boxed.on {
+  color: var(--ssuccess);
+  border-color: color-mix(in srgb, var(--ssuccess) 45%, transparent);
+}
+
+.iconbtn.boxed.danger:hover:not(:disabled) {
+  color: var(--sdanger);
+  background: var(--sdanger-soft);
+  border-color: color-mix(in srgb, var(--sdanger) 45%, transparent);
+}
+
 /* Filter pill: a row of exclusive choices (All / Images / Videos…) */
 .pillbtn {
   display: inline-flex;
