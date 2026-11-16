@@ -265,7 +265,7 @@ function onKeydown(event: KeyboardEvent): void {
   border-radius: 8px;
   padding: 4px 10px;
   color: var(--text);
-  font-size: 0.78rem;
+  font-size: 12px;
   cursor: pointer;
 }
 
@@ -291,7 +291,7 @@ function onKeydown(event: KeyboardEvent): void {
 }
 
 .picker-label {
-  font-size: 0.65rem;
+  font-size: 12px;
   color: var(--text2);
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -306,7 +306,7 @@ function onKeydown(event: KeyboardEvent): void {
 
 .chev {
   color: var(--text2);
-  font-size: 0.75rem;
+  font-size: 12px;
 }
 
 .picker-pop {
@@ -396,7 +396,7 @@ function onKeydown(event: KeyboardEvent): void {
   border-color: var(--accent);
 }
 .filters-n {
-  font-size: 0.72rem;
+  font-size: 11px;
   font-weight: 700;
   color: var(--accent);
 }
@@ -421,7 +421,7 @@ function onKeydown(event: KeyboardEvent): void {
   background: color-mix(in srgb, var(--b) 16%, transparent);
   color: var(--b);
   font-weight: 600;
-  font-size: 0.73rem;
+  font-size: 12px;
   cursor: pointer;
 }
 .achip:hover {
@@ -438,7 +438,7 @@ function onKeydown(event: KeyboardEvent): void {
 
 .picker-section {
   padding: 8px 10px 4px;
-  font-size: 0.65rem;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.6px;
   color: var(--text2);

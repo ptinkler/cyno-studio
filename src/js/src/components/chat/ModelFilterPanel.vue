@@ -54,16 +54,12 @@ const showHidden = defineModel<boolean>('showHidden', { default: false })
 
     <template v-if="uncensoredCount || hiddenCount">
       <div class="fsep"></div>
-      <label v-if="uncensoredCount" class="frow uncensored-only" title="Only list models marked uncensored">
+      <label v-if="uncensoredCount" class="frow uncensored-only" title="Uncensored only">
         <input v-model="uncensoredOnly" type="checkbox" />
         <span class="flabel">Uncensored only</span>
         <span class="fn">{{ uncensoredCount }}</span>
       </label>
-      <label
-        v-if="hiddenCount"
-        class="frow show-hidden"
-        title="Models left out of the list: not enabled for this API key, or retired"
-      >
+      <label v-if="hiddenCount" class="frow show-hidden" title="Not enabled for this key, or retired">
         <input v-model="showHidden" type="checkbox" />
         <span class="flabel">Show hidden models</span>
         <span class="fn">{{ hiddenCount }}</span>
@@ -91,7 +87,7 @@ const showHidden = defineModel<boolean>('showHidden', { default: false })
 }
 .fhead {
   padding: 4px 8px;
-  font-size: 0.75rem;
+  font-size: 12px;
   color: var(--text2);
 }
 .fsep {
@@ -129,14 +125,14 @@ const showHidden = defineModel<boolean>('showHidden', { default: false })
   display: inline-block;
   padding: 1px 7px;
   border-radius: 6px;
-  font-size: 0.7rem;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.5;
   color: var(--b);
   background: color-mix(in srgb, var(--b) 16%, transparent);
 }
 .fn {
-  font-size: 0.75rem;
+  font-size: 12px;
   color: var(--text2);
 }
 .fclear {

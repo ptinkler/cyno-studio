@@ -25,7 +25,7 @@ withDefaults(
 <style scoped>
 .item-badge {
   --b: var(--text2);
-  font-size: 0.65rem;
+  font-size: 11px;
   font-weight: 600;
   line-height: 1.5;
   padding: 1px 7px;

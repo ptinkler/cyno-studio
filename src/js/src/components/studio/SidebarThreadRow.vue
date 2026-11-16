@@ -63,7 +63,7 @@ const threadIcon = (thread: ConversationSummary): string => (thread.kind === 'ga
       </button>
     </template>
     <template v-else>
-      <button class="nact" title="Rename" @click.stop="emit('start-rename')">
+      <button class="nact" title="Rename" aria-label="Rename" @click.stop="emit('start-rename')">
         <svg class="ic sm"><use href="#s-pencil" /></svg>
       </button>
       <button

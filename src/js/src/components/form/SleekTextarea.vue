@@ -45,7 +45,7 @@ function onInput(event: Event): void {
 }
 
 .field-hint {
-  font-size: 0.7rem;
+  font-size: 12px;
   opacity: 0.6;
   font-weight: inherit; /* the shared base sets 400; this field never did */
 }

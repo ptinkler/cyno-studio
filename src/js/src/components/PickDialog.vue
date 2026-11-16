@@ -150,7 +150,7 @@ const onCount = computed(() => props.items.filter(i => i.on).length)
 
 .section {
   margin-top: 4px;
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text2);
@@ -238,7 +238,7 @@ const onCount = computed(() => props.items.filter(i => i.on).length)
   flex-shrink: 0;
   width: 16px;
   height: 16px;
-  font-size: 10px;
+  font-size: 11px;
   border-color: var(--border);
   background: transparent;
 }
@@ -264,7 +264,7 @@ const onCount = computed(() => props.items.filter(i => i.on).length)
 }
 
 .sub {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text2);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -278,7 +278,7 @@ const onCount = computed(() => props.items.filter(i => i.on).length)
   max-width: 100%;
   padding: 1px 6px;
   border-radius: 999px;
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--text2);
   border: 1px solid var(--border);
   overflow: hidden;

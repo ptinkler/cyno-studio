@@ -2,7 +2,7 @@
   padding: 4px 12px;
   border-radius: var(--r);
   border: none;
-  background: var(--saccent);
+  background: var(--saccent-fill);
   color: white;
   font-size: 12px;
   font-weight: 600;

@@ -96,8 +96,7 @@ const canRedoText = computed(() => !streaming.value && canRewordNow.value && has
 const showRedoText = computed(() => canRedoText.value && !!displayText.value)
 // A reply that is only pictures has no words to sit under, so Redo text goes under the pictures instead
 const showRedoFoot = computed(() => canRedoText.value && !displayText.value)
-const REDO_TEXT_TITLE =
-  'Redo text: write these words again and replace them here. The pictures stay; the old words are kept (‹ › on the text).'
+const REDO_TEXT_TITLE = 'Redo text'
 const showWordings = computed(() => textVersions.value > 1 && !streaming.value)
 const showModel = computed(() => !!modelShort.value && showTextModel.value)
 const showTextBar = computed(
@@ -216,12 +215,7 @@ const { copiedKey, copy } = useCopy()
           align="right"
           @open="id => emit('open-chat', id)"
         />
-        <span
-          v-if="modeTag"
-          class="mode-tag"
-          :title="`Last run in ${modeTag} mode — retrying or editing uses the mode selected now`"
-          >{{ modeTag }}</span
-        >
+        <span v-if="modeTag" class="mode-tag" :title="`Sent in ${modeTag} mode`">{{ modeTag }}</span>
         <VersionStepper
           v-if="siblings.length > 1"
           class="branch-nav"
@@ -237,29 +231,22 @@ const { copiedKey, copy } = useCopy()
           class="iconbtn boxed"
           :class="{ on: copiedKey === 'prompt' }"
           title="Copy prompt"
+          aria-label="Copy prompt"
           @click="copy(message.content, 'prompt')"
         >
           <svg class="ic"><use :href="copiedKey === 'prompt' ? '#s-check' : '#s-copy'" /></svg>
         </button>
         <template v-if="canEdit">
-          <button class="iconbtn boxed" title="Edit and resend" @click="startEdit">
+          <button class="iconbtn boxed" title="Edit prompt" aria-label="Edit prompt" @click="startEdit">
             <svg class="ic"><use href="#s-pencil" /></svg>
           </button>
-          <button class="iconbtn boxed" title="Resend this prompt for a different response" @click="emit('resend')">
+          <button class="iconbtn boxed" title="Resend" aria-label="Resend" @click="emit('resend')">
             <svg class="ic"><use href="#s-refresh" /></svg>
           </button>
-          <button
-            class="iconbtn boxed"
-            title="Start a new chat from here: everything up to this prompt and its reply, nothing after"
-            @click="emit('fork')"
-          >
+          <button class="iconbtn boxed" title="Branch from here" aria-label="Branch from here" @click="emit('fork')">
             <svg class="ic"><use href="#s-branch" /></svg>
           </button>
-          <button
-            class="iconbtn boxed danger"
-            title="Delete this prompt and its reply from the chat (images and videos stay in Media)"
-            @click="emit('delete')"
-          >
+          <button class="iconbtn boxed danger" title="Delete prompt" aria-label="Delete prompt" @click="emit('delete')">
             <svg class="ic"><use href="#s-trash" /></svg>
           </button>
         </template>
@@ -284,6 +271,7 @@ const { copiedKey, copy } = useCopy()
             class="iconbtn boxed"
             :class="{ on: copiedKey === 'reply' }"
             title="Copy reply"
+            aria-label="Copy reply"
             @click="copy(displayText, 'reply')"
           >
             <svg class="ic"><use :href="copiedKey === 'reply' ? '#s-check' : '#s-copy'" /></svg>
@@ -291,7 +279,8 @@ const { copiedKey, copy } = useCopy()
           <button
             v-if="showEditText"
             class="iconbtn boxed"
-            title="Edit text: say how to change these words and they are replaced here. The pictures stay; the old words are kept (‹ › on the text)."
+            title="Edit text"
+            aria-label="Edit text"
             @click="textBox = { text: '' }"
           >
             <svg class="ic"><use href="#s-textedit" /></svg>
@@ -306,9 +295,9 @@ const { copiedKey, copy } = useCopy()
             :shown="textShown"
             :count="textVersions"
             :enabled="canSwitch"
-            prev-title="Earlier wording (the pictures stay as they are)"
-            next-title="Later wording (the pictures stay as they are)"
-            title="Wordings of this reply's text — the one shown is what the chat continues from"
+            prev-title="Previous text"
+            next-title="Next text"
+            title="Text versions"
             @step="stepText"
           />
           <ReplyControls

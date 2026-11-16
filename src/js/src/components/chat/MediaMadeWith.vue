@@ -46,7 +46,7 @@ function showRefs(event: MouseEvent, shown: CardParams): void {
     <span v-if="item.credits" class="chip" title="Billed to your Pollo account"
       >{{ item.credits }} credit{{ item.credits === 1 ? '' : 's' }}</span
     >
-    <span v-if="params.context" class="chip" title="The image model was given the conversation">
+    <span v-if="params.context" class="chip" title="Sent with chat context">
       <svg class="ic sm"><use href="#s-chat" /></svg>context
     </span>
     <span
@@ -68,7 +68,7 @@ function showRefs(event: MouseEvent, shown: CardParams): void {
       </div>
       <div class="refs-peek-grid">
         <template v-for="(r, i) in refsPeek.params.refs" :key="r">
-          <div v-if="refMissing(r)" class="ref-gone" title="This image isn't on this server">
+          <div v-if="refMissing(r)" class="ref-gone" title="Image unavailable">
             <svg class="ic"><use href="#s-image" /></svg>
           </div>
           <img
@@ -115,7 +115,7 @@ function showRefs(event: MouseEvent, shown: CardParams): void {
   border-radius: 6px;
   background: var(--shover);
   color: var(--smuted);
-  font-size: 11.5px;
+  font-size: 12px;
   white-space: nowrap;
 }
 .chip.caption-warn {
@@ -136,7 +136,7 @@ function showRefs(event: MouseEvent, shown: CardParams): void {
   border: 1px solid var(--sborder);
   border-radius: var(--r);
   box-shadow: var(--shadow-pop);
-  font-size: 0.72rem;
+  font-size: 12px;
   color: var(--text2);
   pointer-events: none;
 }

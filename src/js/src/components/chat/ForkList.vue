@@ -43,7 +43,7 @@ function pick(id: string): void {
   background: none;
   border: none;
   color: var(--accent);
-  font-size: 0.75rem;
+  font-size: 12px;
   padding: 3px 7px;
   border-radius: 6px;
   cursor: pointer;

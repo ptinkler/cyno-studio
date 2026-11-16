@@ -41,13 +41,15 @@ const big = (item: MediaCard): GenerationItem => bigView(item, props.message, pr
       />
       <span v-if="item.kind !== 'audio'" class="use-btns">
         <button
-          title="Attach this picture and switch to Image mode"
+          title="Use in Image mode"
+          aria-label="Use in Image mode"
           @click="emit('use-image', { file: item.file, mode: 'image' })"
         >
           <svg class="ic sm"><use href="#s-image" /></svg>
         </button>
         <button
-          title="Attach this picture and switch to Video mode"
+          title="Use in Video mode"
+          aria-label="Use in Video mode"
           @click="emit('use-image', { file: item.file, mode: 'video' })"
         >
           <svg class="ic sm"><use href="#s-film" /></svg>

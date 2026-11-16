@@ -35,7 +35,7 @@ async function onPick(event: Event): Promise<void> {
         <option value="__manage">Manage presets…</option>
       </select>
     </label>
-    <button class="add" title="Save the current models and options as a preset" @click="creating = true">+</button>
+    <button class="add" title="Save as preset" @click="creating = true">+</button>
     <PresetEditor :open="creating" @close="creating = false" />
   </div>
 </template>

@@ -92,7 +92,7 @@ onMounted(load)
   gap: 8px;
 }
 .kset {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--saccent);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }

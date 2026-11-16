@@ -11,9 +11,15 @@ function getIcon(type: ToastType): string {
 </script>
 
 <template>
-  <div class="toaster">
+  <div class="toaster" role="status" aria-live="polite">
     <TransitionGroup name="toast">
-      <div v-for="toast in toasts" :key="toast.id" :class="['toast', toast.type]" @click="$emit('remove', toast.id)">
+      <div
+        v-for="toast in toasts"
+        :key="toast.id"
+        :class="['toast', toast.type]"
+        :role="toast.type === 'error' ? 'alert' : undefined"
+        @click="$emit('remove', toast.id)"
+      >
         <span class="toast-icon">{{ getIcon(toast.type) }}</span>
         <span class="toast-message">{{ toast.message }}</span>
       </div>

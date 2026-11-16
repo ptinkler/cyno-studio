@@ -30,7 +30,7 @@ onBeforeUnmount(() => {
 <template>
   <Teleport to="body">
     <div class="req-backdrop" @click.self="emit('close')">
-      <div class="req-dialog" role="dialog" aria-label="Request and response">
+      <div class="req-dialog" role="dialog" aria-modal="true" aria-label="Request and response">
         <div class="req-head">
           <h3>Request and response</h3>
           <button class="btn btn-sm" @click="copy(both, 'req')">
@@ -105,7 +105,7 @@ onBeforeUnmount(() => {
 
 .req-body h4 {
   margin-top: 12px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
   color: var(--sfaint);
   text-transform: uppercase;
@@ -129,7 +129,7 @@ onBeforeUnmount(() => {
   padding: 10px 12px;
   border-radius: var(--r);
   background: var(--sbg2);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;

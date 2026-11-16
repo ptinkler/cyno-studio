@@ -173,7 +173,7 @@ onMounted(load)
   white-space: nowrap;
 }
 .meta {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--sfaint);
 }
 .adhoc {

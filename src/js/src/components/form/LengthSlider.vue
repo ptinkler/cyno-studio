@@ -59,7 +59,7 @@ function onSlide(event: Event): void {
   display: flex;
   align-items: baseline;
   gap: 6px;
-  font-size: 0.72rem;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text2);
   text-transform: uppercase;

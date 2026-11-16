@@ -217,6 +217,6 @@ describe('a failed card suggests one action, not three', () => {
     const primary = w.findAll('.retry-btn.primary')
     expect(primary).toHaveLength(1)
     expect(primary[0]?.text()).toBe('Try again')
-    expect(w.find('button[title="Edit the prompt, then run it again"]').classes()).not.toContain('primary')
+    expect(w.find('button[title="Retry with a new prompt"]').classes()).not.toContain('primary')
   })
 })

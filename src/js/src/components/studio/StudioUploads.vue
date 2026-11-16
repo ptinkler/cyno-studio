@@ -153,7 +153,7 @@ onMounted(load)
   font-weight: 400;
 }
 .hint {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--sfaint);
 }
 .subnote {
@@ -164,7 +164,7 @@ onMounted(load)
 }
 .subnote code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11px;
+  font-size: 12px;
 }
 .subnote.ok {
   color: var(--ssuccess);

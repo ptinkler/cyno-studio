@@ -59,8 +59,8 @@ onBeforeUnmount(() => {
        --s* theme vars that would otherwise only cascade from the .studio ancestor. -->
   <Teleport to="body">
     <div v-if="item" class="gm-back studio" :data-theme="theme || undefined" @click="emit('close')">
-      <div class="gm-card" @click.stop>
-        <button class="gm-x" title="Close" @click="emit('close')">×</button>
+      <div class="gm-card" role="dialog" aria-modal="true" aria-label="Generation" @click.stop>
+        <button class="gm-x" title="Close" aria-label="Close" @click="emit('close')">×</button>
 
         <div class="gm-media" :class="{ 'is-error': isError }">
           <div v-if="isError" class="gm-err">
@@ -115,15 +115,16 @@ onBeforeUnmount(() => {
               <a v-if="!isError" class="gm-btn icon" title="Download" :href="item.url" :download="item.file">
                 <svg class="ic"><use href="#s-download" /></svg>
               </a>
-              <button v-if="canManage" class="gm-btn icon danger" title="Delete" @click="emit('delete', item)">
+              <button
+                v-if="canManage"
+                class="gm-btn icon danger"
+                title="Delete"
+                aria-label="Delete"
+                @click="emit('delete', item)"
+              >
                 <svg class="ic"><use href="#s-trash" /></svg>
               </button>
-              <button
-                v-if="item.request"
-                class="gm-btn icon req"
-                title="Show exactly what was sent to the provider"
-                @click="requestOpen = true"
-              >
+              <button v-if="item.request" class="gm-btn icon req" title="View request" @click="requestOpen = true">
                 { }
               </button>
             </div>
@@ -132,32 +133,23 @@ onBeforeUnmount(() => {
               <template v-if="!isError && item.kind === 'image'">
                 <button
                   class="gm-btn"
-                  title="Attach this picture and switch to Image mode"
+                  title="Use in Image mode"
                   @click="emit('use-image', { file: item.file, mode: 'image', conversation_id: item.conversation_id })"
                 >
                   <svg class="ic"><use href="#s-image" /></svg>Edit
                 </button>
                 <button
                   class="gm-btn"
-                  title="Attach this picture and switch to Video mode"
+                  title="Use in Video mode"
                   @click="emit('use-image', { file: item.file, mode: 'video', conversation_id: item.conversation_id })"
                 >
                   <svg class="ic"><use href="#s-film" /></svg>Animate
                 </button>
-                <button
-                  class="gm-btn"
-                  title="Start a character from this picture"
-                  @click="emit('make-character', item)"
-                >
+                <button class="gm-btn" title="Make character" @click="emit('make-character', item)">
                   <svg class="ic"><use href="#s-user" /></svg>Character
                 </button>
               </template>
-              <button
-                v-if="canManage"
-                class="gm-btn"
-                title="Fill the composer with this generation's settings"
-                @click="emit('use-settings', item)"
-              >
+              <button v-if="canManage" class="gm-btn" title="Reuse settings" @click="emit('use-settings', item)">
                 <svg class="ic"><use href="#s-cog" /></svg>Settings
               </button>
               <button v-if="canManage" class="gm-btn" :class="{ primary: isError }" @click="emit('regenerate', item)">
@@ -283,8 +275,8 @@ a.gm-btn {
   word-break: break-word;
 }
 .gm-btn.primary {
-  background: var(--saccent);
-  border-color: var(--saccent);
+  background: var(--saccent-fill);
+  border-color: var(--saccent-fill);
   color: #fff;
 }
 .gm-btn.primary:hover {

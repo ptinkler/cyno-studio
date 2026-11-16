@@ -263,7 +263,7 @@ async function remove(): Promise<void> {
         <button class="img-btn x-btn" title="Remove" @click="removeImage(img)">✕</button>
       </div>
       <template v-if="total < MAX_IMAGES">
-        <label class="img add" title="Upload from this computer (or drop images here)">
+        <label class="img add" title="Upload images">
           ＋
           <span class="add-label">Upload</span>
           <input
@@ -274,7 +274,7 @@ async function remove(): Promise<void> {
             @change="addFiles(takeFiles($event))"
           />
         </label>
-        <button type="button" class="img add" title="Choose from your uploads and creations" @click="pickerOpen = true">
+        <button type="button" class="img add" title="Choose from Media" @click="pickerOpen = true">
           🗂
           <span class="add-label">Library</span>
         </button>
@@ -293,12 +293,7 @@ async function remove(): Promise<void> {
 
     <template #actions>
       <button v-if="character" class="btn btn-danger" @click="remove">Delete</button>
-      <button
-        v-if="character?.adhoc"
-        class="btn btn-secondary"
-        title="Keep it after this chat, and use it anywhere"
-        @click="promote"
-      >
+      <button v-if="character?.adhoc" class="btn btn-secondary" title="Save for every chat" @click="promote">
         ⭐ Save to characters
       </button>
       <span class="spacer"></span>
@@ -312,7 +307,7 @@ async function remove(): Promise<void> {
 
 <style scoped>
 .tag {
-  font-size: 11px;
+  font-size: 12px;
   padding: 1px 7px;
   border-radius: var(--r-sm);
   background: var(--spanel2);
@@ -393,7 +388,7 @@ textarea {
 }
 
 .add-label {
-  font-size: 0.68rem;
+  font-size: 12px;
 }
 
 .img.add:hover {
@@ -405,10 +400,10 @@ textarea {
   position: absolute;
   left: 4px;
   bottom: 4px;
-  font-size: 0.62rem;
+  font-size: 11px;
   padding: 1px 6px;
   border-radius: 6px;
-  background: var(--accent);
+  background: var(--saccent-fill);
   color: #fff;
 }
 
@@ -416,7 +411,7 @@ textarea {
   position: absolute;
   left: 4px;
   bottom: 4px;
-  font-size: 0.62rem;
+  font-size: 11px;
   padding: 1px 6px;
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.65);
@@ -432,7 +427,7 @@ textarea {
   border: none;
   background: rgba(0, 0, 0, 0.65);
   color: #fff;
-  font-size: 0.7rem;
+  font-size: 12px;
   cursor: pointer;
 }
 

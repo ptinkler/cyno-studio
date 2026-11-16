@@ -209,7 +209,7 @@ function onToggle(item: CharacterCard): void {
 .chip-src {
   flex-shrink: 0;
   padding: 0 0 0 2px;
-  font-size: 0.7rem;
+  font-size: 12px;
   opacity: 0.75;
 }
 
@@ -234,7 +234,7 @@ function onToggle(item: CharacterCard): void {
   flex-shrink: 0;
   display: inline-grid;
   place-items: center;
-  font-size: 0.7rem;
+  font-size: 11px;
   background: var(--surface);
 }
 
@@ -244,7 +244,7 @@ function onToggle(item: CharacterCard): void {
   color: var(--text2);
   cursor: pointer;
   padding: 0 8px 0 2px;
-  font-size: 0.7rem;
+  font-size: 11px;
 }
 
 .chip-x:hover {

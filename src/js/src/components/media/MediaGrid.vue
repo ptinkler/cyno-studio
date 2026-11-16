@@ -188,7 +188,7 @@ function onThumbError(item: LibraryEntry, event: Event): void {
 .badge {
   position: absolute;
   top: 5px;
-  font-size: 0.65rem;
+  font-size: 11px;
   padding: 1px 6px;
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.65);
@@ -207,7 +207,7 @@ function onThumbError(item: LibraryEntry, event: Event): void {
   position: absolute;
   right: 5px;
   bottom: 5px;
-  font-size: 0.68rem;
+  font-size: 11px;
   padding: 1px 6px;
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.65);
@@ -226,7 +226,7 @@ function onThumbError(item: LibraryEntry, event: Event): void {
   border: 2px solid #fff;
   background: rgba(0, 0, 0, 0.45);
   color: #fff;
-  font-size: 0.75rem;
+  font-size: 12px;
   line-height: 18px;
 }
 

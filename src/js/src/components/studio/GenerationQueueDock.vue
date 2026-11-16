@@ -82,7 +82,13 @@ function label(entry: Generation): string {
             <span class="qlabel">{{ label(e) }}</span>
             <span class="qsub">{{ e.conversation_title || 'Untitled thread' }}</span>
           </span>
-          <span class="qx" title="Remove from queue" @click.stop="emit('clear-one', e.media_id)">×</span>
+          <span
+            class="qx"
+            title="Remove from queue"
+            aria-label="Remove from queue"
+            @click.stop="emit('clear-one', e.media_id)"
+            >×</span
+          >
         </button>
       </div>
       <div v-if="done" class="qfoot">
@@ -126,7 +132,7 @@ function label(entry: Generation): string {
   color: var(--sfg);
 }
 .qcount {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--smuted);
   background: var(--shover);
   border-radius: 10px;
@@ -222,7 +228,7 @@ function label(entry: Generation): string {
   color: var(--saccent);
 }
 .qsub {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--smuted);
   white-space: nowrap;
   overflow: hidden;

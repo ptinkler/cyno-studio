@@ -433,7 +433,7 @@ a.btn {
 }
 
 .file-meta {
-  font-size: 0.72rem;
+  font-size: 12px;
   color: var(--text2);
 }
 

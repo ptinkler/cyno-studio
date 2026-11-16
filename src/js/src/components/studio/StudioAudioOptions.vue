@@ -55,7 +55,7 @@ const voiceLabel = (voice: Voice): string => [voice.voiceName, voice.language, v
         <span class="fcap">Volume</span>
         <input v-model.number="audioOpts.volume" type="number" min="0.5" max="2" step="0.1" placeholder="1×" />
       </label>
-      <label class="ifield" title="Pitch shift in semitones (−12…12)">
+      <label class="ifield" title="Pitch (semitones)">
         <span class="fcap">Pitch</span>
         <input v-model.number="audioOpts.pitch" type="number" min="-12" max="12" step="1" placeholder="0" />
       </label>
@@ -74,7 +74,7 @@ const voiceLabel = (voice: Voice): string => [voice.voiceName, voice.language, v
         </label>
       </div>
       <div v-if="has('lyrics')" class="orow">
-        <label class="ifield" title="A style and a title together switch the model into lyrics mode">
+        <label class="ifield" title="Style and title together: lyrics mode">
           <span class="fcap">Style</span>
           <input v-model="audioOpts.style" placeholder="e.g. synthwave" />
         </label>

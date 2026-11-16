@@ -73,7 +73,7 @@ const providerLabels: Readonly<Record<string, string>> = { google: 'Google', mic
 <template>
   <Teleport to="body">
     <div v-if="showLogin" class="modal-backdrop">
-      <div class="modal-box">
+      <div class="modal-box" role="dialog" aria-modal="true" aria-label="Sign in">
         <h3>Sign in</h3>
         <p v-if="notice" class="error-hint">{{ notice }}</p>
         <input v-model="email" type="email" placeholder="Email" autocomplete="username" @keydown.enter="submit" />
@@ -144,7 +144,7 @@ const providerLabels: Readonly<Record<string, string>> = { google: 'Google', mic
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--sfaint);

@@ -400,7 +400,7 @@ function onToggle(item: InstructionCard): void {
   color: var(--text2);
   cursor: pointer;
   padding: 0 2px 0 7px;
-  font-size: 0.7rem;
+  font-size: 12px;
   line-height: 1;
 }
 
@@ -416,7 +416,7 @@ function onToggle(item: InstructionCard): void {
 .chip-src {
   flex-shrink: 0;
   padding: 0 0 0 2px;
-  font-size: 0.7rem;
+  font-size: 12px;
   opacity: 0.75;
 }
 
@@ -455,7 +455,7 @@ function onToggle(item: InstructionCard): void {
   color: var(--text2);
   cursor: pointer;
   padding: 0 8px 0 4px;
-  font-size: 0.7rem;
+  font-size: 11px;
 }
 
 .chip-x:hover {

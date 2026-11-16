@@ -83,7 +83,7 @@ const rows = computed<CostRow[]>(() => costRows(props.total, props.media))
 .pop-title {
   margin-bottom: 6px;
   color: var(--sfaint);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }

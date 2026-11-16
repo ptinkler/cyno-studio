@@ -96,7 +96,7 @@ function getIconSize(ratio: string): { width: string; height: string } {
 .ratio-label {
   position: absolute;
   bottom: -18px;
-  font-size: 0.62rem;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text2);
   white-space: nowrap;

@@ -326,14 +326,16 @@ onMounted(() => {
           <div class="seg" role="group" aria-label="Thread view">
             <button
               :class="{ on: threadView === 'chat' }"
-              title="Chat — the thread opens here from now on"
+              title="Open threads in Chat"
+              aria-label="Open threads in Chat"
               @click="setThreadView('chat')"
             >
               <svg class="ic"><use href="#s-chat" /></svg>
             </button>
             <button
               :class="{ on: threadView === 'gallery' }"
-              title="Gallery — the thread opens here from now on"
+              title="Open threads in Gallery"
+              aria-label="Open threads in Gallery"
               @click="setThreadView('gallery')"
             >
               <svg class="ic"><use href="#s-image" /></svg>

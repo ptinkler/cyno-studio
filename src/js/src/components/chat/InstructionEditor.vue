@@ -288,7 +288,7 @@ textarea {
   border: none;
   color: var(--text2);
   cursor: pointer;
-  font-size: 0.7rem;
+  font-size: 11px;
   padding: 2px 5px;
   border-radius: 999px;
 }

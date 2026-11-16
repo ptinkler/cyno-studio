@@ -112,12 +112,7 @@ const shownItems = computed(() => (showOrphans.value ? orphans.value : items.val
   >
     <!-- Sits with the grid's own filters rather than floating above them -->
     <template #filters>
-      <button
-        class="pillbtn"
-        :class="{ on: showOrphans }"
-        title="Files in this thread that no message references"
-        @click="toggleOrphans"
-      >
+      <button class="pillbtn" :class="{ on: showOrphans }" title="Unused files" @click="toggleOrphans">
         Orphaned<template v-if="showOrphans && !loadingOrphans"> ({{ orphans.length }})</template>
       </button>
     </template>

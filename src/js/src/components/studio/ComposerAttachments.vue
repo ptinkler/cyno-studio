@@ -94,7 +94,7 @@ const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, R
     <button class="clearall" @click="$emit('remove-unused')">Remove</button>
   </div>
   <div v-if="props.attachments.length" class="clearrow">
-    <button class="clearall" title="Remove every attached image and video" @click="$emit('clear')">Clear all</button>
+    <button class="clearall" title="Clear all" @click="$emit('clear')">Clear all</button>
   </div>
 </template>
 
@@ -111,7 +111,7 @@ const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, R
   background: var(--sbg);
   color: var(--smuted);
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   padding: 2px 9px;
   cursor: pointer;
 }

@@ -126,7 +126,13 @@ const bySpace = computed(() => {
       <svg class="ic lg"><use href="#s-chat" /></svg>
     </button>
     <div class="panel">
-      <button class="panelhead" type="button" title="Collapse sidebar" @click="emit('update:collapsed', true)">
+      <button
+        class="panelhead"
+        type="button"
+        title="Collapse sidebar"
+        aria-label="Collapse sidebar"
+        @click="emit('update:collapsed', true)"
+      >
         <span class="brand"
           ><span class="mk"
             ><svg class="ic"><use href="#s-spark" /></svg
@@ -170,7 +176,12 @@ const bySpace = computed(() => {
           >
             <svg class="ic"><use href="#s-star" /></svg>
           </a>
-          <button class="pillbtn ficon" title="More filters — coming soon" disabled>
+          <button
+            class="pillbtn ficon"
+            title="More filters — coming soon"
+            aria-label="More filters — coming soon"
+            disabled
+          >
             <svg class="ic"><use href="#s-filter" /></svg>
           </button>
         </div>
@@ -215,7 +226,7 @@ const bySpace = computed(() => {
             <svg class="ic sm"><use href="#s-chev" /></svg>
             <span>Spaces</span>
           </button>
-          <button class="addspace" title="New space" @click="emit('add-space')">
+          <button class="addspace" title="New space" aria-label="New space" @click="emit('add-space')">
             <svg class="ic sm"><use href="#s-plus" /></svg>
           </button>
         </div>
@@ -396,7 +407,7 @@ const bySpace = computed(() => {
   margin-left: 0;
 }
 .nlabel {
-  font-size: 10.5px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.09em;
   color: var(--sfaint);

@@ -70,6 +70,7 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
           class="gfav"
           :class="{ on: favOnly }"
           title="Favourites only"
+          aria-label="Favourites only"
           @click="favOnly = !favOnly"
         >
           <svg class="ic"><use href="#s-star" /></svg>
@@ -102,7 +103,7 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
           v-else-if="item.status === 'error'"
           type="button"
           class="thumb state errored"
-          title="Open to see why it failed, retry or reuse its settings"
+          title="Failed: open for details"
           @click="emit('open', item)"
         >
           <div class="slabel">{{ item.moderated ? 'Blocked' : 'Failed' }}</div>
@@ -251,7 +252,7 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
   background: color-mix(in srgb, var(--sdanger, #e5484d) 8%, var(--sbg2));
 }
 .shint {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--sfaint);
   margin-top: 2px;
 }
@@ -264,7 +265,7 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
   color: var(--sdanger, #e5484d);
 }
 .sprompt {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
   color: var(--sfaint);
   display: -webkit-box;
@@ -298,7 +299,7 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
   position: absolute;
   bottom: 6px;
   right: 6px;
-  font-size: 0.7rem;
+  font-size: 12px;
   color: #fff;
   background: rgba(0, 0, 0, 0.55);
   border-radius: 4px;

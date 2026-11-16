@@ -145,11 +145,7 @@ const requestItem = ref<MediaCard | null>(null)
       <audio v-else-if="item.kind === 'audio'" :src="mediaUrl(item)" class="media-audio" controls></audio>
       <video v-else :src="mediaUrl(item)" controls loop playsinline preload="metadata"></video>
       <div v-if="versionsOf(item).length" class="ver-nav" @click.stop>
-        <button
-          :disabled="!canSwitch || versionAt(item) === 0"
-          title="Earlier version — it becomes the picture the chat uses"
-          @click="stepVersion(item, -1)"
-        >
+        <button :disabled="!canSwitch || versionAt(item) === 0" title="Previous version" @click="stepVersion(item, -1)">
           ‹
         </button>
         <span :title="`Version ${versionAt(item) + 1}: ${item.prompt || ''}`">
@@ -157,7 +153,7 @@ const requestItem = ref<MediaCard | null>(null)
         </span>
         <button
           :disabled="!canSwitch || versionAt(item) >= versionCount(item) - 1"
-          title="Later version — it becomes the picture the chat uses"
+          title="Next version"
           @click="stepVersion(item, 1)"
         >
           ›
@@ -172,14 +168,16 @@ const requestItem = ref<MediaCard | null>(null)
         <template v-if="item.kind === 'image'">
           <button
             class="media-btn"
-            title="Attach this picture and switch to Image mode"
+            title="Use in Image mode"
+            aria-label="Use in Image mode"
             @click.stop="emit('use-image', { file: item.file, mode: 'image' })"
           >
             <svg class="ic"><use href="#s-image" /></svg>
           </button>
           <button
             class="media-btn"
-            title="Attach this picture and switch to Video mode"
+            title="Use in Video mode"
+            aria-label="Use in Video mode"
             @click.stop="emit('use-image', { file: item.file, mode: 'video' })"
           >
             <svg class="ic"><use href="#s-film" /></svg>
@@ -214,19 +212,19 @@ const requestItem = ref<MediaCard | null>(null)
         <button
           v-if="versionsOf(item).length && canSwitch"
           class="retry-btn"
-          title="Keep the picture this card had before the attempt that failed"
+          title="Keep previous picture"
           @click="emit('media-version', { mediaId: item.id, index: versionsOf(item).length - 1 })"
         >
           ‹ Back to the previous picture
         </button>
         <button
           class="retry-btn primary"
-          title="Run the same prompt again, on the model selected now"
+          title="Retry on selected model"
           @click="emit('regenerate', { mediaId: item.id, model: null })"
         >
           Try again
         </button>
-        <button class="retry-btn" title="Edit the prompt, then run it again" @click="openPrompt(item, false)">
+        <button class="retry-btn" title="Retry with a new prompt" @click="openPrompt(item, false)">
           Try a new prompt…
         </button>
         <ModelPicker
@@ -248,7 +246,8 @@ const requestItem = ref<MediaCard | null>(null)
         <button
           v-if="canRemake(item) && item.kind === 'image' && item.file"
           class="iconbtn boxed"
-          title="Edit this picture: describe the change and it is replaced here"
+          title="Edit picture"
+          aria-label="Edit picture"
           @click="openPrompt(item, true)"
         >
           <svg class="ic"><use href="#s-pencil" /></svg>
@@ -256,7 +255,8 @@ const requestItem = ref<MediaCard | null>(null)
         <button
           v-if="canRemake(item)"
           class="iconbtn boxed"
-          title="Make it again: tweak the prompt and it is replaced here"
+          title="Redo picture"
+          aria-label="Redo picture"
           @click="openPrompt(item, false)"
         >
           <svg class="ic"><use href="#s-refresh" /></svg>
@@ -265,7 +265,7 @@ const requestItem = ref<MediaCard | null>(null)
           v-if="item.prompt"
           class="iconbtn boxed"
           :class="{ on: copiedKey === item.id }"
-          :title="`Copy the prompt sent to the ${item.kind} model:\n${item.prompt}`"
+          :title="`Copy prompt`"
           @click="copy(item.prompt, item.id)"
         >
           <svg class="ic"><use :href="copiedKey === item.id ? '#s-check' : '#s-copy'" /></svg>
@@ -273,7 +273,8 @@ const requestItem = ref<MediaCard | null>(null)
         <button
           v-if="item.request"
           class="iconbtn boxed"
-          title="Show exactly what was sent to the provider"
+          title="View request"
+          aria-label="View request"
           @click="requestItem = item"
         >
           <svg class="ic"><use href="#s-code" /></svg>
@@ -405,12 +406,12 @@ const requestItem = ref<MediaCard | null>(null)
 }
 .pending-specs {
   position: relative;
-  font-size: 0.75rem;
+  font-size: 12px;
   color: var(--accent2);
 }
 .pending-prompt {
   position: relative;
-  font-size: 0.75rem;
+  font-size: 12px;
   color: var(--text2);
   text-align: center;
   max-width: 90%;
@@ -455,7 +456,7 @@ const requestItem = ref<MediaCard | null>(null)
   border-radius: var(--r);
   padding: 4px 10px;
   color: var(--text);
-  font-size: 0.78rem;
+  font-size: 12px;
   cursor: pointer;
 }
 .retry-btn:hover {
@@ -463,8 +464,8 @@ const requestItem = ref<MediaCard | null>(null)
 }
 /* The one action the card is suggesting */
 .retry-btn.primary {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--saccent-fill);
+  border-color: var(--saccent-fill);
   color: #fff;
   font-weight: 600;
 }
@@ -485,7 +486,7 @@ const requestItem = ref<MediaCard | null>(null)
   border-radius: 999px;
   background: rgb(0 0 0 / 55%);
   color: #fff;
-  font-size: 0.72rem;
+  font-size: 12px;
   opacity: 0;
   transition: opacity 0.12s;
 }

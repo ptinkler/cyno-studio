@@ -144,7 +144,7 @@ describe('ChatMessage user actions', () => {
       ],
     })
     const w = mount(ChatMessage, { props: { message: reply, convId: 'c1' } })
-    const copy = () => w.find('button[title^="Copy the prompt"]')
+    const copy = () => w.find('button[title^="Copy prompt"]')
     await copy().trigger('click')
     await flushPromises()
     expect(writeText).toHaveBeenCalledWith('a red fox, dusk')

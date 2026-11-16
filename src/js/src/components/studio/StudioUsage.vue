@@ -219,7 +219,7 @@ const share = (usd: number): string =>
   font-size: 13.5px;
 }
 .pkey {
-  font-size: 11px;
+  font-size: 12px;
   padding: 1px 7px;
   border-radius: 999px;
   color: var(--smuted);
@@ -313,7 +313,7 @@ const share = (usd: number): string =>
   display: inline-block;
   padding: 1px 8px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 12px;
   text-transform: capitalize;
   color: var(--k);
   background: color-mix(in srgb, var(--k) 15%, transparent);

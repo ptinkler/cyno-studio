@@ -48,18 +48,14 @@ function goBranch(by: number): void {
       <svg class="ic sm"><use href="#s-stop" /></svg> Stop
     </button>
     <template v-else>
-      <button
-        v-if="canRetry"
-        class="iconbtn boxed"
-        title="Retry: a fresh version of this whole reply, pictures included, kept beside this one — use ‹ › to compare."
-        @click="emit('retry')"
-      >
+      <button v-if="canRetry" class="iconbtn boxed" title="Retry reply" aria-label="Retry reply" @click="emit('retry')">
         <svg class="ic"><use href="#s-refresh" /></svg>
       </button>
       <button
         v-if="canBranch"
         class="iconbtn boxed"
-        title="Start a new chat from here: everything up to this reply, nothing after"
+        title="Branch from here"
+        aria-label="Branch from here"
         @click="emit('fork')"
       >
         <svg class="ic"><use href="#s-branch" /></svg>

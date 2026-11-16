@@ -163,7 +163,7 @@ defineExpose({ commit, dirty })
   border: 1px solid color-mix(in srgb, var(--saccent) 50%, transparent);
   border-radius: 999px;
   background: var(--saccent-soft);
-  font-size: 0.78rem;
+  font-size: 12px;
 }
 
 .pill-name {
@@ -178,7 +178,7 @@ defineExpose({ commit, dirty })
   border: none;
   color: var(--text2);
   cursor: pointer;
-  font-size: 0.68rem;
+  font-size: 11px;
   padding: 2px 5px;
   border-radius: 999px;
 }
@@ -194,7 +194,7 @@ defineExpose({ commit, dirty })
   border-radius: 999px;
   background: none;
   color: var(--text2);
-  font-size: 0.78rem;
+  font-size: 12px;
   cursor: pointer;
 }
 
@@ -205,7 +205,7 @@ defineExpose({ commit, dirty })
 
 .label {
   flex-shrink: 0;
-  font-size: 0.72rem;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text2);

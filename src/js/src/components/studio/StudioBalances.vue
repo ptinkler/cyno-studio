@@ -54,7 +54,7 @@ const byModel = computed(() => {
 
 <template>
   <div class="bals">
-    <button v-if="label" class="bseg spent" title="Spent in this thread — click for breakdown" @click="open = !open">
+    <button v-if="label" class="bseg spent" title="Thread spend" @click="open = !open">
       Spent <b>{{ label }}</b>
     </button>
     <a

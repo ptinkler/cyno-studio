@@ -36,7 +36,7 @@ const renameText = defineModel<string>('renameText', { default: '' })
     @dragleave="$emit('dragleave')"
     @drop.prevent="$emit('drop')"
   >
-    <button class="fchev" @click="$emit('toggle')">
+    <button class="fchev" aria-label="Show or hide chats" @click="$emit('toggle')">
       <svg class="ic sm"><use href="#s-chev" /></svg>
     </button>
     <input
@@ -75,13 +75,13 @@ const renameText = defineModel<string>('renameText', { default: '' })
         </button>
       </template>
       <template v-else>
-        <button class="nact" title="Rename" @click.stop="$emit('start-rename')">
+        <button class="nact" title="Rename" aria-label="Rename" @click.stop="$emit('start-rename')">
           <svg class="ic sm"><use href="#s-pencil" /></svg>
         </button>
-        <button class="nact" title="Space defaults" @click.stop="$emit('settings')">
+        <button class="nact" title="Space defaults" aria-label="Space defaults" @click.stop="$emit('settings')">
           <svg class="ic sm"><use href="#s-cog" /></svg>
         </button>
-        <button class="nact danger" title="Delete" @click.stop="$emit('delete')">
+        <button class="nact danger" title="Delete" aria-label="Delete" @click.stop="$emit('delete')">
           <svg class="ic sm"><use href="#s-trash" /></svg>
         </button>
       </template>
@@ -141,7 +141,7 @@ const renameText = defineModel<string>('renameText', { default: '' })
   white-space: nowrap;
 }
 .fmain .count {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--sfaint);
 }
 .folder.drop {

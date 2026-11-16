@@ -77,7 +77,7 @@ function onChange(event: Event): void {
 .toggle-label {
   cursor: pointer;
   text-transform: none;
-  font-size: 0.78rem;
+  font-size: 12px;
   font-weight: 500;
   margin: 0;
   color: var(--text2);

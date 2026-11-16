@@ -124,6 +124,6 @@ function onDrop(event: DragEvent): void {
 .prompt-box-hint {
   flex: 1;
   color: var(--smuted);
-  font-size: 0.75rem;
+  font-size: 12px;
 }
 </style>

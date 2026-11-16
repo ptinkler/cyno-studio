@@ -156,14 +156,7 @@ defineExpose({ focusPrompt })
           </button>
         </div>
         <div v-if="refsActive && refItems.length" class="atwrap">
-          <button
-            class="clip at"
-            title="Mention a reference image or video"
-            @mousedown.prevent
-            @click="toggleMentionMenu"
-          >
-            @
-          </button>
+          <button class="clip at" title="Mention a reference" @mousedown.prevent @click="toggleMentionMenu">@</button>
           <div v-if="atMenu" class="atmenu" @mouseleave="atMenu = false">
             <button v-for="r in refItems" :key="r.key" @click="insertMention(r)">
               <img v-if="r.type === 'image'" :src="r.preview ?? undefined" alt="" />
@@ -175,7 +168,8 @@ defineExpose({ focusPrompt })
         <button
           v-if="!mediaMode && mode !== 'audio'"
           class="clip"
-          title="Attach images — pick from Media or upload"
+          title="Add images"
+          aria-label="Add images"
           @click="emit('library')"
         >
           <svg class="ic"><use href="#s-clip" /></svg>
@@ -185,7 +179,7 @@ defineExpose({ focusPrompt })
           v-if="mode === 'image' || mode === 'video'"
           class="clip enh"
           :disabled="!props.draft.trim() || enhancing"
-          title="Enhance the prompt with the text model (optional — sending uses the prompt exactly as written)"
+          title="Enhance prompt"
           @click="emit('enhance')"
         >
           {{ enhancing ? '…' : '✨' }}
@@ -367,7 +361,7 @@ defineExpose({ focusPrompt })
   padding: 5px 14px;
   border: none;
   border-radius: var(--r);
-  background: var(--saccent);
+  background: var(--saccent-fill);
   color: #fff;
   cursor: pointer;
   font-weight: 600;

@@ -98,7 +98,7 @@ onMounted(load)
   gap: 8px;
 }
 .badge.admin {
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   background: var(--saccent-soft);

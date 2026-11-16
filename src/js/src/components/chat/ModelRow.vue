@@ -99,14 +99,14 @@ const provider = computed(() => providerOf(props.model?.id))
   font-size: 0.87rem;
 }
 .item-id {
-  font-size: 0.72rem;
+  font-size: 12px;
   color: var(--text2);
   font-family: monospace;
 }
 
 .row-provider {
   flex-shrink: 0;
-  font-size: 0.62rem;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.4px;
@@ -174,7 +174,7 @@ const provider = computed(() => providerOf(props.model?.id))
 }
 .dots-n {
   margin-left: 2px;
-  font-size: 0.65rem;
+  font-size: 11px;
   color: var(--text2);
 }
 

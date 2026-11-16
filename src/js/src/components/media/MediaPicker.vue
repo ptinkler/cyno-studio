@@ -210,6 +210,7 @@ function confirm(): void {
       <div
         class="dialog"
         role="dialog"
+        aria-modal="true"
         :aria-label="title"
         @dragover.prevent
         @drop.prevent="upload($event.dataTransfer?.files ?? [])"

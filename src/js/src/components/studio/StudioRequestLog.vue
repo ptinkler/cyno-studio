@@ -179,7 +179,7 @@ onMounted(load)
   border-top: 1px solid var(--sborder2);
 }
 .detail h4 {
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--sfaint);
@@ -190,7 +190,7 @@ onMounted(load)
   border-radius: var(--r);
   padding: 10px;
   overflow-x: auto;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;

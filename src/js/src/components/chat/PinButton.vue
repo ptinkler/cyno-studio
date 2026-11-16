@@ -46,7 +46,7 @@ defineEmits<{ toggle: [] }>()
   opacity: 1;
 }
 .pin-btn.on {
-  background: var(--saccent);
+  background: var(--saccent-fill);
   color: #fff;
 }
 @media (hover: none) {
