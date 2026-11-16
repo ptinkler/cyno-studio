@@ -168,11 +168,12 @@ See `.env.example` for the full list.
 | `ADMIN_EMAILS`                                | Comma-separated admin emails; they log in with a password and control the VPN |
 | `ALLOWED_EMAILS`                              | Non-admins allowed to sign in via OAuth (admins always may)                   |
 | `OPEN_SIGNUP`                                 | `true` = anyone who authenticates gets an account                             |
-| `SESSION_SECRET`                              | Signs the login cookie                                                        |
+| `SESSION_SECRET`                              | Signs the login cookie — 32+ random characters, or the app won't start       |
 | `PASSWORD_PEPPER`                             | Server-side secret mixed into password hashes — set once, never change        |
 | `KEYS_SECRET`                                 | Encrypts stored per-user provider keys — set once, never change               |
 | `PUBLIC_BASE_URL`                             | Public https base URL for OAuth callbacks (behind a proxy/DDNS)               |
 | `*_OAUTH_CLIENT_ID` / `*_OAUTH_CLIENT_SECRET` | Google/Microsoft/X credentials; a provider turns on when both are set         |
+| `MICROSOFT_OAUTH_TENANT`                      | Your Microsoft tenant id or domain — required, or Microsoft sign-in is refused |
 | `CYNO_HOST_DATA_DIR`                          | Host path for persistent data (videos, DB)                                    |
 | `APP_PORT`                                    | Host port to expose the app on (default `8080`)                               |
 | `COMPOSE_PROFILES`                            | `novpn` (default) or `vpn` — selects the stack                                |
@@ -186,7 +187,7 @@ Provider keys (`POLLO_API_KEY`, `OPENROUTER_API_KEY`, `VENICE_API_KEY`) are ente
 
 Multi-user: each user signs in, gets their own data (chats, projects, media, characters, settings) and their own provider keys — no user sees another's. There is no API key; protection is by login session.
 
-- **Sign-in** — admins (emails in `ADMIN_EMAILS`) use email + password; everyone else uses OAuth (Google/Microsoft/X). An OAuth login with an admin's email resolves to the same account.
+- **Sign-in** — admins (emails in `ADMIN_EMAILS`) use email + password; everyone else uses OAuth (Google/Microsoft/X). An OAuth login with an admin's email resolves to the same account, so only emails the provider verifies count: Google's verified emails, and Microsoft addresses from the tenant named in `MICROSOFT_OAUTH_TENANT`.
 - **Who gets in** — fail-closed. With none of `ADMIN_EMAILS`/`ALLOWED_EMAILS`/`OPEN_SIGNUP` set, only admins. `ALLOWED_EMAILS` admits a fixed list; `OPEN_SIGNUP=true` admits anyone who authenticates.
 - **Admin accounts** — created only via the CLI, never through the app (so a visitor can't claim one):
 

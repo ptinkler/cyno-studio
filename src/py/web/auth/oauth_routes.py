@@ -1,7 +1,6 @@
 """OAuth sign-in routes: provider list, login redirect, callback, and `me`.
 
-Logout is handled by the existing /api/auth/logout in api.py (it clears both the
-API-key session and the user session).
+Logout is handled by /api/auth/logout in api.py, which clears the session cookie.
 """
 
 from __future__ import annotations
@@ -73,7 +72,10 @@ async def callback(provider: str, request: Request) -> RedirectResponse:
     except Exception as e:  # provider errors, denied consent, bad state
         raise HTTPException(status_code=400, detail=f"OAuth sign-in failed: {e}") from e
     if not profile.get("sub") or not profile.get("email"):
-        raise HTTPException(status_code=400, detail="Provider did not return a usable profile (id/email)")
+        raise HTTPException(
+            status_code=400,
+            detail="Provider did not return a usable profile: it needs an id and a verified email address",
+        )
 
     db = get_db()
     allowed, is_admin = users.admit(profile["email"], is_first_user=db.count_users() == 0)

@@ -24,8 +24,9 @@ pytest_plugins = ["tests.api_fixtures"]
 class TestLifespan:
     """Tests for lifespan."""
 
-    def test_lifespan_runs(self, client: TestClient, db: MetadataDB) -> None:
+    def test_lifespan_runs(self, client: TestClient, db: MetadataDB, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that lifespan runs."""
+        monkeypatch.setenv("SESSION_SECRET", "x" * 40)
 
         async def run_lifespan() -> None:
             async with api_mod.lifespan(api_mod.app):

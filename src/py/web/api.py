@@ -32,7 +32,7 @@ from web.auth.oauth import configured_providers, register_providers
 from web.auth.oauth_routes import router as oauth_router
 from web.auth.passwords import hash_password, needs_rehash, verify_password
 from web.auth.schemas import AuthStatus, LoginResult, Ok, login_result, session_user
-from web.auth.session import USER_COOKIE, set_user_cookie, user_secret
+from web.auth.session import USER_COOKIE, check_secrets, set_user_cookie, user_secret
 from web.auth.user_keys import router as keys_router
 from web.auth.users import admin_emails, resolve_current_user
 from web.chat import router as chat_router
@@ -57,6 +57,7 @@ ROOT_DIR = Path(__file__).resolve().parents[3]  # the repo root (src/py/web/api.
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     """Lifespan context manager for startup/shutdown events."""
+    check_secrets()  # a guessable session secret lets anyone forge a login
     # Startup: announce the auth posture so a misconfigured deploy is obvious
     admins = admin_emails()
     if admins:
@@ -260,14 +261,6 @@ async def api_auth_status(user_session: Annotated[str | None, Cookie()] = None) 
     """
     user = resolve_current_user(user_session)
     return AuthStatus(authenticated=user is not None, user=session_user(user) if user else None)
-
-
-# Track jobs currently being recovered to prevent concurrent recovery attempts
-_recovering_jobs: set[str] = set()
-_recovering_lock = threading.Lock()
-
-
-IMMUTABLE_CACHE = {"Cache-Control": "public, max-age=31536000, immutable"}
 
 
 # Must be registered before the SPA catch-all below.

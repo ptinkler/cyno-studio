@@ -4,16 +4,22 @@ Each provider is registered only when its client id/secret are configured, so
 the app runs fine with none set. Add a provider by setting its env vars:
 
     GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET
-    MICROSOFT_OAUTH_CLIENT_ID / MICROSOFT_OAUTH_CLIENT_SECRET
+    MICROSOFT_OAUTH_CLIENT_ID / MICROSOFT_OAUTH_CLIENT_SECRET / MICROSOFT_OAUTH_TENANT
     X_OAUTH_CLIENT_ID / X_OAUTH_CLIENT_SECRET
 
 The redirect/callback URI registered with each provider must be
     https://<your-public-host>/api/auth/callback/<provider>
 (https is mandatory except for http://localhost during development).
+
+Access is decided by email (ADMIN_EMAILS, ALLOWED_EMAILS) and an existing account is found by email, so
+only an email the provider vouches for is used: Google's `email_verified`, or a Microsoft address from
+one named tenant (MICROSOFT_OAUTH_TENANT). Anyone can make a Microsoft account with any address in some
+other tenant, so the multi-tenant endpoints ("common", "organizations", "consumers") yield no email.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Protocol, cast
@@ -26,17 +32,28 @@ if TYPE_CHECKING:
 
     from web.types import JsonValue
 
+log = logging.getLogger(__name__)
+
 # Authlib ships no type information, so the registry is typed by the Protocol above.
 oauth = cast("OAuthRegistry", OAuth())
 
 # Provider definitions. OIDC providers discover their endpoints from the
 # metadata url; X is plain OAuth2 and needs its endpoints spelled out.
 _GOOGLE_META = "https://accounts.google.com/.well-known/openid-configuration"
-_MS_META = "https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration"
+_MS_MULTI_TENANT = frozenset({"common", "organizations", "consumers"})  # endpoints that admit anyone's tenant
 
 
 def _env(provider: str, field: str) -> str:
     return os.getenv(f"{provider.upper()}_OAUTH_{field}", "").strip()
+
+
+def microsoft_tenant() -> str:
+    """The Microsoft tenant users must belong to (MICROSOFT_OAUTH_TENANT), else the any-tenant "common"."""
+    return _env("microsoft", "TENANT") or "common"
+
+
+def _ms_meta() -> str:
+    return f"https://login.microsoftonline.com/{microsoft_tenant()}/v2.0/.well-known/openid-configuration"
 
 
 def register_providers() -> None:
@@ -57,9 +74,14 @@ def register_providers() -> None:
             name="microsoft",
             client_id=_env("microsoft", "CLIENT_ID"),
             client_secret=_env("microsoft", "CLIENT_SECRET"),
-            server_metadata_url=_MS_META,
+            server_metadata_url=_ms_meta(),
             client_kwargs={"scope": "openid email profile"},
         )
+        if microsoft_tenant() in _MS_MULTI_TENANT:
+            log.warning(
+                "Microsoft sign-in is refused: MICROSOFT_OAUTH_TENANT is unset or multi-tenant, so its "
+                "email can't be trusted. Set it to your tenant id or domain."
+            )
     if _env("x", "CLIENT_ID"):
         oauth.register(
             name="x",
@@ -141,6 +163,18 @@ class UnknownProviderError(ValueError):
         super().__init__(f"Unknown provider: {provider}")
 
 
+def _verified_email(provider: str, info: Mapping[str, JsonValue]) -> str | None:
+    """The account's email, only when the provider vouches that its owner controls it (else None)."""
+    if provider == "google":
+        email = _text(info.get("email"))
+        verified = info.get("email_verified") in (True, "true")
+        return email.lower() if email and verified else None
+    if microsoft_tenant() in _MS_MULTI_TENANT:
+        return None  # any tenant's admin can put any address on an account
+    email = _text(info.get("email")) or _text(info.get("preferred_username"))  # an address within our own tenant
+    return email.lower() if email else None
+
+
 async def normalize_profile(provider: str, client: OAuthClient, token: dict[str, JsonValue]) -> dict[str, str | None]:
     """Normalize a provider's user-info response.
 
@@ -153,11 +187,10 @@ async def normalize_profile(provider: str, client: OAuthClient, token: dict[str,
     if provider in ("google", "microsoft"):
         userinfo = token.get("userinfo")
         info = _object(userinfo) if isinstance(userinfo, Mapping) else await client.userinfo(token=token)
-        email = (_text(info.get("email")) or _text(info.get("preferred_username")) or "").lower() or None
         return {
             "provider": provider,
             "sub": _text(info.get("sub")),
-            "email": email,
+            "email": _verified_email(provider, info),
             "name": _text(info.get("name")),
             "avatar": _text(info.get("picture")),
         }

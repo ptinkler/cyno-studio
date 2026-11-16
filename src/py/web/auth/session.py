@@ -9,12 +9,15 @@ protected endpoint requires a resolvable session (see web/auth/users.py).
 import base64
 import hashlib
 import hmac
+import logging
 import os
 import time
 
 from fastapi import Request, Response
 
-from web.core.env import bool_env_or_none
+from web.core.env import bool_env, bool_env_or_none
+
+log = logging.getLogger(__name__)
 
 _TOKEN_PARTS = 3  # a signed token is <payload>.<expiry>.<signature>
 
@@ -46,6 +49,39 @@ def user_secret() -> bytes:
             b"pollo-user-v1\x00" + explicit.encode()
         ).digest()  # legacy salt: changing it signs every user out
     return hashlib.sha256(b"pollo-user-v1-dev").digest()
+
+
+MIN_SECRET_CHARS = 32
+PLACEHOLDER_PREFIX = "change_me"  # what .env.example ships
+
+
+class WeakSessionSecretError(RuntimeError):
+    """SESSION_SECRET is missing, short or still the example value, so session cookies could be forged."""
+
+    def __init__(self) -> None:
+        """Say what to set, and what else depends on it."""
+        super().__init__(
+            f"SESSION_SECRET must be a random string of at least {MIN_SECRET_CHARS} characters "
+            "(openssl rand -hex 32). It signs login cookies; without a real one anyone can forge a session. "
+            "Stored provider keys are encrypted with KEYS_SECRET, else this: set KEYS_SECRET too, "
+            "since changing this one makes keys saved without it unreadable (they have to be entered again)."
+        )
+
+
+def check_secrets() -> None:
+    """Refuse to start with a guessable session secret (DEV_LOGIN, the throwaway dev setup, is exempt).
+
+    The other two secrets can't be refused: changing either one orphans data already saved with it.
+    They are warned about instead.
+    """
+    if bool_env("DEV_LOGIN"):
+        return
+    secret = os.getenv("SESSION_SECRET", "").strip()
+    if len(secret) < MIN_SECRET_CHARS or secret.lower().startswith(PLACEHOLDER_PREFIX):
+        raise WeakSessionSecretError
+    for name in ("KEYS_SECRET", "PASSWORD_PEPPER"):
+        if os.getenv(name, "").strip().lower().startswith(PLACEHOLDER_PREFIX):
+            log.warning("%s is still the example value from .env.example: anyone can read what it protects", name)
 
 
 def make_user_session(user_id: str) -> str:
