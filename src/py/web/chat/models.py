@@ -1,6 +1,8 @@
 """Pydantic request bodies for the chat API."""
 
-from pydantic import BaseModel, Field
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from web.chat.constants import DEFAULT_IMAGE_LIMIT
 
@@ -120,22 +122,35 @@ class RefChoices(BaseModel):
     off: list[str] = []  # never sent
 
 
-class TurnSettings(BaseModel):
-    """Model, history, and media-generation settings for a chat turn."""
+class ComposerSettings(BaseModel):
+    """What the composer remembers per chat, so reopening the chat restores it.
 
-    mode: str = "auto"  # auto | text | image | video | audio
+    These are the turn settings that are not a conversation column of their own: it is the part of
+    `TurnSettings` saved on the conversation (see `remember_settings`), and what the API returns as
+    `Conversation.settings`.
+    """
+
+    # Every field has a default, and is always present in what the API serves
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+    mode: Literal["auto", "text", "image", "video", "audio"] = "auto"
     history_limit: int | None = Field(default=None, ge=1)  # past messages sent to the chat model; None = all
     image_limit: int | None = Field(default=DEFAULT_IMAGE_LIMIT, ge=0)  # chat images per request; None = all
-    text_model: str | None = None
-    image_model: str | None = None
-    video_model: str | None = None
-    audio_model: str | None = None  # kept in the remembered settings, not a conversation column
+    audio_model: str | None = None  # remembered here, not a conversation column
     # The composer's picks, applied in every mode (Auto included). Unset =
     # the chat model's choice (Auto), else the media model's default.
     image_options: TurnOptions = TurnOptions()
     video_options: VideoTurnOptions = VideoTurnOptions()
     audio_options: AudioOptions = AudioOptions()
     ref_choices: RefChoices = RefChoices()
+
+
+class TurnSettings(ComposerSettings):
+    """Model, history, and media-generation settings for a chat turn."""
+
+    text_model: str | None = None
+    image_model: str | None = None
+    video_model: str | None = None
 
 
 class EstimateRequest(BaseModel):

@@ -2113,6 +2113,48 @@ export interface components {
             cleared: number;
         };
         /**
+         * ComposerSettings
+         * @description What the composer remembers per chat, so reopening the chat restores it.
+         *
+         *     These are the turn settings that are not a conversation column of their own: it is the part of
+         *     `TurnSettings` saved on the conversation (see `remember_settings`), and what the API returns as
+         *     `Conversation.settings`.
+         */
+        ComposerSettings: {
+            /** Audio Model */
+            audio_model: string | null;
+            /** @default {} */
+            audio_options: components["schemas"]["AudioOptions"];
+            /** History Limit */
+            history_limit: number | null;
+            /**
+             * Image Limit
+             * @default 6
+             */
+            image_limit: number | null;
+            /** @default {} */
+            image_options: components["schemas"]["TurnOptions"];
+            /**
+             * Mode
+             * @default auto
+             * @enum {string}
+             */
+            mode: "auto" | "text" | "image" | "video" | "audio";
+            /**
+             * @default {
+             *       "off": [],
+             *       "on": []
+             *     }
+             */
+            ref_choices: components["schemas"]["RefChoices"];
+            /**
+             * @default {
+             *       "duration_auto": false
+             *     }
+             */
+            video_options: components["schemas"]["VideoTurnOptions"];
+        };
+        /**
          * Conversation
          * @description A chat and its settings.
          */
@@ -2146,7 +2188,7 @@ export interface components {
             paused_instructions: components["schemas"]["PausedInstructions"];
             /** Pinned */
             pinned: boolean;
-            settings: components["schemas"]["JsonObject"] | null;
+            settings: components["schemas"]["ComposerSettings"] | null;
             /** Space Id */
             space_id: number | null;
             /** Text Model */
@@ -2292,7 +2334,7 @@ export interface components {
             paused_instructions: components["schemas"]["PausedInstructions"];
             /** Pinned */
             pinned: boolean;
-            settings: components["schemas"]["JsonObject"] | null;
+            settings: components["schemas"]["ComposerSettings"] | null;
             /** Snippet */
             snippet?: string | null;
             /** Space Id */
@@ -2514,8 +2556,9 @@ export interface components {
             /**
              * Mode
              * @default auto
+             * @enum {string}
              */
-            mode?: string;
+            mode?: "auto" | "text" | "image" | "video" | "audio";
             /**
              * @default {
              *       "off": [],
@@ -3305,7 +3348,7 @@ export interface components {
             paused_instructions: components["schemas"]["PausedInstructions"];
             /** Pinned */
             pinned: boolean;
-            settings: components["schemas"]["JsonObject"] | null;
+            settings: components["schemas"]["ComposerSettings"] | null;
             /** Space Id */
             space_id: number | null;
             spend: components["schemas"]["Spend"];
@@ -3506,8 +3549,9 @@ export interface components {
             /**
              * Mode
              * @default auto
+             * @enum {string}
              */
-            mode?: string;
+            mode?: "auto" | "text" | "image" | "video" | "audio";
             /**
              * @default {
              *       "off": [],
@@ -3556,8 +3600,9 @@ export interface components {
             /**
              * Mode
              * @default auto
+             * @enum {string}
              */
-            mode?: string;
+            mode?: "auto" | "text" | "image" | "video" | "audio";
             /**
              * @default {
              *       "off": [],
@@ -3629,8 +3674,9 @@ export interface components {
             /**
              * Mode
              * @default auto
+             * @enum {string}
              */
-            mode?: string;
+            mode?: "auto" | "text" | "image" | "video" | "audio";
             /**
              * @default {
              *       "off": [],

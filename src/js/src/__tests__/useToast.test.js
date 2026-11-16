@@ -2,7 +2,7 @@
  * Tests for composables/useToast.js
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { useToast } from '../composables/useToast.js'
+import { useToast } from '../composables/useToast'
 
 describe('useToast', () => {
   beforeEach(() => {

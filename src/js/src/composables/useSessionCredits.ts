@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
 import { fetchBalance } from './chatSettingsApi'
+import type { PolloBalance } from './chatSettingsApi'
 
 /**
  * Session credit tracker.
@@ -8,14 +9,14 @@ import { fetchBalance } from './chatSettingsApi'
 
 // Global state — shared across all components, lives in memory only
 const sessionCreditsUsed = ref(0)
-const balance = ref(null)
+const balance = ref<PolloBalance | null>(null)
 const balanceLoading = ref(false)
 const lastFetchedAt = ref(0)
 
 // Minimum interval between balance fetches (30 seconds)
 const BALANCE_FETCH_INTERVAL = 30_000
 
-function addCredits(amount) {
+function addCredits(amount: number | null | undefined): void {
   if (amount && amount > 0) {
     sessionCreditsUsed.value += amount
     // Immediately subtract from local balance for instant UI feedback
@@ -28,7 +29,7 @@ function addCredits(amount) {
   }
 }
 
-async function refreshBalance(force = false) {
+async function refreshBalance(force = false): Promise<void> {
   const now = Date.now()
   if (!force && balanceLoading.value) return
   if (!force && now - lastFetchedAt.value < BALANCE_FETCH_INTERVAL) return
@@ -44,10 +45,7 @@ async function refreshBalance(force = false) {
   }
 }
 
-const creditsRemaining = computed(() => {
-  if (!balance.value) return null
-  return balance.value.availableCredits
-})
+const creditsRemaining = computed(() => balance.value?.availableCredits ?? null)
 
 export function useSessionCredits() {
   return {

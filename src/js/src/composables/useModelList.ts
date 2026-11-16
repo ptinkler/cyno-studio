@@ -1,16 +1,40 @@
 import { computed } from 'vue'
+import type { Ref } from 'vue'
+import type { Model, ModelKind } from './chatModelsApi'
 import { useModelFavourites } from './useModelFavourites'
 import { useModelFilters } from './useModelFilters'
 import { useShowHidden } from './useShowHidden'
 import { useUncensoredOnly } from './useUncensoredOnly'
-import { ALL_PROVIDERS, PROVIDER_COLOR, TAG_LABELS, providerOf, tagColor } from './modelTags'
+import { ALL_PROVIDERS, PROVIDER_COLOR, PROVIDER_IDS, TAG_LABELS, providerOf, tagColor, tagLabel } from './modelTags'
+import type { Provider } from './modelTags'
 
 const MAX_LISTED = 200 // models shown outside Favourites
+
+/** The model picker's props that decide what it lists. */
+export interface ModelListProps {
+  models: readonly Model[]
+  modelValue: string
+  kind: ModelKind
+}
+
+export interface ActiveChip {
+  key: string
+  label: string
+  color?: string
+  /** Switch this filter off. */
+  off: () => void
+}
+
+export interface ModelSection {
+  id: 'fav' | 'all'
+  label: string
+  models: Model[]
+}
 
 // What the model picker lists: the catalogue narrowed by "Show hidden", "Uncensored only", the provider and tag
 // facets and the search text, then split into Favourites and the rest. `props` is the picker's props (reactive);
 // `query` is a ref of the search box. The current pick always stays in the list.
-export function useModelList(props, query) {
+export function useModelList(props: ModelListProps, query: Ref<string>) {
   const { favourites, isFavourite, toggleFavourite } = useModelFavourites()
   const { showHidden } = useShowHidden()
   const { uncensoredOnly } = useUncensoredOnly()
@@ -32,21 +56,21 @@ export function useModelList(props, query) {
   // Provider facet: which providers the list spans, with counts. Chips are only
   // offered when more than one provider is present.
   const providerCounts = computed(() => {
-    const c = {}
+    const counts: Partial<Record<Provider, number>> = {}
     for (const m of visibleModels.value) {
       const p = providerOf(m.id)
-      c[p] = (c[p] || 0) + 1
+      counts[p] = (counts[p] ?? 0) + 1
     }
-    return c
+    return counts
   })
-  const providersPresent = computed(() => Object.keys(ALL_PROVIDERS).filter(id => providerCounts.value[id]))
+  const providersPresent = computed(() => PROVIDER_IDS.filter(id => providerCounts.value[id]))
   const showProviders = computed(() => providersPresent.value.length > 1)
   const providerFacet = computed(() =>
     showProviders.value
       ? providersPresent.value.map(id => ({
           id,
           ...ALL_PROVIDERS[id],
-          n: providerCounts.value[id],
+          n: providerCounts.value[id] ?? 0,
           color: PROVIDER_COLOR[id],
         }))
       : [],
@@ -54,14 +78,14 @@ export function useModelList(props, query) {
 
   // Tag facet: the capability tags present across this kind's models, with counts.
   const tagCounts = computed(() => {
-    const c = {}
-    for (const m of visibleModels.value) for (const t of m.tags || []) c[t] = (c[t] || 0) + 1
-    return c
+    const counts = new Map<string, number>()
+    for (const m of visibleModels.value) for (const t of m.tags) counts.set(t, (counts.get(t) ?? 0) + 1)
+    return counts
   })
   const tagsPresent = computed(() =>
     Object.keys(TAG_LABELS)
-      .filter(s => tagCounts.value[s])
-      .map(s => ({ slug: s, label: TAG_LABELS[s], n: tagCounts.value[s], color: tagColor(s) })),
+      .filter(slug => tagCounts.value.has(slug))
+      .map(slug => ({ slug, label: tagLabel(slug), n: tagCounts.value.get(slug) ?? 0, color: tagColor(slug) })),
   )
 
   const selProviders = computed(() => filters[props.kind].providers)
@@ -69,31 +93,49 @@ export function useModelList(props, query) {
   // Something other than search/show-hidden is narrowing the list
   const anyFilter = computed(() => hasActive(props.kind) || uncensoredOnly.value)
   const hasFacets = computed(
-    () => providerFacet.value.length || tagsPresent.value.length || uncensoredCount.value || hiddenCount.value,
+    () =>
+      providerFacet.value.length > 0 ||
+      tagsPresent.value.length > 0 ||
+      uncensoredCount.value > 0 ||
+      hiddenCount.value > 0,
   )
   const filterCount = computed(() => selProviders.value.length + selTags.value.length + (uncensoredOnly.value ? 1 : 0))
-  const activeChips = computed(() => [
+  const activeChips = computed<ActiveChip[]>(() => [
     ...selProviders.value.map(id => ({
       key: `p-${id}`,
-      label: ALL_PROVIDERS[id]?.label || id,
+      label: ALL_PROVIDERS[id].label,
       color: PROVIDER_COLOR[id],
-      off: () => toggleProvider(props.kind, id),
+      off: () => {
+        toggleProvider(props.kind, id)
+      },
     })),
     ...selTags.value.map(slug => ({
       key: `t-${slug}`,
-      label: TAG_LABELS[slug] || slug,
+      label: tagLabel(slug),
       color: tagColor(slug),
-      off: () => toggleTag(props.kind, slug),
+      off: () => {
+        toggleTag(props.kind, slug)
+      },
     })),
-    ...(uncensoredOnly.value ? [{ key: 'unc', label: 'Uncensored', off: () => (uncensoredOnly.value = false) }] : []),
+    ...(uncensoredOnly.value
+      ? [
+          {
+            key: 'unc',
+            label: 'Uncensored',
+            off: () => {
+              uncensoredOnly.value = false
+            },
+          },
+        ]
+      : []),
   ])
 
   // Facets AND together (provider ∧ tag); within the tag facet a model needs
   // only one of the selected tags.
-  function passesFilters(m) {
+  function passesFilters(m: Model): boolean {
     if (m.id === props.modelValue) return true
     if (selProviders.value.length && !selProviders.value.includes(providerOf(m.id))) return false
-    if (selTags.value.length && !(m.tags || []).some(t => selTags.value.includes(t))) return false
+    if (selTags.value.length && !m.tags.some(t => selTags.value.includes(t))) return false
     return true
   }
   const searched = computed(() => {
@@ -106,19 +148,19 @@ export function useModelList(props, query) {
   // the catalogue are skipped rather than shown broken
   const favouriteModels = computed(() => {
     const byId = new Map(searched.value.map(m => [m.id, m]))
-    return (favourites[props.kind] || []).map(id => byId.get(id)).filter(Boolean)
+    return favourites[props.kind].flatMap(id => byId.get(id) ?? [])
   })
   const otherModels = computed(() => searched.value.filter(m => !isFavourite(props.kind, m.id)).slice(0, MAX_LISTED))
   const filtered = computed(() => [...favouriteModels.value, ...otherModels.value])
-  const sections = computed(() => {
-    const out = []
+  const sections = computed<ModelSection[]>(() => {
+    const out: ModelSection[] = []
     if (favouriteModels.value.length) out.push({ id: 'fav', label: '★ Favourites', models: favouriteModels.value })
     // Only label the main list when there's a favourites list to tell it apart from
     out.push({ id: 'all', label: favouriteModels.value.length ? 'All models' : '', models: otherModels.value })
     return out
   })
 
-  function clearAll() {
+  function clearAll(): void {
     clearFilters(props.kind)
     uncensoredOnly.value = false
   }

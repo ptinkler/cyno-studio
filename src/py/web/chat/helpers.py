@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING
 
 from fastapi import HTTPException
 
-from web.chat.constants import KINDS, REMEMBERED_SETTINGS
+from web.chat.constants import KINDS
+from web.chat.models import ComposerSettings
 from web.chat.schemas import ShownMessage
 from web.core import config
 from web.core.metadata import get_db
@@ -189,7 +190,7 @@ def remember_settings(conv: ChatConversation, settings: TurnSettings) -> None:
         "video_model": (settings.video_model, conv.video_model),
     }
     fields: dict[str, JsonValue] = {k: new for k, (new, old) in picks.items() if new and new != old}
-    composer = settings.model_dump(include=REMEMBERED_SETTINGS)
+    composer = settings.model_dump(include=set(ComposerSettings.model_fields))
     if composer != conv.settings:
         fields["settings"] = composer
     if fields:

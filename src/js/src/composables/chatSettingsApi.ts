@@ -9,6 +9,7 @@ export type Instruction = Schemas['Instruction']
 export type InstructionGroup = Schemas['InstructionGroup']
 export type Space = Schemas['Space']
 export type ChatSettings = Schemas['ChatSettings']
+export type PolloBalance = Schemas['PolloBalance']
 
 const id = (value: number): string => String(value)
 

@@ -40,7 +40,8 @@ export function tagColor(slug: string): string {
   return `hsl(${String(Math.round((i * GOLDEN_ANGLE) % HUE_STEPS))} 72% ${i % 2 ? '72' : '62'}%)`
 }
 
-export type Provider = 'pollo' | 'venice' | 'openrouter'
+export const PROVIDER_IDS = ['pollo', 'venice', 'openrouter'] as const
+export type Provider = (typeof PROVIDER_IDS)[number]
 
 // One pastel per provider, defined once in style.css (--p-*) so the picker
 // tags, the filter chips and the usage cards all agree.

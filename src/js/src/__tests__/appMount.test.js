@@ -31,7 +31,7 @@ const ANSWERS = [
   ],
   [/\/api\/chat\/spend\/breakdown/, { days: 0, total_usd: 0, rows: [] }],
   [/\/api\/chat\/pollo-balance/, { availableCredits: 0, totalCredits: 0 }],
-  [/\/api\/chat\/(library|favourites)/, { items: [] }],
+  [/\/api\/chat\/(library|favourites|generations\/active)/, { items: [] }],
   [/\/api\/chat\/request-log/, { entries: [] }],
   [/\/api\/characters/, { characters: [] }],
   [/\/api\/media/, { items: [], total: 0 }],

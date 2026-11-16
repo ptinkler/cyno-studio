@@ -1,4 +1,5 @@
 import { tagColor, tagLabel } from '../composables/modelTags'
+import { isImageModel, isTextModel, isVideoModel } from '../composables/chatModelsApi'
 import type { ImageModel, Model, ModelKind, TextModel, VideoModel } from '../composables/chatModelsApi'
 import { chatImageModelTakesCharacters } from '../composables/useCharacters'
 
@@ -44,10 +45,6 @@ const CHEAP_USD = 0.1
 
 // Venice prices: per image, or a quote for a ~5s video at the lowest resolution
 const fmtPrice = (usd: number): string => `$${usd < CHEAP_USD ? usd.toFixed(3).replace(/0$/, '') : usd.toFixed(2)}`
-
-const isText = (m: Model): m is TextModel => 'supports_tools' in m
-const isImage = (m: Model): m is ImageModel => 'conversational' in m
-const isVideo = (m: Model): m is VideoModel => 'frame_images' in m
 
 function flagBadges(m: Model): MaybeBadge[] {
   return [
@@ -99,9 +96,9 @@ function videoBadges(m: VideoModel): MaybeBadge[] {
 }
 
 function kindBadges(m: Model): MaybeBadge[] {
-  if (isText(m)) return textBadges(m)
-  if (isImage(m)) return imageBadges(m)
-  if (isVideo(m)) return videoBadges(m)
+  if (isTextModel(m)) return textBadges(m)
+  if (isImageModel(m)) return imageBadges(m)
+  if (isVideoModel(m)) return videoBadges(m)
   return []
 }
 

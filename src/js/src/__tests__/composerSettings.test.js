@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { reactive } from 'vue'
 import { useComposerSettings } from '../composables/useComposerSettings'
+import { composerSettings } from './models'
 
 const STORE_KEY = 'chat.prefs'
 
@@ -60,7 +61,7 @@ describe('useComposerSettings: remembered models that no longer exist', () => {
 
   it('adopts a thread model the catalogue has', () => {
     const s = useComposerSettings(catalogue())
-    s.applyChat({ image_model: 'pollo/flux2max', settings: { audio_model: 'pollo/elevenv3' } })
+    s.applyChat({ image_model: 'pollo/flux2max', settings: composerSettings({ audio_model: 'pollo/elevenv3' }) })
     expect(s.selected.image).toBe('pollo/flux2max')
     expect(s.selected.audio).toBe('pollo/elevenv3')
   })

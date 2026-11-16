@@ -4,14 +4,18 @@ The frontend's generated types come from these (see TODO.md, TypeScript migratio
 ISO 8601 strings, as `core.metadata.models.iso` writes them.
 """
 
+import logging
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, TypeAdapter, ValidationError
 from pydantic.alias_generators import to_camel
 
 from web.characters import CharacterInfo
+from web.chat.models import ComposerSettings
 from web.core.request_log import RequestLogEntry
 from web.types import CreditEstimate, JsonValue
+
+log = logging.getLogger(__name__)
 
 
 class ChatStatus(BaseModel):
@@ -186,6 +190,21 @@ class PausedInstructions(BaseModel):
     instruction_group: list[int]
 
 
+def _composer_settings(raw: object) -> ComposerSettings | None:
+    """A chat's stored composer settings, or None when they are absent or no longer fit the model.
+
+    They are saved JSON that outlives versions (and may come from another server's export), so a
+    stale shape must not stop the chat opening: it just forgets the remembered settings.
+    """
+    if raw is None or isinstance(raw, ComposerSettings):
+        return raw
+    try:
+        return ComposerSettings.model_validate(raw)
+    except ValidationError:
+        log.warning("ignoring stored composer settings that no longer fit: %r", raw)
+        return None
+
+
 class Conversation(BaseModel):
     """A chat and its settings."""
 
@@ -203,7 +222,7 @@ class Conversation(BaseModel):
     forked_from_message_id: int | None
     pinned: bool
     kind: Literal["chat", "gallery"]
-    settings: JsonObject | None  # the composer settings last used here
+    settings: Annotated[ComposerSettings | None, BeforeValidator(_composer_settings)]  # last used in this chat
     hidden_defaults: HiddenDefaults
     paused_instructions: PausedInstructions
     import_source: str | None

@@ -589,6 +589,22 @@ class TestRememberedSettings:
         )
         assert new["settings"] == got
 
+    def test_a_chat_with_older_or_odd_stored_settings_still_opens(
+        self, client: TestClient, conv: ConversationOut, db: MetadataDB
+    ) -> None:
+        """Stored settings outlive versions: a partial shape gets defaults, an unusable one is forgotten."""
+        db.update_conversation(conv["id"], settings_json='{"mode": "video", "image_limit": 4}')
+        got = obj(client.get(f"/api/chat/conversations/{conv['id']}"), "conversation", "settings")
+        assert got["mode"] == "video"
+        assert got["image_limit"] == 4
+        assert got["history_limit"] is None  # filled in from the defaults
+        assert dig(got, "ref_choices", "on") == []
+
+        db.update_conversation(conv["id"], settings_json='{"mode": "telepathy", "image_limit": "lots"}')
+        opened = client.get(f"/api/chat/conversations/{conv['id']}")
+        assert opened.status_code == 200
+        assert dig(opened, "conversation", "settings") is None
+
 
 class TestTitles:
     """Tests for titles."""
