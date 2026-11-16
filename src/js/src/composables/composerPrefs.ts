@@ -96,6 +96,11 @@ export const defaultAudioOpts = (): AudioOpts => ({
   duration: '',
 })
 
+// Just the well-formed fields of some stored options, for laying over what the composer already has
+export const partialImageOpts = (raw: unknown): Partial<ImageOpts> => readShape(IMAGE_SHAPE, raw)
+export const partialVideoOpts = (raw: unknown): Partial<VideoOpts> => readShape(VIDEO_SHAPE, raw)
+export const partialAudioOpts = (raw: unknown): Partial<AudioOpts> => readShape(AUDIO_SHAPE, raw)
+
 // Stored options laid over the defaults, so a missing or odd field never leaves a hole
 export const imageOptsFrom = (raw: unknown): ImageOpts => ({ ...defaultImageOpts(), ...readShape(IMAGE_SHAPE, raw) })
 export const videoOptsFrom = (raw: unknown): VideoOpts => ({ ...defaultVideoOpts(), ...readShape(VIDEO_SHAPE, raw) })

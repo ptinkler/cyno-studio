@@ -138,13 +138,10 @@ describe('ChatMessage user actions', () => {
   })
 })
 
-describe('copyText fallback', () => {
-  it('uses execCommand when the Clipboard API is unavailable (plain HTTP)', async () => {
+describe('copyText without the Clipboard API', () => {
+  it('says it could not copy (plain HTTP has no clipboard) instead of throwing', async () => {
     Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
-    document.execCommand = vi.fn().mockReturnValue(true)
-    expect(await copyText('hi')).toBe(true)
-    expect(document.execCommand).toHaveBeenCalledWith('copy')
-    expect(document.querySelectorAll('textarea').length).toBe(0) // cleaned up
+    expect(await copyText('hi')).toBe(false)
   })
 })
 

@@ -8,6 +8,9 @@ export interface Toast {
   type: ToastType
 }
 
+/** What a component or composable is given to show a toast with. */
+export type ShowToast = (message: string, type?: ToastType, duration?: number) => number
+
 const DEFAULT_DURATION_MS = 3000
 
 export function useToast() {

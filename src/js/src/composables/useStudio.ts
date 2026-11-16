@@ -1,54 +1,76 @@
 import { ref, reactive, computed, watch, onScopeDispose } from 'vue'
+import type { ShownMessage } from './chatConversationsApi'
+import type { LibraryCard } from './chatFilesApi'
+import type { Mode } from './composerPrefs'
+import type { Catalogues, ComposerSettings } from './useComposerSettings'
+import type { Conversation, ConversationSummary } from './chatConversationsApi'
+import type { Space, Spend, ThreadKind, UiMessage } from './studioTypes'
 import { fetchChatStatus, fetchChatModels } from './useChat'
+import { useChatBalances } from './useChatBalances'
 import { useChatCharacters } from './useChatCharacters'
 import { useChatInstructions } from './useChatInstructions'
 import { useMessagePolling } from './useMessagePolling'
-import { useChatBalances } from './useChatBalances'
 import { useStudioAttachments } from './useStudioAttachments'
 import { useStudioDefaults } from './useStudioDefaults'
-import { useStudioEnhance, useStudioEstimate } from './useStudioPrompt'
 import { useStudioMedia } from './useStudioMedia'
+import { useStudioEnhance, useStudioEstimate } from './useStudioPrompt'
 import { useStudioReuse } from './useStudioReuse'
 import { useStudioSidebar } from './useStudioSidebar'
 import { useStudioThreads } from './useStudioThreads'
 import { useStudioTurns } from './useStudioTurns'
+import type { ShowToast } from './useToast'
 
 const BALANCE_REFRESH_MS = 2 * 60 * 1000
+
+/** "Edit this image" / "animate this image": which file to attach, and the mode to switch to. */
+interface ImagePick {
+  file?: string
+  mode?: Mode
+  conversation_id?: string
+}
 
 // All of Studio's state + behaviour, kept out of the view so the components
 // stay presentational. `settings` is a useComposerSettings() instance (shared
 // with the inspector's model pickers); `models` is its catalogue, filled here.
 // This is the composition root: it owns the shared state and wires the focused composables together
 // (attachments, threads, turns, prompt tools, media actions, sidebar).
-export function useStudio({ models, settings, showToast }) {
+export function useStudio({
+  models,
+  settings,
+  showToast,
+}: {
+  models: Catalogues
+  settings: ComposerSettings
+  showToast: ShowToast
+}) {
   const { selected, mode, turnSettings, applyDefaults } = settings
 
   const modelsLoading = ref(true)
   const providers = reactive({ openrouter: true, venice: false })
   const { balances, refresh: refreshBalances } = useChatBalances(providers)
-  const threads = ref([])
-  const spaces = ref([])
-  const active = ref(null)
-  const activeThread = ref(null)
-  const messages = ref([])
+  const threads = ref<ConversationSummary[]>([])
+  const spaces = ref<Space[]>([])
+  const active = ref<string | null>(null)
+  const activeThread = ref<Conversation | null>(null)
+  const messages = ref<UiMessage[]>([])
   const loading = ref(false)
   // Threads with a live turn: generation blocks only its own thread, not the app
-  const sendingIds = ref(new Set())
+  const sendingIds = ref(new Set<string | null>())
   // Which lane the composer feeds: 'gallery' sends are standalone exchanges that
   // never block (or join) the chat, so the gallery view is never "sending".
-  const lane = ref(null)
+  const lane = ref<'gallery' | null>(null)
   const sending = computed(() => lane.value !== 'gallery' && sendingIds.value.has(active.value))
-  const streamingId = ref(null)
+  const streamingId = ref<number | string | null>(null)
   const draft = ref('')
-  const spend = ref(null)
-  const favourites = ref([]) // cross-thread gallery of favourited generations
+  const spend = ref<Spend | null>(null)
+  const favourites = ref<LibraryCard[]>([]) // cross-thread gallery of favourited generations
   // The thread being created from scratch opens on this view ('chat' | 'gallery')
-  const newKind = ref('chat')
+  const newKind = ref<ThreadKind>('chat')
 
   // The composables below need each other's functions before they exist; these call through at use time.
-  const ensureThread = () => threadApi.ensureThread()
-  const messageIndex = id => messages.value.findIndex(m => m.id === id)
-  function replaceMessage(fresh) {
+  const ensureThread = (): Promise<string> => threadApi.ensureThread()
+  const messageIndex = (id: number | string | null | undefined): number => messages.value.findIndex(m => m.id === id)
+  function replaceMessage(fresh: ShownMessage): void {
     const i = messageIndex(fresh.id)
     if (i !== -1) messages.value.splice(i, 1, fresh)
   }
@@ -128,7 +150,9 @@ export function useStudio({ models, settings, showToast }) {
   // Tell the defaults singleton which space is in context (for editors' add-to toggles)
   watch(
     () => activeThread.value?.space_id ?? null,
-    id => defaults.setCurrentSpace(id),
+    id => {
+      defaults.setCurrentSpace(id)
+    },
     { immediate: true },
   )
 
@@ -136,30 +160,39 @@ export function useStudio({ models, settings, showToast }) {
     const last = messages.value.filter(m => !m.lane).at(-1)
     return last?.role === 'assistant' ? last.id : null
   })
+  const noPrompt = computed(() => {
+    const info = settings.activeInfo.value
+    return !!info && 'no_prompt' in info && !!info.no_prompt
+  })
   const canSend = computed(
     () =>
-      (!!draft.value.trim() || attachments.value.some(a => a.file) || !!settings.activeInfo.value?.no_prompt) &&
+      (!!draft.value.trim() || attachments.value.some(a => a.file) || noPrompt.value) &&
       !uploading.value &&
       !sending.value,
   )
-  const activeTitle = computed(() => threads.value.find(t => t.id === active.value)?.title || 'New thread')
+  const activeTitle = computed(() => {
+    const title = threads.value.find(t => t.id === active.value)?.title
+    return title === undefined || title === '' ? 'New thread' : title
+  })
   // Which view the current thread opens on. A saved thread carries its own
   // kind; an unsaved new thread uses the kind picked in the sidebar.
-  const activeKind = computed(() => (active.value ? activeThread.value?.kind || 'chat' : newKind.value))
+  const activeKind = computed<ThreadKind>(() => (active.value ? (activeThread.value?.kind ?? 'chat') : newKind.value))
 
-  const polling = useMessagePolling({ messages, streamingId, replace: replaceMessage, onFinished: refreshAfterBilling })
   // Something was billed (a reply or generation landed): refresh every figure
   // that depends on it instead of waiting for a reload
-  function refreshAfterBilling() {
-    threadApi.loadLists()
-    threadApi.refreshSpend(active.value)
-    refreshBalances()
+  function refreshAfterBilling(): void {
+    void threadApi.loadLists()
+    void threadApi.refreshSpend(active.value)
+    void refreshBalances()
   }
+  const polling = useMessagePolling({ messages, streamingId, replace: replaceMessage, onFinished: refreshAfterBilling })
   // Balances also drift outside this tab (other devices, other chats): re-check
   // when the tab is shown again and every couple of minutes while it is. Both
   // are torn down with the scope that created them — a listener and a timer
   // that outlive it would keep firing against a dead component.
-  const onShown = () => document.visibilityState === 'visible' && refreshBalances()
+  const onShown = (): void => {
+    if (document.visibilityState === 'visible') void refreshBalances()
+  }
   document.addEventListener('visibilitychange', onShown)
   const balanceTimer = setInterval(onShown, BALANCE_REFRESH_MS)
   onScopeDispose(() => {
@@ -171,15 +204,7 @@ export function useStudio({ models, settings, showToast }) {
   const threadApi = useStudioThreads({
     state,
     settings,
-    link: {
-      instructionIds,
-      instructionGroupIds,
-      characterIds,
-      hiddenDefaults,
-      paused,
-      NO_HIDDEN,
-      NO_PAUSED,
-    },
+    link: { instructionIds, instructionGroupIds, characterIds, hiddenDefaults, paused, NO_HIDDEN, NO_PAUSED },
     polling,
     showToast,
   })
@@ -226,11 +251,11 @@ export function useStudio({ models, settings, showToast }) {
     loadLists,
   })
 
-  async function loadModels() {
+  async function loadModels(): Promise<void> {
     modelsLoading.value = true
     try {
-      const d = await fetchChatModels()
-      Object.assign(models, { text: d.text || [], image: d.image || [], video: d.video || [], audio: d.audio || [] })
+      const { text, image, video, audio } = await fetchChatModels()
+      Object.assign(models, { text, image, video, audio })
       applyDefaults()
     } catch {
       /* leave empty */
@@ -238,20 +263,21 @@ export function useStudio({ models, settings, showToast }) {
       modelsLoading.value = false
     }
   }
-  async function loadStatus() {
+
+  async function loadStatus(): Promise<void> {
     try {
-      const s = await fetchChatStatus()
-      providers.openrouter = s.openrouter ?? s.configured
-      providers.venice = !!s.venice
+      const status = await fetchChatStatus()
+      providers.openrouter = status.openrouter
+      providers.venice = status.venice
     } catch {
       /* ignore */
     }
-    refreshBalances()
+    void refreshBalances()
   }
+
   // "Edit this image" / "animate this image": attach it and switch to that mode
-  /** @param {{ file?: string, mode?: string, conversation_id?: string }} [pick] */
-  function useImage({ file, mode: target, conversation_id: fromConv } = {}) {
-    if (file && !addChatImage(file, fromConv)) return
+  function useImage({ file, mode: target, conversation_id: fromConv }: ImagePick = {}): void {
+    if (file && !addChatImage(file, fromConv ?? null)) return
     if (target) mode.value = target
   }
 
@@ -351,3 +377,6 @@ export function useStudio({ models, settings, showToast }) {
     removeSpace,
   }
 }
+
+/** The Studio's state and behaviour, as the view and its helpers use it. */
+export type Studio = ReturnType<typeof useStudio>

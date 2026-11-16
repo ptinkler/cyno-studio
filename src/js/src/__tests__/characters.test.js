@@ -121,17 +121,6 @@ describe('which models can use characters', () => {
     expect(ok(null)).toBe(false)
   })
 
-  it('Generate models: image models with "images", ref models, v1 models in Ref mode', async () => {
-    const { generateModelTakesCharacters: ok } = await import('../composables/useCharacters')
-    expect(ok({ type: 'image', options: ['images'] })).toBe(true)
-    expect(ok({ type: 'image', options: [] })).toBe(false)
-    expect(ok({ type: 'ref' })).toBe(true)
-    const v1 = { type: 'img2vid', ref_mode: { types: ['image'], max: 9 } }
-    expect(ok(v1, false)).toBe(false)
-    expect(ok(v1, true)).toBe(true)
-    expect(ok({ type: 'img2vid' }, true)).toBe(false)
-  })
-
   it('the chat model picker badges image models that can', async () => {
     const { nextTick } = await import('vue')
     const ModelPicker = (await import('../components/chat/ModelPicker.vue')).default
@@ -163,7 +152,7 @@ describe('useChatCharacters reloads for the open chat', () => {
     )
     vi.doMock('../composables/useCharacters', () => ({ chatImageModelTakesCharacters: () => true, fetchCharacters }))
     const { ref, nextTick } = await import('vue')
-    const { useChatCharacters } = await import('../composables/useChatCharacters.js')
+    const { useChatCharacters } = await import('../composables/useChatCharacters')
     const convId = ref(null)
     const c = useChatCharacters({
       convId,

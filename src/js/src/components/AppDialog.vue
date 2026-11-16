@@ -1,4 +1,4 @@
-<!-- The app's own confirm / prompt dialog (see composables/useDialog.js). -->
+<!-- The app's own confirm / prompt dialog (see composables/useDialog.ts). -->
 <script setup>
 import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { dialog, settleDialog } from '../composables/useDialog'

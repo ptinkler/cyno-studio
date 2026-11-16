@@ -38,7 +38,7 @@ type Schemas = components['schemas']
 export type Catalogues = Pick<ModelCatalogue, ModelKind>
 
 /** The settings a turn is sent with: the body of a send / retry / edit, without what is particular to each. */
-export type TurnSettingsBody = Omit<Schemas['SendMessage'], 'content' | 'attachments' | 'lane'>
+export type TurnSettingsBody = Required<Omit<Schemas['SendMessage'], 'content' | 'attachments' | 'lane'>>
 
 // First id containing one of these wins when nothing is remembered yet
 const PREFERRED: Record<PickKind, readonly string[]> = {
@@ -317,3 +317,6 @@ export function useComposerSettings(models: Catalogues) {
     clipDuration,
   }
 }
+
+/** What `useComposerSettings` returns: the composer's state and the calls that change it. */
+export type ComposerSettings = ReturnType<typeof useComposerSettings>
