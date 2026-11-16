@@ -4,7 +4,8 @@ const openStack: ((event: KeyboardEvent) => void)[] = []
 </script>
 
 <script setup lang="ts">
-import { onBeforeUnmount, watch } from 'vue'
+import { onBeforeUnmount, ref, toRef, watch } from 'vue'
+import { useFocusTrap } from '../composables/useFocusTrap'
 
 // A modal's shell: the backdrop, the card with its title and ✕, Esc and
 // backdrop clicks to close. Slots: `head` (beside the title), the body, and
@@ -22,6 +23,8 @@ const props = withDefaults(
   { open: false, title: '', label: '', width: '32rem', form: false },
 )
 const emit = defineEmits<{ close: []; submit: [] }>()
+const card = ref<HTMLElement | null>(null)
+useFocusTrap(card, toRef(props, 'open'))
 
 // Open dialogs, newest last: Esc closes only the top one (a picker opened
 // from inside another dialog mustn't close both)
@@ -51,6 +54,7 @@ onBeforeUnmount(release)
     <div v-if="open" class="backdrop" @click.self="emit('close')">
       <component
         :is="form ? 'form' : 'div'"
+        ref="card"
         class="dialog"
         role="dialog"
         aria-modal="true"

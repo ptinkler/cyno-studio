@@ -89,6 +89,14 @@ class NoImagesError(OpenRouterError):
         super().__init__("Image model returned no images")
 
 
+class UnsafeVideoUrlError(OpenRouterError):
+    """A returned video URL points somewhere we refuse to fetch."""
+
+    def __init__(self, cause: Exception) -> None:
+        """Give the reason the address was refused."""
+        super().__init__(f"Refusing to fetch unsafe video URL: {cause}")
+
+
 class UnsafeImageUrlError(OpenRouterError):
     """A returned image URL points somewhere we refuse to fetch."""
 
@@ -628,7 +636,11 @@ def get_video(job_id: str) -> dict[str, JsonValue]:
 
 
 def download_video(job_id: str, dest: Path, index: int = 0) -> None:
-    """Download a completed video job to ``dest``."""
+    """Download a completed video job to ``dest``.
+
+    OpenRouter answers with the file, or with a redirect to where it is stored: that address is fetched only
+    if it is public, and without our key.
+    """
     tmp = dest.with_suffix(dest.suffix + ".part")
     with http_client.stream(
         "GET",
@@ -636,11 +648,22 @@ def download_video(job_id: str, dest: Path, index: int = 0) -> None:
         headers=request_headers(),
         params={"index": index},
         timeout=IMAGE_TIMEOUT,
-        follow_redirects=True,
+        follow_redirects=False,
     ) as resp:
+        if resp.is_redirect and "location" in resp.headers:
+            location = str(resp.next_request.url) if resp.next_request else resp.headers["location"]
+            _download_stored(location, dest)
+            return
         if resp.status_code >= HTTPStatus.BAD_REQUEST:
             resp.read()
             raise_for_response(resp)
         with tmp.open("wb") as f:
             f.writelines(resp.iter_bytes())
     tmp.replace(dest)
+
+
+def _download_stored(url: str, dest: Path) -> None:
+    try:
+        net_guard.download_public(net_guard.public_http, url, dest, timeout=IMAGE_TIMEOUT)
+    except net_guard.UnsafeURLError as exc:
+        raise UnsafeVideoUrlError(exc) from exc

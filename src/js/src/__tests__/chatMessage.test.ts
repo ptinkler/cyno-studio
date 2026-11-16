@@ -572,6 +572,22 @@ describe('ChatMessage edit and redo a picture in place', () => {
   })
 })
 
+describe('ChatMessage links', () => {
+  const link = (content: string) => mount(ChatMessage, reply([], { content })).find('.markdown a')
+
+  it('open in a new tab with no handle back to the chat', () => {
+    const a = link('See [the docs](https://example.com/x).')
+    expect(a.attributes('href')).toBe('https://example.com/x')
+    expect(a.attributes('target')).toBe('_blank')
+    expect(a.attributes('rel')).toBe('noopener noreferrer')
+  })
+
+  it('still strip a script address', () => {
+    const a = link('[click](javascript:alert(1))')
+    expect(a.attributes('href') ?? '').not.toContain('javascript')
+  })
+})
+
 describe('ChatMessage cost', () => {
   const priced = { ...image, model: 'venice/seedream-v5-pro', cost: 0.06 }
   interface Hoverable {

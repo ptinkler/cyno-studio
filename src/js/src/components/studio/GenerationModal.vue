@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useFocusTrap } from '../../composables/useFocusTrap'
 import type { GenerationItem, ImagePick } from '../../composables/studioTypes'
 import { shortModel, fmtCost, creditsToUsd } from '../../utils/format'
 import RequestDialog from '../chat/RequestDialog.vue'
@@ -23,6 +24,11 @@ const emit = defineEmits<{
   'open-thread': [id: string]
   'make-character': [item: GenerationItem]
 }>()
+const card = ref<HTMLElement | null>(null)
+useFocusTrap(
+  card,
+  computed(() => !!props.item),
+)
 
 const isVideo = computed(() => props.item?.kind === 'video')
 const isError = computed(() => props.item?.status === 'error')
@@ -59,7 +65,7 @@ onBeforeUnmount(() => {
        --s* theme vars that would otherwise only cascade from the .studio ancestor. -->
   <Teleport to="body">
     <div v-if="item" class="gm-back studio" :data-theme="theme || undefined" @click="emit('close')">
-      <div class="gm-card" role="dialog" aria-modal="true" aria-label="Generation" @click.stop>
+      <div ref="card" class="gm-card" role="dialog" aria-modal="true" aria-label="Generation" @click.stop>
         <button class="gm-x" title="Close" aria-label="Close" @click="emit('close')">×</button>
 
         <div class="gm-layout">

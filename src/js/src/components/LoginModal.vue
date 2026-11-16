@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import { useAuth } from '../composables/useAuth'
+import { useFocusTrap } from '../composables/useFocusTrap'
 import { fetchAuthProviders, authLoginUrl } from '../composables/useAccount'
 import { messageOf } from '../utils/errors'
 
 const { showLogin, login, devLogin } = useAuth()
+const box = ref<HTMLElement | null>(null)
+useFocusTrap(box, showLogin)
 const email = ref('')
 const password = ref('')
 const error = ref('')
@@ -73,7 +76,7 @@ const providerLabels: Readonly<Record<string, string>> = { google: 'Google', mic
 <template>
   <Teleport to="body">
     <div v-if="showLogin" class="modal-backdrop">
-      <div class="modal-box" role="dialog" aria-modal="true" aria-label="Sign in">
+      <div ref="box" class="modal-box" role="dialog" aria-modal="true" aria-label="Sign in">
         <h3>Sign in</h3>
         <p v-if="notice" class="error-hint">{{ notice }}</p>
         <input v-model="email" type="email" placeholder="Email" autocomplete="username" @keydown.enter="submit" />

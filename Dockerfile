@@ -3,8 +3,8 @@ FROM mirror.gcr.io/library/node:24-alpine AS frontend-builder
 
 # Same layout as the repo, so the build lands where the API looks for it (src/js/dist)
 WORKDIR /build/src/js
-COPY src/js/package.json src/js/package-lock.json* ./
-RUN npm install
+COPY src/js/package.json src/js/package-lock.json ./
+RUN npm ci
 COPY src/js/ ./
 RUN npm run build
 

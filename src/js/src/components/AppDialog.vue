@@ -1,9 +1,15 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { dialog, settleDialog } from '../composables/useDialog'
+import { useFocusTrap } from '../composables/useFocusTrap'
 
 const input = ref<HTMLInputElement | null>(null)
 const okBtn = ref<HTMLButtonElement | null>(null)
+const card = ref<HTMLElement | null>(null)
+useFocusTrap(
+  card,
+  computed(() => dialog.open),
+)
 
 const cancel = (): void => {
   settleDialog(null)
@@ -42,7 +48,7 @@ watch(
 <template>
   <Teleport to="body">
     <div v-if="dialog.open" class="ad-back" @click.self="cancel">
-      <div class="ad" role="dialog" aria-modal="true" :aria-label="dialog.title">
+      <div ref="card" class="ad" role="dialog" aria-modal="true" :aria-label="dialog.title">
         <h3 v-if="dialog.title">{{ dialog.title }}</h3>
         <p v-if="dialog.message" class="ad-msg">{{ dialog.message }}</p>
         <label v-if="dialog.kind === 'prompt'" class="ad-field">

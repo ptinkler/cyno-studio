@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, inject, onBeforeUnmount } from 'vue'
 import { showToastKey, noToast } from '../../injection'
+import { useFocusTrap } from '../../composables/useFocusTrap'
 import MediaFilters from './MediaFilters.vue'
 import MediaGrid from './MediaGrid.vue'
 import type { LibraryEntry } from '../../composables/mediaApi'
@@ -41,6 +42,11 @@ const props = withDefaults(
   },
 )
 const emit = defineEmits<{ pick: [items: LibraryEntry[]]; close: [] }>()
+const card = ref<HTMLElement | null>(null)
+useFocusTrap(
+  card,
+  computed(() => props.open),
+)
 const showToast = inject(showToastKey, noToast)
 
 // A page at a time, filtered server-side: the whole library in one request is
@@ -208,6 +214,7 @@ function confirm(): void {
   <Teleport to="body">
     <div v-if="open" class="backdrop" @click.self="emit('close')" @keydown.esc="emit('close')">
       <div
+        ref="card"
         class="dialog"
         role="dialog"
         aria-modal="true"

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import httpx
 
+from web.core import net_guard
 from web.core.cache import TTLCache
 from web.jsonutil import as_object, as_str, body_of
 from web.providers.openrouter import IMAGE_TIMEOUT
@@ -19,6 +20,7 @@ from web.providers.venice.errors import (
     VeniceError,
     VideoCheckFailedError,
     VideoDownloadFailedError,
+    VideoDownloadUnreachableError,
     VideoNotReadyError,
 )
 from web.providers.venice.video import (
@@ -214,14 +216,13 @@ def download_video(job_id: str, dest: Path) -> None:
     if not src.is_file():
         url = _download_urls.get(job_id)
         if url:  # private models hand back a short-lived download link instead
-            tmp = dest.with_suffix(dest.suffix + ".part")
-            with client.http.stream("GET", url, timeout=IMAGE_TIMEOUT, follow_redirects=True) as resp:
-                if resp.status_code >= HTTPStatus.BAD_REQUEST:
-                    resp.read()
-                    raise VideoDownloadFailedError(resp.status_code)
-                with tmp.open("wb") as f:
-                    f.writelines(resp.iter_bytes())
-            tmp.replace(dest)
+            # Another host's link: fetched without our key, and only if it is a public address
+            try:
+                net_guard.download_public(net_guard.public_http, url, dest, timeout=IMAGE_TIMEOUT)
+            except httpx.HTTPStatusError as e:
+                raise VideoDownloadFailedError(e.response.status_code) from e
+            except (httpx.HTTPError, net_guard.UnsafeURLError) as e:
+                raise VideoDownloadUnreachableError(e) from e
             return
         if get_video(job_id)["status"] != "completed" or not src.is_file():
             raise VideoNotReadyError

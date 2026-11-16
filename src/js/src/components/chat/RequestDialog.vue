@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import { useFocusTrap } from '../../composables/useFocusTrap'
 import { RouterLink } from 'vue-router'
 import { useCopy } from '../../composables/useClipboard'
 
@@ -9,6 +10,8 @@ const props = withDefaults(defineProps<{ request: unknown; response: unknown; er
   error: '',
 })
 const emit = defineEmits<{ close: [] }>()
+const card = ref<HTMLElement | null>(null)
+useFocusTrap(card, ref(true)) // this component exists only while the dialog is open
 const { copiedKey, copy } = useCopy()
 
 const fmt = (value: unknown): string => (typeof value === 'string' ? value : JSON.stringify(value, null, 2))
@@ -30,7 +33,7 @@ onBeforeUnmount(() => {
 <template>
   <Teleport to="body">
     <div class="req-backdrop" @click.self="emit('close')">
-      <div class="req-dialog" role="dialog" aria-modal="true" aria-label="Request and response">
+      <div ref="card" class="req-dialog" role="dialog" aria-modal="true" aria-label="Request and response">
         <div class="req-head">
           <h3>Request and response</h3>
           <button class="btn btn-sm" @click="copy(both, 'req')">

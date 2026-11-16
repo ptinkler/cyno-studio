@@ -47,6 +47,13 @@ const emit = defineEmits<{
 }>()
 
 marked.setOptions({ gfm: true, breaks: true })
+// A link in a reply opens in a new tab (the chat is not left behind), and that page gets no handle back to this one
+DOMPurify.addHook('afterSanitizeAttributes', node => {
+  if (node.tagName === 'A' && node.hasAttribute('href')) {
+    node.setAttribute('target', '_blank')
+    node.setAttribute('rel', 'noopener noreferrer')
+  }
+})
 
 const isUser = computed(() => props.message.role === 'user')
 const streaming = computed(() => props.message.status === 'streaming')

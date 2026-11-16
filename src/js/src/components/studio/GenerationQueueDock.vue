@@ -64,32 +64,30 @@ function label(entry: Generation): string {
          order it reads on screen.) -->
     <div v-show="!collapsed" class="qpop">
       <div class="qbody">
-        <button
-          v-for="e in entries"
-          :key="e.media_id"
-          type="button"
-          class="qrow"
-          :class="e.status"
-          @click="emit('open', e)"
-        >
-          <span class="qthumb" :class="e.kind">
-            <img v-if="e.status === 'done' && e.file && e.kind === 'image'" :src="thumb(e)" loading="lazy" alt="" />
-            <video v-else-if="e.status === 'done' && e.file" :src="thumb(e)" muted preload="metadata"></video>
-            <span v-else-if="e.status === 'pending'" class="qspin sm"></span>
-            <span v-else class="qfail">✕</span>
-          </span>
-          <span class="qinfo">
-            <span class="qlabel">{{ label(e) }}</span>
-            <span class="qsub">{{ e.conversation_title || 'Untitled thread' }}</span>
-          </span>
-          <span
+        <!-- The remove button is the row's sibling, not inside it: a button can't hold another -->
+        <div v-for="e in entries" :key="e.media_id" class="qitem">
+          <button type="button" class="qrow" :class="e.status" @click="emit('open', e)">
+            <span class="qthumb" :class="e.kind">
+              <img v-if="e.status === 'done' && e.file && e.kind === 'image'" :src="thumb(e)" loading="lazy" alt="" />
+              <video v-else-if="e.status === 'done' && e.file" :src="thumb(e)" muted preload="metadata"></video>
+              <span v-else-if="e.status === 'pending'" class="qspin sm"></span>
+              <span v-else class="qfail">✕</span>
+            </span>
+            <span class="qinfo">
+              <span class="qlabel">{{ label(e) }}</span>
+              <span class="qsub">{{ e.conversation_title || 'Untitled thread' }}</span>
+            </span>
+          </button>
+          <button
+            type="button"
             class="qx"
             title="Remove from queue"
             aria-label="Remove from queue"
-            @click.stop="emit('clear-one', e.media_id)"
-            >×</span
+            @click="emit('clear-one', e.media_id)"
           >
-        </button>
+            ×
+          </button>
+        </div>
       </div>
       <div v-if="done" class="qfoot">
         <button class="qclear" @click="emit('clear')">Clear {{ done }} finished</button>
@@ -165,11 +163,21 @@ function label(entry: Generation): string {
   flex-direction: column;
   gap: 2px;
 }
+.qitem {
+  display: flex;
+  align-items: center;
+  border-radius: 0.5333rem;
+  padding-right: 0.4rem;
+}
+.qitem:hover {
+  background: var(--shover);
+}
 .qrow {
   display: flex;
   align-items: center;
   gap: 0.6667rem;
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   padding: 0.4rem;
   border: none;
   border-radius: 0.5333rem;
@@ -178,9 +186,6 @@ function label(entry: Generation): string {
   cursor: pointer;
   text-align: left;
   font: inherit;
-}
-.qrow:hover {
-  background: var(--shover);
 }
 .qthumb {
   position: relative;
@@ -244,6 +249,9 @@ function label(entry: Generation): string {
   color: var(--sfaint);
   font-size: 1.0667rem;
   line-height: 1;
+  border: none;
+  background: none;
+  cursor: pointer;
 }
 .qx:hover {
   background: var(--sborder);

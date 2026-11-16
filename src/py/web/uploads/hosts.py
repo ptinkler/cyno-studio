@@ -11,10 +11,12 @@ from collections.abc import Mapping
 from http import HTTPStatus
 from pathlib import Path
 
+import httpx
 import requests
 from bs4 import BeautifulSoup
 from pydantic import TypeAdapter
 
+from web.core import net_guard
 from web.media.public import selfhost_url
 from web.types import JsonValue
 from web.uploads.settings import UploadPrefs, current_upload_prefs
@@ -325,18 +327,24 @@ def _served_url(host: str, stored: str, filepath: Path) -> str:
 # the backup. Self-hosting is skipped: this instance can reach itself whatever
 # the outside world sees.
 _VERIFY_HOSTS = ("litterbox", "uguu", "tmpfiles")
-_VERIFY_TIMEOUT = (8, 15)
+_VERIFY_TIMEOUT = httpx.Timeout(15, connect=8)
+_VERIFY_MAX_BYTES = 64 * 1024  # a ranged request for one byte: anything bigger is a host ignoring the range
 
 
 def _verify_served(host: str, url: str, filepath: Path) -> None:
     if host not in _VERIFY_HOSTS:
         return
     try:
-        resp = requests.get(url, stream=True, timeout=_VERIFY_TIMEOUT, headers={"Range": "bytes=0-0"})
-        content_type = (resp.headers.get("content-type") or "").split(";")[0].strip().lower()
-        resp.close()
-    except requests.RequestException as exc:
+        resp = net_guard.get_public(
+            net_guard.public_http,
+            url,
+            timeout=_VERIFY_TIMEOUT,
+            headers={"Range": "bytes=0-0"},
+            max_bytes=_VERIFY_MAX_BYTES,
+        )
+    except (httpx.HTTPError, net_guard.UnsafeURLError) as exc:
         raise HostedFileUnreachableError(exc) from exc
+    content_type = (resp.headers.get("content-type") or "").split(";")[0].strip().lower()
     if resp.status_code not in (200, 206):
         raise HostedFileStatusError(resp.status_code)
     # Only an HTML answer is treated as wrong: hosts serve files as all sorts of
@@ -457,8 +465,13 @@ def _tmpfiles_direct_url(page_url: str) -> str:
     That segment is a signed expiry ~5 minutes after the page is fetched, so the
     link must be derived just before it's handed to a provider, never cached.
     """
-    page = requests.get(page_url, timeout=(8, 30))
-    page.raise_for_status()
+    try:
+        page = net_guard.get_public(
+            net_guard.public_http, page_url, timeout=httpx.Timeout(30, connect=8), max_bytes=net_guard.MAX_PAGE_BYTES
+        )
+        page.raise_for_status()
+    except (httpx.HTTPError, net_guard.UnsafeURLError) as exc:
+        raise HostedFileUnreachableError(exc) from exc
     soup = BeautifulSoup(page.text, "html.parser")
     link = soup.find("a", class_="download") or soup.find("img", id="img_preview")
     raw_url = (link.get("href") or link.get("src")) if link else None

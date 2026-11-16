@@ -119,4 +119,11 @@ describe('GenerationQueueDock', () => {
     const empty = mount(Dock, { props: { entries: [], pending: 0, done: 0 } })
     expect(empty.find('.qdock').exists()).toBe(false)
   })
+
+  it('has the remove control as a button beside the row, not inside it (a button cannot hold a button)', async () => {
+    const { default: Dock } = await import('../components/studio/GenerationQueueDock.vue')
+    const w = mount(Dock, { props: { entries: items, pending: 1, done: 2 } })
+    expect(w.find('.qrow .qx').exists()).toBe(false)
+    expect(w.find('.qx').element.tagName).toBe('BUTTON')
+  })
 })
