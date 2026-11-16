@@ -1847,7 +1847,7 @@ export interface components {
             /** Avatar Url */
             avatar_url: string | null;
             /** Email */
-            email: string;
+            email: string | null;
             /** Id */
             id: string;
             /** Is Admin */
@@ -3186,7 +3186,7 @@ export interface components {
          */
         LoginResult: {
             /** Email */
-            email: string;
+            email: string | null;
             /** Is Admin */
             is_admin: boolean;
             /** Name */
@@ -3723,7 +3723,7 @@ export interface components {
          */
         SessionUser: {
             /** Email */
-            email: string;
+            email: string | null;
             /** Is Admin */
             is_admin: boolean;
             /** Name */

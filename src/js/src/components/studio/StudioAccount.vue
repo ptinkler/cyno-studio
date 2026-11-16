@@ -41,10 +41,12 @@ onMounted(load)
     <div class="ctitle">Account</div>
     <div v-if="user" class="who">
       <img v-if="user.avatar_url" :src="user.avatar_url" class="av" alt="" />
-      <div v-else class="av ph">{{ (user.name || user.email || '?').charAt(0).toUpperCase() }}</div>
+      <div v-else class="av ph">{{ (user.name || user.email || '?').replace(/^@/, '').charAt(0).toUpperCase() }}</div>
       <div class="meta">
         <div class="nm">{{ user.name || user.email }} <span v-if="user.is_admin" class="badge admin">Admin</span></div>
-        <div class="em">{{ user.email }} · {{ PROVIDER_LABELS[user.provider] || user.provider }}</div>
+        <div class="em">
+          {{ [user.email, PROVIDER_LABELS[user.provider] || user.provider].filter(Boolean).join(' · ') }}
+        </div>
       </div>
       <button class="btn" @click="$emit('sign-out')">Sign out</button>
     </div>

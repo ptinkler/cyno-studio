@@ -63,7 +63,11 @@ describe('request and response types', () => {
   })
 
   it('has no nullable or optional fields the backend does not declare', () => {
-    expectTypeOf<Schemas['SessionUser']>().toEqualTypeOf<{ email: string; name: string | null; is_admin: boolean }>()
+    expectTypeOf<Schemas['SessionUser']>().toEqualTypeOf<{
+      email: string | null
+      name: string | null
+      is_admin: boolean
+    }>()
     expectTypeOf<Schemas['KeyStatus']>().toEqualTypeOf<{ hint: string; set: boolean }>()
   })
 })

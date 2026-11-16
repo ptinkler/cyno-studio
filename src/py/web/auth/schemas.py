@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 class SessionUser(BaseModel):
     """The signed-in user as the app shell needs them."""
 
-    email: str
+    email: str | None  # none for a sign-in that has no email (X)
     name: str | None
     is_admin: bool
 

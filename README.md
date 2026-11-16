@@ -167,6 +167,7 @@ See `.env.example` for the full list.
 | --------------------------------------------- | ----------------------------------------------------------------------------- |
 | `ADMIN_EMAILS`                                | Comma-separated admin emails; they log in with a password and control the VPN |
 | `ALLOWED_EMAILS`                              | Non-admins allowed to sign in via OAuth (admins always may)                   |
+| `ALLOWED_OAUTH_IDS`                           | Sign-ins with no email (X) let in by id, e.g. `x:12345` — shown on the "not allowed" screen |
 | `OPEN_SIGNUP`                                 | `true` = anyone who authenticates gets an account                             |
 | `SESSION_SECRET`                              | Signs the login cookie — 32+ random characters, or the app won't start       |
 | `PASSWORD_PEPPER`                             | Server-side secret mixed into password hashes — set once, never change        |
@@ -187,8 +188,8 @@ Provider keys (`POLLO_API_KEY`, `OPENROUTER_API_KEY`, `VENICE_API_KEY`) are ente
 
 Multi-user: each user signs in, gets their own data (chats, projects, media, characters, settings) and their own provider keys — no user sees another's. There is no API key; protection is by login session.
 
-- **Sign-in** — admins (emails in `ADMIN_EMAILS`) use email + password; everyone else uses OAuth (Google/Microsoft/X). An OAuth login with an admin's email resolves to the same account, so only emails the provider verifies count: Google's verified emails, and Microsoft addresses from the tenant named in `MICROSOFT_OAUTH_TENANT`.
-- **Who gets in** — fail-closed. With none of `ADMIN_EMAILS`/`ALLOWED_EMAILS`/`OPEN_SIGNUP` set, only admins. `ALLOWED_EMAILS` admits a fixed list; `OPEN_SIGNUP=true` admits anyone who authenticates.
+- **Sign-in** — admins (emails in `ADMIN_EMAILS`) use email + password; everyone else uses OAuth (Google/Microsoft/X). An OAuth login with an admin's email resolves to the same account, so only emails the provider verifies count: Google's verified emails, and Microsoft addresses from the tenant named in `MICROSOFT_OAUTH_TENANT`. X gives no email, so an X account is just its X user id (the handle is only a label, since handles can be taken over once released) and has no email.
+- **Who gets in** — fail-closed. With none of `ADMIN_EMAILS`/`ALLOWED_EMAILS`/`OPEN_SIGNUP` set, only admins. `ALLOWED_EMAILS` admits a fixed list (and `ALLOWED_OAUTH_IDS` the same for sign-ins with no email, like X; someone refused is shown the id to send you); `OPEN_SIGNUP=true` admits anyone who authenticates.
 - **Admin accounts** — created only via the CLI, never through the app (so a visitor can't claim one):
 
   ```bash

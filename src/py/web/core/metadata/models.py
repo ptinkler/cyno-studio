@@ -46,7 +46,9 @@ class User(Base):
 
     __tablename__ = "users"
     id: Mapped[str] = mapped_column(String(50), primary_key=True)  # uuid hex
-    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    # Null for a sign-in that has no email (X): the account is found by (provider, provider_sub), and the
+    # email, where there is one, only ever links a second sign-in to the same person.
+    email: Mapped[str | None] = mapped_column(String(320), unique=True, index=True, nullable=True)
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     avatar_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     provider: Mapped[str] = mapped_column(String(32))  # google | microsoft | x | local

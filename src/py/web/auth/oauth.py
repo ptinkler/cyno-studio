@@ -11,10 +11,12 @@ The redirect/callback URI registered with each provider must be
     https://<your-public-host>/api/auth/callback/<provider>
 (https is mandatory except for http://localhost during development).
 
-Access is decided by email (ADMIN_EMAILS, ALLOWED_EMAILS) and an existing account is found by email, so
-only an email the provider vouches for is used: Google's `email_verified`, or a Microsoft address from
-one named tenant (MICROSOFT_OAUTH_TENANT). Anyone can make a Microsoft account with any address in some
-other tenant, so the multi-tenant endpoints ("common", "organizations", "consumers") yield no email.
+An account is its provider and the provider's user id. Where there is an email, access is decided by it
+(ADMIN_EMAILS, ALLOWED_EMAILS) and it joins a second sign-in to the same person, so only an email the
+provider vouches for is used: Google's `email_verified`, or a Microsoft address from one named tenant
+(MICROSOFT_OAUTH_TENANT). Anyone can make a Microsoft account with any address in some other tenant, so
+the multi-tenant endpoints ("common", "organizations", "consumers") yield no email. X yields none either:
+its users are let in by id (ALLOWED_OAUTH_IDS, e.g. `x:12345`) or by OPEN_SIGNUP.
 """
 
 from __future__ import annotations
@@ -98,6 +100,10 @@ def register_providers() -> None:
                 "token_endpoint_auth_method": "client_secret_basic",
             },
         )
+
+
+# Providers whose sign-in always carries a verified email (access is decided by it); X has none
+EMAIL_PROVIDERS = frozenset({"google", "microsoft"})
 
 
 def configured_providers() -> list[str]:
@@ -198,13 +204,13 @@ async def normalize_profile(provider: str, client: OAuthClient, token: dict[str,
         resp = await client.get("users/me?user.fields=profile_image_url,name,username", token=token)
         data = _object(_object(resp.json()).get("data"))
         username = _text(data.get("username"))
-        # X does not return email without elevated access; key on the handle
-        email = f"{username}@x.local" if username else None
+        # X gives no email and its handles can be taken over once released, so the account is the X user id
+        # and the handle is only a label
         return {
             "provider": provider,
             "sub": _text(data.get("id")),
-            "email": email,
-            "name": _text(data.get("name")),
+            "email": None,
+            "name": _text(data.get("name")) or (f"@{username}" if username else None),
             "avatar": _text(data.get("profile_image_url")),
         }
     raise UnknownProviderError(provider)

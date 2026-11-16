@@ -29,3 +29,17 @@ describe('StudioAccount', () => {
     expect(w.text()).not.toContain('Sign out other devices')
   })
 })
+
+describe('StudioAccount for a sign-in with no email', () => {
+  it('shows the provider and the name, not an empty email', async () => {
+    fakeServer(() => ({
+      ...signedIn,
+      user: { ...signedIn.user, email: null, name: '@alice', provider: 'x' },
+    }))
+    const w = mount(StudioAccount)
+    await flushPromises()
+    expect(w.find('.em').text()).toBe('X')
+    expect(w.find('.nm').text()).toContain('@alice')
+    expect(w.find('.av').text()).toBe('A')
+  })
+})

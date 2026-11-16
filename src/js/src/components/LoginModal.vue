@@ -8,11 +8,24 @@ const { showLogin, login, devLogin } = useAuth()
 const email = ref('')
 const password = ref('')
 const error = ref('')
+// Why the provider's redirect back refused them (a sign-in is answered with `/?auth=denied`)
+const notice = ref('')
 const busy = ref(false)
 const providers = ref<string[]>([])
 const devAvailable = ref(false)
 
+function readDenied(): void {
+  const query = new URLSearchParams(location.search)
+  if (query.get('auth') !== 'denied') return
+  const id = query.get('id')
+  notice.value = id
+    ? `This sign-in isn't allowed in yet. Ask the admin to add ${id} (ALLOWED_OAUTH_IDS).`
+    : "That account isn't allowed in. Ask the admin to add your email."
+  history.replaceState(null, '', location.pathname)
+}
+
 onMounted(async () => {
+  readDenied()
   try {
     const info = await fetchAuthProviders()
     providers.value = info.providers
@@ -62,6 +75,7 @@ const providerLabels: Readonly<Record<string, string>> = { google: 'Google', mic
     <div v-if="showLogin" class="modal-backdrop">
       <div class="modal-box">
         <h3>Sign in</h3>
+        <p v-if="notice" class="error-hint">{{ notice }}</p>
         <input v-model="email" type="email" placeholder="Email" autocomplete="username" @keydown.enter="submit" />
         <input
           v-model="password"
