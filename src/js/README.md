@@ -1,118 +1,95 @@
-# Cyno Studio - Vue Frontend
+# Cyno Studio frontend
 
-A Vue 3 frontend for Cyno Studio with client-side routing.
+A Vue 3 + TypeScript single-page app. It is the whole UI: one routed view, `StudioView`, which shows a chat
+or gallery thread, the library, settings and the other panes depending on the URL.
 
-## URL Routes
+Everything here is strict TypeScript, including the tests. There is no `any` and no `ts-ignore`,
+`ts-expect-error` or `eslint-disable` for types (the one `eslint-disable` is for a DOMPurify-sanitised `v-html`).
 
-- `/` - Home page with project grid
-- `/project/:name` - Project page (defaults to gallery)
-- `/project/:name/generate` - Project generation form
-- `/project/:name/gallery` - Project video gallery
-- `/project/:name/gallery/:videoFilename` - Gallery with specific video open
-- `/project/:name/history` - Project job history
+## Commands
 
-## Project Structure
+Run from `src/js` (or use the `make` targets from the repo root).
+
+| Command                | What it does                                                                           |
+| ---------------------- | -------------------------------------------------------------------------------------- |
+| `npm run dev`          | Vite dev server on :5173, proxying `/api` to FastAPI on :5000 (`make dev` starts both) |
+| `npm run build`        | Production build into `dist/`, which the API (and nginx in the image) serves           |
+| `npm test`             | Vitest (jsdom)                                                                         |
+| `npm run lint`         | ESLint, `typescript-eslint` `strictTypeChecked`, for `.ts` and `.vue`                  |
+| `npm run typecheck`    | `vue-tsc`: every `.ts` file and every `<script setup lang="ts">`                       |
+| `npm run format:check` | Prettier                                                                               |
+| `npm run gen:api`      | Regenerate `src/api/schema.d.ts` (normally `make gen-api` from the repo root)          |
+
+CI runs lint, format, typecheck, tests, and fails if `schema.d.ts` is stale.
+
+## Routes
+
+Every route renders `StudioView`, which reads the route to pick the pane (`src/router/index.ts`).
+
+| Path                                       | Pane                                  |
+| ------------------------------------------ | ------------------------------------- |
+| `/`                                        | New thread                            |
+| `/:id` and `/:id/(chat\|gallery)`          | A thread, as a chat or as its gallery |
+| `/space/:spaceId`                          | A space's threads                     |
+| `/media`, `/favourites`                    | Media library, favourites             |
+| `/characters`, `/instructions`, `/presets` | Library pages                         |
+| `/usage`, `/requests`                      | Credit usage, provider request log    |
+| `/settings`, `/tools`                      | Settings, tools and library menu      |
+
+## Layout
 
 ```
-frontend/
-├── src/
-│   ├── router/              # Vue Router configuration
-│   │   └── index.ts
-│   ├── components/          # Reusable UI components
-│   │   ├── form/           # Form-specific components
-│   │   │   ├── RatioPicker.vue
-│   │   │   ├── LengthSlider.vue
-│   │   │   └── ToggleSwitch.vue
-│   │   ├── AppHeader.vue
-│   │   ├── ProjectCard.vue
-│   │   ├── VideoCard.vue
-│   │   ├── VideoModal.vue
-│   │   ├── JobCard.vue
-│   │   └── ToastContainer.vue
-│   ├── composables/         # Reusable logic (Vue composition API)
-│   │   ├── useApi.ts       # API calls
-│   │   ├── useToast.ts     # Toast notifications
-│   │   └── useProjectSettings.ts  # Project settings persistence
-│   ├── views/              # Page-level components
-│   │   ├── HomeView.vue    # Home page with project grid
-│   │   ├── ProjectView.vue # Project page with tabs
-│   │   └── panels/         # Tab panels
-│   │       ├── GeneratePanel.vue
-│   │       ├── GalleryPanel.vue
-│   │       └── HistoryPanel.vue
-│   ├── App.vue             # Root component
-│   ├── main.ts             # Entry point
-│   └── style.css           # Global styles
-├── package.json
-├── vite.config.js
-└── index.html
+src/
+├── api/             # The typed client
+│   ├── schema.d.ts  #   generated from the backend's OpenAPI (never edit)
+│   ├── paths.ts     #   turns `paths` into a typed `api.get('/x/${id}')`
+│   ├── http.ts      #   requests, errors, uploads, downloads
+│   └── json.ts      #   the one place server JSON gets its type
+├── composables/     # Logic. `*Api.ts` wrap endpoints; `use*.ts` are stateful composables
+│   ├── useChat.ts   #   facade over the `chat*Api.ts` modules (tests mock this one seam)
+│   ├── useStudio.ts #   the Studio's whole state, built from the `useStudio*` pieces
+│   └── studioTypes.ts # shared UI types (UiMessage, GenerationItem, panes…)
+├── components/      # <script setup lang="ts"> components
+│   ├── form/  media/  characters/  chat/  studio/
+│   └── *.vue        #   dialogs, toasts, login
+├── views/StudioView.vue
+├── utils/           # Pure helpers (formatting, storage, ref planning, card specs…)
+├── injection.ts     # Typed InjectionKeys (toast, composer settings, model catalogues)
+├── router/  main.ts  App.vue  style.css
+└── __tests__/       # Vitest, plus typed fixtures and helpers (see below)
 ```
 
-## Setup
+## How the types work
 
-1. Install dependencies:
+- The backend's Pydantic models are exported as OpenAPI (`scripts/export_openapi.py`) and turned into
+  `src/api/schema.d.ts` by `openapi-typescript`. The client in `api/` takes request and response types from it,
+  so a path the backend doesn't serve, or a body of the wrong shape, is a compile error.
+- Server JSON is trusted only through that generated schema. Anything else read from outside (localStorage,
+  third-party catalogue rows, a media card's open-JSON `params`) is parsed where it enters:
+  `utils/storage.ts` plus `readShape` for stored settings, `utils/cardSpecs.ts` for card params.
+- Components declare props and emits with `defineProps<…>()` / `defineEmits<…>()`. Under
+  `exactOptionalPropertyTypes`, an optional prop is written `x?: T | undefined`; templates read `props.x` where
+  a default makes it non-optional.
+- `useChat.ts` stays as the single facade over the API modules, so composables import from one path and tests
+  mock one module.
 
-```bash
-cd frontend
-npm install
-```
+## Scoped CSS
 
-2. Development (with hot reload):
+Styles are scoped per component, and scoped CSS does not reach into a child component. A parent that styles an
+element a child owns must say so with `:deep(...)`, or the rule silently does nothing (this once left space
+names in the sidebar underlined).
 
-```bash
-npm run dev
-```
+## Tests
 
-This starts Vite dev server on port 5173, proxying API calls to FastAPI on port 5000.
+Tests are `*.test.ts` in `src/__tests__/`, run by Vitest with `globals: true` and a jsdom environment.
 
-3. Build for production:
-
-```bash
-npm run build
-```
-
-## Development
-
-**Option 1: Use the dev script (recommended)**
-
-```bash
-./dev.sh
-```
-
-This starts both the FastAPI backend and Vue frontend dev servers.
-
-**Option 2: Run servers separately**
-
-Run the FastAPI backend in one terminal:
-
-```bash
-python web/api.py
-```
-
-Run the Vue frontend in another terminal:
-
-```bash
-cd src/js
-npm run dev
-```
-
-Then open http://localhost:5173 for development with hot reload.
-
-API documentation is available at http://localhost:5000/docs
-
-## Production
-
-Run the FastAPI server:
-
-```bash
-python web/api.py
-```
-
-Open http://localhost:5000
-
-## Features
-
-- **Deep linking**: Share URLs to specific projects, tabs, or even videos
-- **Browser history**: Back/forward buttons work as expected
-- **Bookmarkable**: Save links to frequently used project views
-- **Keyboard shortcuts**: Press Escape to close video modal
+- `models.ts`: typed builders for every row a test needs (`uiMessage`, `serverMessage`, `mediaCard`,
+  `libraryEntry`, `character`, `space`, `imageModel`…). They are complete, as the backend serves them, so a test
+  spells out only what it cares about and a fixture can't drift from the real shape.
+- `fakeServer.ts`: answers every `fetch` from one function and records the calls.
+- `dom.ts`: `one` / `all` / `defined` for reading the document (teleported dialogs live in `<body>`) and the
+  `Wrapper` type for helpers that take a mounted component. `intersection.ts` drives `IntersectionObserver`.
+- `src/vue-shim.d.ts` lets typed ESLint resolve `.vue` imports (it can't open them); `vue-tsc` still checks the
+  real component types.
+- A test that starts failing after a type change is usually a fixture or fake-server answer missing a field the
+  backend always sends: complete the fixture rather than loosening the type.

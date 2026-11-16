@@ -325,7 +325,6 @@ const bySpace = computed(() => {
    sit exactly like the buttons they replaced. */
 .newbtn,
 .footbtn,
-.fmain,
 .pillbtn.ficon {
   text-decoration: none;
   box-sizing: border-box;
@@ -447,14 +446,14 @@ const bySpace = computed(() => {
 .nrow.active {
   background: var(--saccent-soft);
 }
-.nrow.active .nitem,
-.nrow:hover .nitem {
+.nrow.active :deep(.nitem),
+.nrow:hover :deep(.nitem) {
   color: var(--sfg);
 }
-.nrow.active .ic {
+.nrow.active :deep(.nitem .ic) {
   color: var(--saccent);
 }
-.nrow.sm .nitem {
+.nrow.sm :deep(.nitem) {
   padding: 6px 10px;
   font-size: 13px;
 }

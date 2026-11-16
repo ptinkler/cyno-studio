@@ -469,11 +469,4 @@ function onToggle(item: InstructionCard): void {
   color: var(--text);
   border-color: var(--accent);
 }
-
-/* Actions at the foot of the menu: quiet rows under a divider */
-.menu-foot {
-  margin-top: 4px;
-  padding-top: 4px;
-  border-top: 1px solid var(--border);
-}
 </style>

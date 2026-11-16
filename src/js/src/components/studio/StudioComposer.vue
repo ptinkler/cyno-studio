@@ -213,10 +213,6 @@ defineExpose({ focusPrompt })
   color: var(--saccent);
   white-space: nowrap;
 }
-.est.warn {
-  color: var(--swarn);
-  cursor: help;
-}
 .compose {
   padding: 8px 22px 20px;
 }

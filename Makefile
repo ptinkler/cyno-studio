@@ -28,12 +28,12 @@ dev-frontend:
 dev:
 	$(MAKE) -j2 dev-api dev-frontend
 
-# Code standards: ruff (Python) and ESLint + Prettier (frontend). CI runs `lint`.
+# Code standards: ruff + basedpyright (Python) and ESLint + Prettier + vue-tsc (frontend). CI runs `lint`.
 lint:
 	.venv/bin/ruff check .
 	.venv/bin/ruff format --check .
 	.venv/bin/basedpyright
-	cd src/js && npm run lint && npm run format:check
+	cd src/js && npm run lint && npm run format:check && npm run typecheck
 
 format:
 	.venv/bin/ruff check --fix .

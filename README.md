@@ -38,22 +38,22 @@ Upgrading an existing single-user install? See [Users & access](#users--access) 
 
 See `.env.example` for the full list.
 
-| Variable | Description |
-|----------|-------------|
-| `ADMIN_EMAILS` | Comma-separated admin emails; they log in with a password and control the VPN |
-| `ALLOWED_EMAILS` | Non-admins allowed to sign in via OAuth (admins always may) |
-| `OPEN_SIGNUP` | `true` = anyone who authenticates gets an account |
-| `SESSION_SECRET` | Signs the login cookie |
-| `PASSWORD_PEPPER` | Server-side secret mixed into password hashes — set once, never change |
-| `KEYS_SECRET` | Encrypts stored per-user provider keys — set once, never change |
-| `PUBLIC_BASE_URL` | Public https base URL for OAuth callbacks (behind a proxy/DDNS) |
-| `*_OAUTH_CLIENT_ID` / `*_OAUTH_CLIENT_SECRET` | Google/Microsoft/X credentials; a provider turns on when both are set |
-| `CYNO_HOST_DATA_DIR` | Host path for persistent data (videos, DB) |
-| `APP_PORT` | Host port to expose the app on (default `8080`) |
-| `COMPOSE_PROFILES` | `novpn` (default) or `vpn` — selects the stack |
-| `PUID` / `PGID` | User/group the app container runs as (run `id` to find values) |
-| `APP_HOSTNAME` | Hostname for HTTPS redirect (Synology boot script) |
-| `GLUETUN_API_KEY` | Gluetun control server API key (VPN stack only) |
+| Variable                                      | Description                                                                   |
+| --------------------------------------------- | ----------------------------------------------------------------------------- |
+| `ADMIN_EMAILS`                                | Comma-separated admin emails; they log in with a password and control the VPN |
+| `ALLOWED_EMAILS`                              | Non-admins allowed to sign in via OAuth (admins always may)                   |
+| `OPEN_SIGNUP`                                 | `true` = anyone who authenticates gets an account                             |
+| `SESSION_SECRET`                              | Signs the login cookie                                                        |
+| `PASSWORD_PEPPER`                             | Server-side secret mixed into password hashes — set once, never change        |
+| `KEYS_SECRET`                                 | Encrypts stored per-user provider keys — set once, never change               |
+| `PUBLIC_BASE_URL`                             | Public https base URL for OAuth callbacks (behind a proxy/DDNS)               |
+| `*_OAUTH_CLIENT_ID` / `*_OAUTH_CLIENT_SECRET` | Google/Microsoft/X credentials; a provider turns on when both are set         |
+| `CYNO_HOST_DATA_DIR`                          | Host path for persistent data (videos, DB)                                    |
+| `APP_PORT`                                    | Host port to expose the app on (default `8080`)                               |
+| `COMPOSE_PROFILES`                            | `novpn` (default) or `vpn` — selects the stack                                |
+| `PUID` / `PGID`                               | User/group the app container runs as (run `id` to find values)                |
+| `APP_HOSTNAME`                                | Hostname for HTTPS redirect (Synology boot script)                            |
+| `GLUETUN_API_KEY`                             | Gluetun control server API key (VPN stack only)                               |
 
 Provider keys (`POLLO_API_KEY`, `OPENROUTER_API_KEY`, `VENICE_API_KEY`) are entered per-user in the UI and are never read from the environment.
 
@@ -68,6 +68,7 @@ Multi-user: each user signs in, gets their own data (chats, projects, media, cha
   ```bash
   docker compose exec app python -m web.provision_admin --email you@gmail.com --set-password
   ```
+
 - **Upgrading a single-user install** — set `ADMIN_EMAILS` **before the first start**: migration `0020` backfills all existing data to that admin (or to a throwaway `admin@local` if unset). Then run `provision_admin --email you@… --claim-orphans` to adopt any remaining unowned data and move the old shared library into the admin's folder.
 - **OAuth setup** — set `PUBLIC_BASE_URL` and register each provider's redirect URI as `<PUBLIC_BASE_URL>/api/auth/callback/<provider>`.
 
@@ -86,8 +87,8 @@ WIREGUARD_ADDRESSES=...
 
 ## Models
 
-| Model | Type | Notes |
-|-------|------|-------|
+| Model     | Type    | Notes          |
+| --------- | ------- | -------------- |
 | Pollo 2.0 | img2vid | 5s or 10s only |
 
 ## Development
@@ -105,10 +106,14 @@ make hooks      # check (and fix) staged files on every commit
 Code standards, enforced in CI:
 
 - **Python** — [ruff](https://docs.astral.sh/ruff/) for linting (PEP 8, pyflakes, import order, bugbear,
-  pyupgrade, simplifications, and a cyclomatic complexity limit of 10) and formatting. 120-column lines.
+  pyupgrade, simplifications, and a cyclomatic complexity limit of 7) and formatting. 120-column lines.
   Settings in `pyproject.toml`.
-- **Frontend** — ESLint (`eslint:recommended` + `plugin:vue/recommended`, complexity limit 12) and Prettier
-  (no semicolons, single quotes, 120 columns). Settings in `src/js/eslint.config.js` and `.prettierrc.json`.
+- **Frontend** — everything under `src/js/src` is strict TypeScript (`vue-tsc`: `strict`,
+  `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), with no `any` and no suppressions. ESLint
+  runs `typescript-eslint` `strictTypeChecked` (complexity limit 10, 600 lines per file) and Prettier
+  (no semicolons, single quotes, 120 columns). API types are generated from the backend (`make gen-api`).
+  Settings in `src/js/eslint.config.js`, `src/js/tsconfig.json` and `.prettierrc.json`. See
+  [src/js/README.md](src/js/README.md).
 - **Line endings** — LF everywhere (`.gitattributes`, `.editorconfig`).
 
 ## Data

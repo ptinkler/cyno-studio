@@ -126,6 +126,9 @@ const renameText = defineModel<string>('renameText', { default: '' })
   border: none;
   cursor: pointer;
   text-align: left;
+  /* an <a> (so it opens in a new tab) that must look like the button it replaced */
+  text-decoration: none;
+  box-sizing: border-box;
 }
 .fmain .ic {
   color: var(--sfaint);
