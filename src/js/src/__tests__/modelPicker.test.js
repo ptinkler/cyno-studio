@@ -7,11 +7,12 @@ import ModelPicker from '../components/chat/ModelPicker.vue'
 import { useModelFavourites } from '../composables/useModelFavourites'
 import { useModelFilters } from '../composables/useModelFilters'
 import { useShowHidden } from '../composables/useShowHidden'
+import { imageModel, videoModel } from './models'
 
 const MODELS = [
-  { id: 'a/alpha', name: 'Alpha' },
-  { id: 'b/beta', name: 'Beta' },
-  { id: 'c/gamma', name: 'Gamma' },
+  imageModel({ id: 'a/alpha', name: 'Alpha' }),
+  imageModel({ id: 'b/beta', name: 'Beta' }),
+  imageModel({ id: 'c/gamma', name: 'Gamma' }),
 ]
 
 async function openPicker(props = {}) {
@@ -168,10 +169,7 @@ describe('Failed media card', () => {
   }
   const provide = {
     chatModels: {
-      image: [
-        { id: 'x/strict', name: 'Strict' },
-        { id: 'y/lenient', name: 'Lenient' },
-      ],
+      image: [imageModel({ id: 'x/strict', name: 'Strict' }), imageModel({ id: 'y/lenient', name: 'Lenient' })],
       video: [],
     },
   }
@@ -238,10 +236,10 @@ describe('Media note lines in replies', () => {
 
 describe('ModelPicker provider & tag filters', () => {
   const MIXED = [
-    { id: 'pollo/a', name: 'Pollo A', tags: ['img2vid', 'audio'] },
-    { id: 'pollo/b', name: 'Pollo B', tags: ['img2vid'] },
-    { id: 'google/g', name: 'Gemini', tags: ['text2vid'] },
-    { id: 'qwen/q', name: 'Qwen OR', tags: ['img2vid'] },
+    videoModel({ id: 'pollo/a', name: 'Pollo A', tags: ['img2vid', 'audio'] }),
+    videoModel({ id: 'pollo/b', name: 'Pollo B', tags: ['img2vid'] }),
+    videoModel({ id: 'google/g', name: 'Gemini', tags: ['text2vid'] }),
+    videoModel({ id: 'qwen/q', name: 'Qwen OR', tags: ['img2vid'] }),
   ]
   const providerChips = w => w.findAll('.frow.provider').map(c => `${c.find('.fpill').text()} ${c.find('.fn').text()}`)
   const tagChips = w => w.findAll('.frow.tag').map(c => `${c.find('.fpill').text()} ${c.find('.fn').text()}`)
@@ -339,7 +337,7 @@ describe('ModelPicker provider & tag filters', () => {
   })
 
   it('adds a Venice chip, and only shows chips for providers that have models', async () => {
-    const withVenice = [...MIXED, { id: 'venice/v', name: 'Venice V', tags: ['img2vid'] }]
+    const withVenice = [...MIXED, videoModel({ id: 'venice/v', name: 'Venice V', tags: ['img2vid'] })]
     const w = await openVid({ models: withVenice })
     expect(providerChips(w)).toEqual(['Pollo 2', 'Venice 1', 'OpenRouter 2'])
     w.unmount()
@@ -350,8 +348,8 @@ describe('ModelPicker provider & tag filters', () => {
 
   it('marks uncensored models in the list and on the closed picker', async () => {
     const models = [
-      { id: 'venice/lustify-v8', name: 'Venice: Lustify', uncensored: true },
-      { id: 'venice/flux-2-pro', name: 'Venice: Flux 2 Pro' },
+      imageModel({ id: 'venice/lustify-v8', name: 'Venice: Lustify', uncensored: true }),
+      imageModel({ id: 'venice/flux-2-pro', name: 'Venice: Flux 2 Pro' }),
     ]
     const w = await openPicker({ models })
     const badgesOf = name =>
@@ -371,9 +369,9 @@ describe('ModelPicker provider & tag filters', () => {
 
   it('shows Venice privacy levels in the list and on the closed picker', async () => {
     const models = [
-      { id: 'venice/lustify-v8', name: 'Venice: Lustify', privacy: 'private' },
-      { id: 'venice/flux-2-pro', name: 'Venice: Flux 2 Pro', privacy: 'anonymized' },
-      { id: 'venice/other', name: 'Venice: Other' },
+      imageModel({ id: 'venice/lustify-v8', name: 'Venice: Lustify', privacy: 'private' }),
+      imageModel({ id: 'venice/flux-2-pro', name: 'Venice: Flux 2 Pro', privacy: 'anonymized' }),
+      imageModel({ id: 'venice/other', name: 'Venice: Other' }),
     ]
     const w = await openPicker({ models })
     const item = name => w.findAll('.picker-item').find(i => i.text().includes(name))
@@ -393,8 +391,8 @@ describe('ModelPicker provider & tag filters', () => {
 describe('ModelPicker row badges', () => {
   it('shows capability tags on the row, folding more than two into coloured dots', async () => {
     const models = [
-      { id: 'pollo/few', name: 'Few', tags: ['img2vid', 'motion'] },
-      { id: 'pollo/many', name: 'Many', tags: ['img2vid', 'text2vid', 'motion', 'audio'] },
+      videoModel({ id: 'pollo/few', name: 'Few', tags: ['img2vid', 'motion'] }),
+      videoModel({ id: 'pollo/many', name: 'Many', tags: ['img2vid', 'text2vid', 'motion', 'audio'] }),
     ]
     const w = await openPicker({ kind: 'video', models })
     const row = name => w.findAll('.picker-item').find(i => i.find('.item-name').text() === name)
@@ -418,9 +416,9 @@ describe('ModelPicker row badges', () => {
 
 describe('ModelPicker uncensored filter', () => {
   const CATALOGUE = [
-    { id: 'venice/lustify-v8', name: 'Venice: Lustify', uncensored: true },
-    { id: 'venice/flux-2-pro', name: 'Venice: Flux 2 Pro' },
-    { id: 'or/img', name: 'OpenRouter Img' },
+    imageModel({ id: 'venice/lustify-v8', name: 'Venice: Lustify', uncensored: true }),
+    imageModel({ id: 'venice/flux-2-pro', name: 'Venice: Flux 2 Pro' }),
+    imageModel({ id: 'or/img', name: 'OpenRouter Img' }),
   ]
   beforeEach(() => {
     localStorage.clear()
@@ -470,8 +468,8 @@ describe('ModelPicker prices', () => {
         label: 'Image',
         kind: 'image',
         models: [
-          { id: 'venice/a', name: 'A', price: { usd: 0.05, basis: '' } },
-          { id: 'venice/b', name: 'B', price: { usd: 0.1, basis: '1K' } },
+          imageModel({ id: 'venice/a', name: 'A', price: { usd: 0.05, basis: '' } }),
+          imageModel({ id: 'venice/b', name: 'B', price: { usd: 0.1, basis: '1K' } }),
         ],
       },
     })
@@ -483,7 +481,7 @@ describe('ModelPicker prices', () => {
       props: {
         label: 'Video',
         kind: 'video',
-        models: [{ id: 'venice/v', name: 'V', price: { usd: 0.65, basis: '5s · 720p' } }],
+        models: [imageModel({ id: 'venice/v', name: 'V', price: { usd: 0.65, basis: '5s · 720p' } })],
       },
     })
     await vid.find('.picker-btn').trigger('click')
@@ -498,7 +496,7 @@ describe('ModelPicker pop-up placement', () => {
     const w = mount(ModelPicker, {
       attachTo: document.body,
       props: {
-        models: [{ id: 'a/b', name: 'A' }],
+        models: [imageModel({ id: 'a/b', name: 'A' })],
         label: 'Chat',
         kind: 'text',
       },
@@ -515,12 +513,12 @@ describe('ModelPicker pop-up placement', () => {
 
 describe('ModelPicker hidden models', () => {
   const WITH_HIDDEN = [
-    { id: 'pollo/seedream', name: 'Pollo: Seedream 5.0 Lite' },
-    {
+    imageModel({ id: 'pollo/seedream', name: 'Pollo: Seedream 5.0 Lite' }),
+    imageModel({
       id: 'pollo/seedreampro',
       name: 'Pollo: Seedream 5.0 Pro',
       hidden: 'Not enabled for API access on this key (403)',
-    },
+    }),
   ]
   const modelNames = w => names(w).filter(n => n !== 'None')
 

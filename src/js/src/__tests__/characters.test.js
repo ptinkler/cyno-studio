@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import CharacterPicker from '../components/characters/CharacterPicker.vue'
 import CharacterEditor from '../components/characters/CharacterEditor.vue'
+import { imageModel } from './models'
 
 const linh = { id: 1, name: 'Linh', description: 'red scarf', images: ['a.png'], adhoc: false }
 const bao = { id: 2, name: 'Bao', description: '', images: [], adhoc: true }
@@ -140,8 +141,8 @@ describe('which models can use characters', () => {
         label: 'Image',
         modelValue: '',
         models: [
-          { id: 'a/refs', name: 'Refs', input_modalities: ['text', 'image'] },
-          { id: 'b/prompt', name: 'Prompt only', input_modalities: ['text'] },
+          imageModel({ id: 'a/refs', name: 'Refs', input_modalities: ['text', 'image'] }),
+          imageModel({ id: 'b/prompt', name: 'Prompt only', input_modalities: ['text'] }),
         ],
       },
       attachTo: document.body,

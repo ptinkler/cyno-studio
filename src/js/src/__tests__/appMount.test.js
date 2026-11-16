@@ -7,12 +7,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { createApp, nextTick } from 'vue'
+import { audioModel, imageModel, textModel, videoModel } from './models'
 
 const MODELS = {
-  text: [{ id: 'openai/gpt-5', name: 'GPT-5', supports_tools: true, tags: ['vision', 'functions'] }],
-  image: [{ id: 'pollo/seedream', name: 'Pollo: Seedream', tags: ['text2img'], aspect_ratios: ['1:1'] }],
-  video: [{ id: 'pollo/seedance20fast', name: 'Pollo: Seedance', tags: ['img2vid', 'audio'], durations: [5, 10] }],
-  audio: [{ id: 'pollo/elevenv3', name: 'Pollo: ElevenLabs', type: 'speech', options: ['voice'] }],
+  text: [textModel({ id: 'openai/gpt-5', name: 'GPT-5', supports_tools: true, tags: ['vision', 'functions'] })],
+  image: [imageModel({ id: 'pollo/seedream', name: 'Pollo: Seedream', tags: ['text2img'], aspect_ratios: ['1:1'] })],
+  video: [
+    videoModel({ id: 'pollo/seedance20fast', name: 'Pollo: Seedance', tags: ['img2vid', 'audio'], durations: [5, 10] }),
+  ],
+  audio: [audioModel({ id: 'pollo/elevenv3', name: 'Pollo: ElevenLabs', type: 'speech', options: ['voice'] })],
 }
 
 // What each endpoint the Studio calls on load answers; anything else gets an empty object
