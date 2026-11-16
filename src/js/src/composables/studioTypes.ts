@@ -86,6 +86,8 @@ export interface RegenerateRequest {
   prompt?: string
   edit?: boolean
   replace?: boolean
+  /** The chat's pictures to give the model as references (the whole set; omit to leave them as they were). */
+  refs?: string[]
 }
 
 export type InstructionKind = 'snippet' | 'group'

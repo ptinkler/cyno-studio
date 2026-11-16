@@ -3480,6 +3480,8 @@ export interface components {
             model?: string | null;
             /** Prompt */
             prompt?: string | null;
+            /** Refs */
+            refs?: string[] | null;
             /**
              * Replace
              * @default false

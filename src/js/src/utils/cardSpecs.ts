@@ -92,3 +92,23 @@ export function refUrl(convId: string, ref: string): string {
   const [, id, file] = match ?? []
   return id !== undefined && file !== undefined ? characterImageUrl(Number(id), file) : chatMediaUrl(convId, ref)
 }
+
+const refItemImages = (items: unknown): string[] =>
+  Array.isArray(items)
+    ? items.flatMap(item => {
+        const r = asRecord(item)
+        const file = r['file']
+        return r['type'] === 'image' && typeof file === 'string' ? [file] : []
+      })
+    : []
+
+/**
+ * The chat's pictures a card was made from, in the order they were given: the frames, the references, the named
+ * images. A character's images are left out (they follow the card; the picker only handles chat files).
+ */
+export function cardRefFiles(raw: Record<string, unknown> | null | undefined): string[] {
+  const p = cardParams(raw)
+  const named = refItemImages(asRecord(raw)['ref_items'])
+  const files = [p.first_frame, p.last_frame, ...p.refs, ...named].filter(f => f && !f.startsWith('char:'))
+  return [...new Set(files)]
+}

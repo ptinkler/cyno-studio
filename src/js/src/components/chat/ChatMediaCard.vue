@@ -5,8 +5,9 @@ import type { MediaCard } from '../../composables/chatConversationsApi'
 import { chatMediaPreviewUrl, chatMediaUrl } from '../../composables/useChat'
 import type { GenerationItem, ImagePick, RegenerateRequest, UiMessage } from '../../composables/studioTypes'
 import { useCopy } from '../../composables/useClipboard'
+import { videoImageLimit } from '../../composables/useStudioAttachments'
 import { bigView, canPinMedia } from '../../utils/chatMedia'
-import { cardParams, cardSpecs, refUrl, refsLabel, refsTitle } from '../../utils/cardSpecs'
+import { cardParams, cardRefFiles, cardSpecs, refUrl, refsLabel, refsTitle } from '../../utils/cardSpecs'
 import type { CardParams } from '../../utils/cardSpecs'
 import { shortModel, fmtCost } from '../../utils/format'
 import ModelPicker from './ModelPicker.vue'
@@ -97,20 +98,42 @@ function stepVersion(item: MediaCard, by: number): void {
 
 // The box the pencil and Redo open: one prompt, applied to this picture alone.
 // `edit` sends the picture back as the reference; Redo just re-runs the words.
-const promptBox = ref<{ mediaId: string; edit: boolean; text: string } | null>(null)
-function openPrompt(item: MediaCard, edit: boolean): void {
-  promptBox.value = { mediaId: item.id, edit, text: edit ? '' : (item.prompt ?? '') }
+// Either can take reference pictures too: Redo starts with the ones the card
+// was made from (take any away or add more); an edit starts with none, since
+// the picture itself is the reference.
+interface PromptState {
+  mediaId: string
+  edit: boolean
+  text: string
+  /** Pictures it began with, to tell whether they were changed. */
+  start: string[]
+  refs: string[]
 }
+const promptBox = ref<PromptState | null>(null)
+function openPrompt(item: MediaCard, edit: boolean): void {
+  const start = edit ? [] : cardRefFiles(item.params)
+  promptBox.value = { mediaId: item.id, edit, text: edit ? '' : (item.prompt ?? ''), start, refs: [...start] }
+}
+// How many pictures the card's model takes (a video model's own limits; images take the usual most)
+function refLimit(item: MediaCard): number | undefined {
+  if (item.kind !== 'video') return undefined
+  return videoImageLimit(chatModels.video.find(m => m.id === item.model))
+}
+const sameFiles = (a: readonly string[], b: readonly string[]): boolean =>
+  a.length === b.length && a.every((file, i) => file === b[i])
 function submitPrompt(item: MediaCard): void {
   const box = promptBox.value
   if (!box?.text.trim()) return
   promptBox.value = null
+  // Pictures are sent only when they differ from what the card already had
+  const changed = box.edit ? box.refs.length > 0 : !sameFiles(box.refs, box.start)
   emit('regenerate', {
     mediaId: item.id,
     model: item.model ?? null,
     prompt: box.text.trim(),
     edit: box.edit,
     replace: true,
+    ...(changed ? { refs: box.refs } : {}),
   })
 }
 
@@ -294,6 +317,10 @@ const requestItem = ref<MediaCard | null>(null)
     <PromptBox
       v-if="promptBox?.mediaId === item.id"
       v-model="promptBox.text"
+      v-model:refs="promptBox.refs"
+      :conv-id="convId"
+      :start-refs="promptBox.start"
+      :ref-limit="refLimit(item)"
       :placeholder="promptBox.edit ? 'Describe the change…' : 'Prompt for the new version…'"
       :hint="promptBox.edit ? 'Edits this picture' : 'Makes a new one from the prompt alone'"
       :submit-label="promptBox.edit ? 'Edit' : 'Redo'"

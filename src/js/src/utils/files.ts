@@ -9,3 +9,7 @@ export function takeFiles(event: Event): File[] {
   input.value = ''
   return files
 }
+
+/** The images among a paste or drop's files (a pasted screenshot arrives as a file, not as text). */
+export const imagesIn = (files: Iterable<File> | null | undefined): File[] =>
+  [...(files ?? [])].filter(f => f.type.startsWith('image/'))

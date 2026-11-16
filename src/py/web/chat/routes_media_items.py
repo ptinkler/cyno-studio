@@ -36,6 +36,7 @@ from web.chat.helpers import (
     saved_media,
     shown_message,
 )
+from web.chat.regen_refs import checked_refs, regeneration_params
 from web.chat.schemas import ActiveGenerations, Generation, ShownMessage
 from web.chat.workers import with_owner_keys
 from web.core.metadata import get_db, iso
@@ -108,6 +109,9 @@ class RegenerateMedia(BaseModel):
     # Replace the item rather than adding a new one beside it: the picture it
     # had moves into `versions`, so nothing is lost and the card can flip back.
     replace: bool = False
+    # The chat's pictures the new run is given as references (None = as the item had them; an edit
+    # always leads with the picture itself). Taken as the whole set, so leaving one out drops it.
+    refs: list[str] | None = None
 
 
 # A card's pictures: the live one is the item's own fields; the others are in
@@ -215,6 +219,11 @@ def _regeneration_inputs(message_id: int, media_id: str, data: RegenerateMedia) 
         # The picture being edited leads the reference list; the references it
         # was itself made from are dropped, so the model edits this one image.
         params["refs"] = [file, *(r for r in as_list(params.get("refs")) if str(r).startswith("char:"))]
+    if data.refs is not None:
+        conv_id = _require_message(get_db().get_chat_message(message_id)).conversation_id
+        picked = checked_refs(conv_id, data.refs)
+        lead = [file] if data.edit and file else []
+        params = regeneration_params(as_str(item.get("kind")), model, prompt, params, [*lead, *picked])
     return item, _Rerun(model, prompt, params)
 
 

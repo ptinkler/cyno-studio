@@ -1,9 +1,10 @@
-import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
 import ChatMessage from '../components/chat/ChatMessage.vue'
 import type { MediaCard } from '../composables/chatConversationsApi'
 import type { UiMessage } from '../composables/studioTypes'
 import { one } from './dom'
+import { fakeServer } from './fakeServer'
 import { mediaCard, uiMessage } from './models'
 
 const image = mediaCard({ id: 'm1', file: 'img_a.png', prompt: 'a fox' })
@@ -516,6 +517,85 @@ describe('ChatMessage edit and redo a picture in place', () => {
     const w = mount(ChatMessage, reply([image], { status: 'streaming' }))
     expect(w.find('button[title^="Edit this picture"]').exists()).toBe(false)
     expect(w.find('button[title^="Make it again"]').exists()).toBe(false)
+  })
+})
+
+describe('ChatMessage references on an Edit or Redo', () => {
+  const withRefs: MediaCard = { ...image, params: { refs: ['up_1.png', 'char:3/c.png', 'up_2.png'] } }
+  beforeEach(() => {
+    // jsdom has no object URLs: a pasted picture's thumbnail needs one
+    URL.createObjectURL = vi.fn(() => 'blob:preview')
+    URL.revokeObjectURL = vi.fn()
+  })
+  const thumbs = (w: { findAll: (selector: string) => { attributes: (name: string) => string | undefined }[] }) =>
+    w.findAll('.prompt-box .att-media img').map(i => i.attributes('src'))
+
+  it('Redo starts with the pictures the card was made from, without the characters', async () => {
+    const w = mount(ChatMessage, reply([withRefs]))
+    await w.find('button[title^="Make it again"]').trigger('click')
+    expect(thumbs(w)).toEqual(['/api/chat/media/c1/up_1.png', '/api/chat/media/c1/up_2.png'])
+  })
+
+  it('Edit starts with none: the picture itself is the reference', async () => {
+    const w = mount(ChatMessage, reply([withRefs]))
+    await w.find('button[title^="Edit this picture"]').trigger('click')
+    expect(thumbs(w)).toEqual([])
+    expect(w.find('.prompt-box .addtile').exists()).toBe(true)
+  })
+
+  it('sends no references when they are left as they were', async () => {
+    const w = mount(ChatMessage, reply([withRefs]))
+    await w.find('button[title^="Make it again"]').trigger('click')
+    await w.find('.prompt-box .edit-send').trigger('click')
+    expect(w.emitted('regenerate')?.[0]?.[0]).not.toHaveProperty('refs')
+  })
+
+  it('sends the pictures that are left once one is taken away', async () => {
+    fakeServer(() => ({ deleted: false }))
+    const w = mount(ChatMessage, reply([withRefs]))
+    await w.find('button[title^="Make it again"]').trigger('click')
+    await w.find('.prompt-box .attx').trigger('click')
+    await w.find('.prompt-box .edit-send').trigger('click')
+    expect(w.emitted('regenerate')?.[0]?.[0]).toMatchObject({ refs: ['up_2.png'], edit: false })
+  })
+
+  it('an edit sends what was added', async () => {
+    const w = mount(ChatMessage, reply([image]))
+    await w.find('button[title^="Edit this picture"]').trigger('click')
+    // Pasting a picture uploads it to the chat first, then it is a reference
+    fakeServer(() => ({ file: 'up_new.png' }))
+    const png = new File(['x'], 'p.png', { type: 'image/png' })
+    await w.find('.prompt-box textarea').trigger('paste', { clipboardData: { files: [png] } })
+    await flushPromises()
+    await w.find('.prompt-box textarea').setValue('as a cat')
+    await w.find('.prompt-box .edit-send').trigger('click')
+    expect(w.emitted('regenerate')?.[0]?.[0]).toMatchObject({ edit: true, prompt: 'as a cat', refs: ['up_new.png'] })
+  })
+
+  it('waits for an upload to finish before sending', async () => {
+    const w = mount(ChatMessage, reply([image]))
+    await w.find('button[title^="Edit this picture"]').trigger('click')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise(() => undefined)),
+    )
+    const png = new File(['x'], 'p.png', { type: 'image/png' })
+    await w.find('.prompt-box textarea').trigger('paste', { clipboardData: { files: [png] } })
+    await flushPromises()
+    await w.find('.prompt-box textarea').setValue('as a cat')
+    expect(w.find('.prompt-box .edit-send').attributes('disabled')).toBeDefined()
+  })
+
+  it('cancelling throws away what was uploaded for it', async () => {
+    const calls = fakeServer(() => ({ file: 'up_new.png', deleted: true }))
+    const w = mount(ChatMessage, reply([image]))
+    await w.find('button[title^="Edit this picture"]').trigger('click')
+    const png = new File(['x'], 'p.png', { type: 'image/png' })
+    await w.find('.prompt-box textarea').trigger('paste', { clipboardData: { files: [png] } })
+    await flushPromises()
+    await w.find('.prompt-box .meta-btn').trigger('click')
+    await flushPromises()
+    expect(calls.some(c => c.method === 'DELETE' && c.url.endsWith('/attachments/up_new.png'))).toBe(true)
   })
 })
 

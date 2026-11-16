@@ -12,7 +12,7 @@ const refModeImageLimit = (refMode: NonNullable<VideoModel['ref_mode']>): number
   refMode.limits?.image ?? refMode.max ?? MAX_ATTACHMENTS
 
 // How many images a video model takes (its catalogue entry `v`, undefined while that is loading)
-function videoImageLimit(v: VideoModel | undefined): number {
+export function videoImageLimit(v: VideoModel | undefined): number {
   if (!v) return MAX_ATTACHMENTS
   // Reference-to-video: as many images as the model's ref_mode allows.
   if (v.ref_mode) return refModeImageLimit(v.ref_mode)
