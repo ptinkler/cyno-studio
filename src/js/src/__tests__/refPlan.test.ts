@@ -3,8 +3,8 @@ import { charRef, planRefs } from '../utils/refPlan'
 
 const A = { id: 1, images: ['a0', 'a1', 'a2'] }
 const B = { id: 2, images: ['b0', 'b1', 'b2'] }
-const a = i => charRef(1, `a${i}`)
-const b = i => charRef(2, `b${i}`)
+const a = (i: number): string => charRef(1, `a${String(i)}`)
+const b = (i: number): string => charRef(2, `b${String(i)}`)
 
 describe('planRefs (mirrors plan_refs in web/chat/generation.py)', () => {
   it('sends everything in priority order when the maximum is unknown', () => {

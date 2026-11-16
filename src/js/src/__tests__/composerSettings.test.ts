@@ -1,21 +1,24 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { reactive } from 'vue'
 import { useComposerSettings } from '../composables/useComposerSettings'
-import { composerSettings } from './models'
+import type { Catalogues } from '../composables/useComposerSettings'
+import { audioModel, composerSettings, conversation, imageModel, textModel, videoModel } from './models'
 
 const STORE_KEY = 'chat.prefs'
 
 // A catalogue in the shape /api/chat/models returns
 const catalogue = () =>
-  reactive({
-    text: [{ id: 'anthropic/claude-sonnet', supports_tools: true }, { id: 'openai/gpt-5' }],
-    image: [{ id: 'pollo/seedream' }, { id: 'pollo/flux2max' }],
-    video: [{ id: 'pollo/seedance20fast' }],
-    audio: [{ id: 'pollo/elevenv3' }],
+  reactive<Catalogues>({
+    text: [textModel({ id: 'anthropic/claude-sonnet', supports_tools: true }), textModel({ id: 'openai/gpt-5' })],
+    image: [imageModel({ id: 'pollo/seedream' }), imageModel({ id: 'pollo/flux2max' })],
+    video: [videoModel({ id: 'pollo/seedance20fast' })],
+    audio: [audioModel({ id: 'pollo/elevenv3' })],
   })
 
 describe('useComposerSettings: remembered models that no longer exist', () => {
-  beforeEach(() => localStorage.clear())
+  beforeEach(() => {
+    localStorage.clear()
+  })
 
   it('replaces a renamed or retired pick with a default', () => {
     // what this browser remembered before the Pollo keys lost their v1 suffix
@@ -55,13 +58,15 @@ describe('useComposerSettings: remembered models that no longer exist', () => {
     const s = useComposerSettings(catalogue())
     s.applyDefaults()
     const before = s.selected.image
-    s.applyChat({ image_model: 'pollo/polloimage2', settings: null })
+    s.applyChat(conversation({ image_model: 'pollo/polloimage2', settings: null }))
     expect(s.selected.image).toBe(before)
   })
 
   it('adopts a thread model the catalogue has', () => {
     const s = useComposerSettings(catalogue())
-    s.applyChat({ image_model: 'pollo/flux2max', settings: composerSettings({ audio_model: 'pollo/elevenv3' }) })
+    s.applyChat(
+      conversation({ image_model: 'pollo/flux2max', settings: composerSettings({ audio_model: 'pollo/elevenv3' }) }),
+    )
     expect(s.selected.image).toBe('pollo/flux2max')
     expect(s.selected.audio).toBe('pollo/elevenv3')
   })

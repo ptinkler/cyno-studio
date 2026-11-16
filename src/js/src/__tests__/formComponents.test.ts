@@ -34,7 +34,7 @@ describe('SleekInput', () => {
       props: { label: 'URL', modelValue: '' },
     })
     await wrapper.find('input').setValue('https://example.com')
-    expect(wrapper.emitted('update:modelValue')[0]).toEqual(['https://example.com'])
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual(['https://example.com'])
   })
 
   it('renders placeholder', () => {
@@ -105,7 +105,7 @@ describe('SleekSelect', () => {
     })
     const opts = wrapper.findAll('option')
     expect(opts).toHaveLength(2)
-    expect(opts[0].text()).toBe('480p')
+    expect(opts[0]?.text()).toBe('480p')
   })
 
   it('renders object options with label/value', () => {
@@ -113,8 +113,8 @@ describe('SleekSelect', () => {
       props: { label: 'Model', modelValue: 'pollodance20', options: objectOptions },
     })
     const opts = wrapper.findAll('option')
-    expect(opts[0].text()).toBe('Sora 2')
-    expect(opts[0].attributes('value')).toBe('pollodance20')
+    expect(opts[0]?.text()).toBe('Sora 2')
+    expect(opts[0]?.attributes('value')).toBe('pollodance20')
   })
 
   it('emits on change', async () => {
@@ -122,7 +122,7 @@ describe('SleekSelect', () => {
       props: { label: 'Res', modelValue: '480p', options: stringOptions },
     })
     await wrapper.find('select').setValue('720p')
-    expect(wrapper.emitted('update:modelValue')[0]).toEqual(['720p'])
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual(['720p'])
   })
 
   it('renders hint', () => {
@@ -170,7 +170,7 @@ describe('SleekTextarea', () => {
       props: { label: 'Prompt', modelValue: '' },
     })
     await wrapper.find('textarea').setValue('Hello world')
-    expect(wrapper.emitted('update:modelValue')[0]).toEqual(['Hello world'])
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual(['Hello world'])
   })
 
   it('renders placeholder', () => {

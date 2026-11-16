@@ -7,23 +7,25 @@
  */
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
+import type { VueWrapper } from '@vue/test-utils'
 import StudioSidebar from '../components/studio/StudioSidebar.vue'
 import StudioBalances from '../components/studio/StudioBalances.vue'
-import { uiMessage } from './models'
+import type { ConversationSummary } from '../composables/chatConversationsApi'
+import { space, thread, uiMessage } from './models'
 
-const sidebar = (threads = [{ id: 't1', title: 'A thread', kind: 'chat' }]) =>
+const sidebar = (threads: ConversationSummary[] = [thread({ id: 't1', title: 'A thread' })]) =>
   mount(StudioSidebar, {
     props: {
       threads,
-      spaces: [{ id: 3, name: 'Novel' }],
-      activeId: null,
+      spaces: [space({ id: 3, name: 'Novel' })],
+      active: null,
       collapsed: false,
       search: '',
       filter: 'all',
     },
   })
 
-const hrefOf = (w, text) =>
+const hrefOf = (w: Pick<VueWrapper, 'findAll'>, text: string) =>
   w
     .findAll('a')
     .find(a => a.text().trim() === text || a.attributes('title') === text)
@@ -71,18 +73,18 @@ describe('sidebar navigation is linkable', () => {
   })
 
   it('lets a chat be pinned and unpinned from its row actions', async () => {
-    const thread = { id: 't1', title: 'A thread', kind: 'chat' }
-    const w = sidebar([thread])
+    const row = thread({ id: 't1', title: 'A thread' })
+    const w = sidebar([row])
 
     expect(w.findAll('.nrow .nact').map(button => button.attributes('title'))).toEqual(['Rename', 'Pin', 'Delete'])
     expect(w.find('button[aria-label="Pin chat"]').exists()).toBe(true)
     expect(w.find('button[aria-label="Delete chat"]').exists()).toBe(true)
     await w.find('button[aria-label="Pin chat"]').trigger('click')
-    expect(w.emitted('pin')).toEqual([[thread]])
+    expect(w.emitted('pin')).toEqual([[row]])
     await w.find('button[aria-label="Delete chat"]').trigger('click')
-    expect(w.emitted('delete')).toEqual([[thread]])
+    expect(w.emitted('delete')).toEqual([[row]])
 
-    const pinned = sidebar([{ ...thread, pinned: true }])
+    const pinned = sidebar([{ ...row, pinned: true }])
     const unpin = pinned.find('button[aria-label="Unpin chat"]')
     expect(unpin.attributes('aria-pressed')).toBe('true')
   })
@@ -93,7 +95,7 @@ describe('sidebar navigation is linkable', () => {
 
     await w.find('input.nrename').setValue('Renamed')
     await w.find('button[aria-label="Confirm rename"]').trigger('click')
-    expect(w.emitted('rename')).toEqual([[{ id: 't1', title: 'A thread', kind: 'chat' }, 'Renamed']])
+    expect(w.emitted('rename')).toEqual([[thread({ id: 't1', title: 'A thread' }), 'Renamed']])
   })
 
   it('collapses the Spaces and Recent sections', async () => {
@@ -104,19 +106,19 @@ describe('sidebar navigation is linkable', () => {
     await w
       .findAll('.section-toggle')
       .find(button => button.text().includes('Spaces'))
-      .trigger('click')
+      ?.trigger('click')
     expect(w.find('a.fmain').isVisible()).toBe(false)
     expect(w.find('a.nitem').exists()).toBe(true)
 
     await w
       .findAll('.section-toggle')
       .find(button => button.text().includes('Recent'))
-      .trigger('click')
+      ?.trigger('click')
     expect(w.find('a.nitem').isVisible()).toBe(false)
   })
 
   it('collapses the Pinned section', async () => {
-    const w = sidebar([{ id: 't1', title: 'A thread', kind: 'chat', pinned: true }])
+    const w = sidebar([thread({ id: 't1', title: 'A thread', pinned: true })])
     expect(w.find('button[aria-label="Unpin chat"]').exists()).toBe(true)
 
     await w.find('.section-toggle').trigger('click')
@@ -126,7 +128,7 @@ describe('sidebar navigation is linkable', () => {
   it('still navigates in-app, without a full page load', async () => {
     const w = sidebar()
     const link = w.findAll('a').find(a => a.text().trim() === 'Media')
-    await link.trigger('click')
+    await link?.trigger('click')
     expect(w.emitted('media')).toHaveLength(1) // handled, and .prevent stops the browser
   })
 })
@@ -214,7 +216,7 @@ describe('a failed card suggests one action, not three', () => {
     const w = mount(ChatMessage, failed)
     const primary = w.findAll('.retry-btn.primary')
     expect(primary).toHaveLength(1)
-    expect(primary[0].text()).toBe('Try again')
+    expect(primary[0]?.text()).toBe('Try again')
     expect(w.find('button[title="Edit the prompt, then run it again"]').classes()).not.toContain('primary')
   })
 })

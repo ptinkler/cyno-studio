@@ -17,7 +17,7 @@ A Vue 3 frontend for Cyno Studio with client-side routing.
 frontend/
 ├── src/
 │   ├── router/              # Vue Router configuration
-│   │   └── index.js
+│   │   └── index.ts
 │   ├── components/          # Reusable UI components
 │   │   ├── form/           # Form-specific components
 │   │   │   ├── RatioPicker.vue
@@ -30,9 +30,9 @@ frontend/
 │   │   ├── JobCard.vue
 │   │   └── ToastContainer.vue
 │   ├── composables/         # Reusable logic (Vue composition API)
-│   │   ├── useApi.js       # API calls
-│   │   ├── useToast.js     # Toast notifications
-│   │   └── useProjectSettings.js  # Project settings persistence
+│   │   ├── useApi.ts       # API calls
+│   │   ├── useToast.ts     # Toast notifications
+│   │   └── useProjectSettings.ts  # Project settings persistence
 │   ├── views/              # Page-level components
 │   │   ├── HomeView.vue    # Home page with project grid
 │   │   ├── ProjectView.vue # Project page with tabs
@@ -41,7 +41,7 @@ frontend/
 │   │       ├── GalleryPanel.vue
 │   │       └── HistoryPanel.vue
 │   ├── App.vue             # Root component
-│   ├── main.js             # Entry point
+│   ├── main.ts             # Entry point
 │   └── style.css           # Global styles
 ├── package.json
 ├── vite.config.js

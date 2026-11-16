@@ -1,22 +1,22 @@
 // Test setup for Vitest
 // Mock localStorage
 const localStorageMock = (() => {
-  let store = {}
+  let store: Record<string, string> = {}
   return {
-    getItem: key => store[key] || null,
-    setItem: (key, value) => {
+    getItem: (key: string): string | null => store[key] ?? null,
+    setItem: (key: string, value: unknown): void => {
       store[key] = String(value)
     },
-    removeItem: key => {
-      delete store[key]
+    removeItem: (key: string): void => {
+      Reflect.deleteProperty(store, key)
     },
-    clear: () => {
+    clear: (): void => {
       store = {}
     },
-    get length() {
+    get length(): number {
       return Object.keys(store).length
     },
-    key: index => Object.keys(store)[index] || null,
+    key: (index: number): string | null => Object.keys(store)[index] ?? null,
   }
 })()
 
@@ -25,12 +25,12 @@ const localStorageMock = (() => {
 // there, aborting setup and leaving tests with no localStorage).
 vi.stubGlobal('localStorage', localStorageMock)
 
-// Mock import.meta.env
-globalThis.import = globalThis.import || {}
-
 // jsdom has no ResizeObserver (the chat follows new content with one)
-globalThis.ResizeObserver ??= class {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
+vi.stubGlobal(
+  'ResizeObserver',
+  class {
+    observe = vi.fn()
+    unobserve = vi.fn()
+    disconnect = vi.fn()
+  },
+)

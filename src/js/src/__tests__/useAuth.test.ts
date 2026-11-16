@@ -1,30 +1,36 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // useAuth checks the session as soon as it is imported, so each test sets up fetch first and imports afresh.
-async function loadAuth(status) {
+async function loadAuth(status: Record<string, unknown>) {
   vi.resetModules()
   const reload = vi.fn()
   vi.stubGlobal('location', { reload })
-  const calls = []
+  const calls: [string, string][] = []
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (url, opts) => {
-      calls.push([url, opts?.method || 'GET'])
+    vi.fn((url: string, opts?: { method?: string }) => {
+      calls.push([url, opts?.method ?? 'GET'])
       const body = url === '/api/auth/status' ? status : url === '/api/auth/login' ? { id: 7, email: 'a@b.c' } : {}
-      return { ok: true, json: async () => body }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(body) })
     }),
   )
   const { useAuth } = await import('../composables/useAuth')
-  await vi.waitFor(() => expect(calls.length).toBeGreaterThan(0)) // the initial status check
+  await vi.waitFor(() => {
+    expect(calls.length).toBeGreaterThan(0)
+  }) // the initial status check
   return { auth: useAuth(), reload, calls }
 }
 
 describe('useAuth restarts the app when the signed-in user changes', () => {
-  beforeEach(() => vi.unstubAllGlobals())
+  beforeEach(() => {
+    vi.unstubAllGlobals()
+  })
 
   it("reloads after signing in, so the first (refused) load is replaced by the user's data", async () => {
     const { auth, reload } = await loadAuth({ authenticated: false, user: null })
-    await vi.waitFor(() => expect(auth.showLogin.value).toBe(true))
+    await vi.waitFor(() => {
+      expect(auth.showLogin.value).toBe(true)
+    })
     await auth.login('a@b.c', 'pw')
     expect(auth.isAuthenticated.value).toBe(true)
     expect(auth.showLogin.value).toBe(false)

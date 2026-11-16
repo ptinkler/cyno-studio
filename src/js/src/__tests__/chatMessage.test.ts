@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ChatMessage from '../components/chat/ChatMessage.vue'
-import { uiMessage } from './models'
+import type { MediaCard } from '../composables/chatConversationsApi'
+import type { UiMessage } from '../composables/studioTypes'
+import { one } from './dom'
+import { mediaCard, uiMessage } from './models'
 
-const image = { id: 'm1', kind: 'image', source: 'generated', status: 'done', file: 'img_a.png', prompt: 'a fox' }
-const video = { id: 'm2', kind: 'video', source: 'generated', status: 'done', file: 'vid_a.mp4' }
+const image = mediaCard({ id: 'm1', file: 'img_a.png', prompt: 'a fox' })
+const video = mediaCard({ id: 'm2', kind: 'video', file: 'vid_a.mp4' })
 
 describe('ChatMessage "make a video from this image"', () => {
   it('is offered on generated images, not videos', async () => {
@@ -22,7 +25,7 @@ describe('ChatMessage "make a video from this image"', () => {
     })
     const buttons = w.findAll('button[title="Attach this picture and switch to Video mode"]')
     expect(buttons).toHaveLength(1)
-    await buttons[0].trigger('click')
+    await buttons[0]?.trigger('click')
     expect(w.emitted('use-image')).toEqual([[{ file: 'img_a.png', mode: 'video' }]])
   })
 
@@ -57,7 +60,7 @@ describe('ChatMessage "make a video from this image"', () => {
       },
     })
     await w.find('.media-item img').trigger('click')
-    expect(w.emitted('open-media')[0][0]).toMatchObject({ kind: 'image', file: 'img_a.png' })
+    expect(w.emitted('open-media')?.[0]?.[0]).toMatchObject({ kind: 'image', file: 'img_a.png' })
   })
 })
 
@@ -70,7 +73,7 @@ describe('ChatMessage media settings', () => {
       first_frame: 'img_a.png',
       generate_audio: true,
     }
-    const pending = { id: 'v1', kind: 'video', source: 'generated', status: 'pending', prompt: 'waves', params }
+    const pending = mediaCard({ id: 'v1', kind: 'video', status: 'pending', file: null, prompt: 'waves', params })
     const w = mount(ChatMessage, {
       props: {
         convId: 'c1',
@@ -115,7 +118,7 @@ describe('ChatMessage media settings', () => {
 })
 
 describe('ChatMessage mode tag', () => {
-  const user = mode =>
+  const user = (mode: UiMessage['mode']) =>
     mount(ChatMessage, {
       props: {
         convId: 'c1',
@@ -181,7 +184,7 @@ describe('ChatMessage pin as reference', () => {
     })
     const pins = w.findAll('.pin-btn')
     expect(pins).toHaveLength(1)
-    await pins[0].trigger('click')
+    await pins[0]?.trigger('click')
     expect(w.emitted('pin')).toEqual([[{ mediaId: 'm1', pinned: true }]])
     await w.setProps({
       message: uiMessage({
@@ -194,7 +197,7 @@ describe('ChatMessage pin as reference', () => {
     })
     expect(w.find('.pin-btn').classes()).toContain('on')
     await w.find('.pin-btn').trigger('click')
-    expect(w.emitted('pin')[1]).toEqual([{ mediaId: 'm1', pinned: false }])
+    expect(w.emitted('pin')?.[1]).toEqual([{ mediaId: 'm1', pinned: false }])
 
     const u = mount(ChatMessage, {
       props: {
@@ -336,7 +339,7 @@ describe('ChatMessage branches', () => {
     await w.find('.fork-toggle').trigger('click')
     const items = w.findAll('.fork-item')
     expect(items.map(i => i.text())).toEqual(['Fox (branch)', 'Other'])
-    await items[1].trigger('click')
+    await items[1]?.trigger('click')
     expect(w.emitted('open-chat')).toEqual([['b2']])
     expect(w.find('.fork-menu').exists()).toBe(false)
   })
@@ -425,7 +428,7 @@ describe('ChatMessage request view', () => {
       },
     })
     await w.find('button[title="Show exactly what was sent to the provider"]').trigger('click')
-    const dialog = document.querySelector('.req-dialog')
+    const dialog = one('.req-dialog')
     expect(dialog.textContent).toContain('"model": "seedream-v5-pro-edit"')
     expect(dialog.textContent).toContain('Venice: blocked')
     expect(dialog.textContent).toContain('"error": "Your prompt violates the content policy"')
@@ -451,7 +454,7 @@ describe('ChatMessage request view', () => {
   })
 })
 
-const reply = (media, extra = {}) => ({
+const reply = (media: MediaCard[], extra: Partial<UiMessage> = {}) => ({
   props: {
     convId: 'c1',
     message: uiMessage({ id: 42, role: 'assistant', content: 'Here you go.', status: 'done', media, ...extra }),
@@ -471,12 +474,12 @@ describe('ChatMessage edit and redo a picture in place', () => {
   it('Edit opens an empty box and asks to edit this picture', async () => {
     const w = mount(ChatMessage, reply([image]))
     await w.find('button[title^="Edit this picture"]').trigger('click')
-    const box = w.find('.prompt-box textarea')
+    const box = w.find<HTMLTextAreaElement>('.prompt-box textarea')
     expect(box.element.value).toBe('')
     expect(box.attributes('placeholder')).toBe('Describe the change…')
     await box.setValue('give it a hat')
     await w.find('.prompt-box .edit-send').trigger('click')
-    expect(w.emitted('regenerate')[0][0]).toEqual({
+    expect(w.emitted('regenerate')?.[0]?.[0]).toEqual({
       mediaId: 'm1',
       model: null,
       prompt: 'give it a hat',
@@ -488,9 +491,9 @@ describe('ChatMessage edit and redo a picture in place', () => {
   it('Redo pre-fills the prompt it was made with and does not edit', async () => {
     const w = mount(ChatMessage, reply([image]))
     await w.find('button[title^="Make it again"]').trigger('click')
-    expect(w.find('.prompt-box textarea').element.value).toBe('a fox')
+    expect(w.find<HTMLTextAreaElement>('.prompt-box textarea').element.value).toBe('a fox')
     await w.find('.prompt-box .edit-send').trigger('click')
-    expect(w.emitted('regenerate')[0][0]).toMatchObject({ prompt: 'a fox', edit: false, replace: true })
+    expect(w.emitted('regenerate')?.[0]?.[0]).toMatchObject({ prompt: 'a fox', edit: false, replace: true })
   })
 
   it('will not send an empty prompt', async () => {
@@ -517,7 +520,7 @@ describe('ChatMessage edit and redo a picture in place', () => {
 })
 
 describe('ChatMessage earlier versions of a picture', () => {
-  const versioned = {
+  const versioned: MediaCard = {
     ...image,
     file: 'img_new.png',
     prompt: 'a fox in a hat',
@@ -540,19 +543,19 @@ describe('ChatMessage earlier versions of a picture', () => {
   it('asks for the picture it replaced to become the real one', async () => {
     const w = mount(ChatMessage, { props: { ...reply([versioned]).props, canSwitch: true } })
     const [back, forward] = w.findAll('.ver-nav button')
-    expect(forward.attributes('disabled')).toBeDefined() // already on the newest
-    await back.trigger('click')
+    expect(forward?.attributes('disabled')).toBeDefined() // already on the newest
+    await back?.trigger('click')
     expect(w.emitted('media-version')).toEqual([[{ mediaId: versioned.id, index: 0 }]])
   })
 
   it('shows where the live picture sits once an earlier one was chosen', () => {
-    const chosen = { ...versioned, file: 'img_a.png', versions: [{ file: 'img_new.png' }], version_shown: 0 }
+    const chosen: MediaCard = { ...versioned, file: 'img_a.png', versions: [{ file: 'img_new.png' }], version_shown: 0 }
     const w = mount(ChatMessage, { props: { ...reply([chosen]).props, canSwitch: true } })
     expect(w.find('.ver-nav span').text()).toBe('1/2')
     expect(w.find('img').attributes('src')).toContain('img_a.png')
     const [back, forward] = w.findAll('.ver-nav button')
-    expect(back.attributes('disabled')).toBeDefined()
-    expect(forward.attributes('disabled')).toBeUndefined()
+    expect(back?.attributes('disabled')).toBeDefined()
+    expect(forward?.attributes('disabled')).toBeUndefined()
   })
 
   it('cannot switch mid-reply', () => {
@@ -561,7 +564,7 @@ describe('ChatMessage earlier versions of a picture', () => {
   })
 
   it('offers the previous picture back after a failed redo', async () => {
-    const failed = { ...versioned, status: 'error', file: null, error: 'nope' }
+    const failed: MediaCard = { ...versioned, status: 'error', file: null, error: 'nope' }
     const w = mount(ChatMessage, { props: { ...reply([failed]).props, canSwitch: true } })
     await w.find('button[title^="Keep the picture this card had"]').trigger('click')
     expect(w.emitted('media-version')).toEqual([[{ mediaId: failed.id, index: 0 }]])
@@ -570,7 +573,7 @@ describe('ChatMessage earlier versions of a picture', () => {
 
 describe('ChatMessage edit and redo the text in place', () => {
   // Offered on any finished reply (the feed passes canReword); the pictures stay
-  const rewordable = (media, extra = {}) => {
+  const rewordable = (media: MediaCard[], extra: Partial<UiMessage> = {}) => {
     const r = reply(media, extra)
     return { props: { ...r.props, canReword: true, canSwitch: true } }
   }
@@ -607,13 +610,12 @@ describe('ChatMessage edit and redo the text in place', () => {
 })
 
 describe('ChatMessage earlier wordings of the text', () => {
-  const worded = (shown, extra = {}) => ({
+  const worded = (extra: { canSwitch?: boolean } = {}) => ({
     props: { ...reply([image]).props, canSwitch: true, ...extra },
   })
-  const withVersions = (shown, props = {}) => {
-    const w = worded(shown, props)
-    w.props.message = { ...w.props.message, text_versions: 3, text_shown: shown }
-    return w
+  const withVersions = (shown: number, extra: { canSwitch?: boolean } = {}) => {
+    const base = reply([image], { text_versions: 3, text_shown: shown })
+    return { props: { ...base.props, canSwitch: true, ...extra } }
   }
 
   it('has no text arrows until the text has been rewritten', () => {
@@ -629,8 +631,8 @@ describe('ChatMessage earlier wordings of the text', () => {
   it('asks for the neighbouring wording', async () => {
     const w = mount(ChatMessage, withVersions(1))
     const [back, forward] = w.findAll('.text-ver button')
-    await back.trigger('click')
-    await forward.trigger('click')
+    await back?.trigger('click')
+    await forward?.trigger('click')
     expect(w.emitted('text-version')).toEqual([[0], [2]])
   })
 
@@ -644,7 +646,7 @@ describe('ChatMessage renders one element per media kind', () => {
   // Regression: the version arrows were inserted between the <img v-if> and
   // its <video v-else>, which breaks Vue's conditional chain — the <video>
   // then rendered for images too, putting a play control on a picture.
-  const media = extra => ({
+  const media = (extra: Partial<MediaCard>) => ({
     props: {
       convId: 'c1',
       message: uiMessage({
@@ -652,7 +654,7 @@ describe('ChatMessage renders one element per media kind', () => {
         role: 'assistant',
         content: '',
         status: 'done',
-        media: [{ id: 'm1', source: 'generated', status: 'done', prompt: 'a fox', ...extra }],
+        media: [mediaCard({ id: 'm1', prompt: 'a fox', ...extra })],
       }),
     },
   })
@@ -711,11 +713,11 @@ describe('ChatMessage a failed picture can be changed and retried', () => {
     const w = mount(ChatMessage, failed)
     expect(w.find('button[title^="Run the same prompt again"]').exists()).toBe(true)
     await w.find('button[title="Edit the prompt, then run it again"]').trigger('click')
-    const box = w.find('.prompt-box textarea')
+    const box = w.find<HTMLTextAreaElement>('.prompt-box textarea')
     expect(box.element.value).toBe('a fox') // pre-filled with what failed
     await box.setValue('a fox, softer lighting')
     await w.find('.prompt-box .edit-send').trigger('click')
-    expect(w.emitted('regenerate')[0][0]).toMatchObject({
+    expect(w.emitted('regenerate')?.[0]?.[0]).toMatchObject({
       mediaId: 'm1',
       prompt: 'a fox, softer lighting',
       edit: false,

@@ -3,27 +3,23 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { ref } from 'vue'
 import MediaPicker from '../components/media/MediaPicker.vue'
 import { useMediaFilters, mediaOrigin } from '../composables/useMedia'
+import type { LibraryEntry } from '../composables/mediaApi'
+import { all, one } from './dom'
+import { fakeServer } from './fakeServer'
+import { stubIntersectionObserver } from './intersection'
+import { libraryEntry } from './models'
 
 const ITEMS = [
-  {
-    id: 'lib:a.png',
-    kind: 'image',
-    source: 'upload',
-    origin: 'library',
-    name: 'a.png',
-    url: '/a',
-    created_at: '2026-10-07',
-  },
-  {
+  libraryEntry({ id: 'lib:a.png', name: 'a.png', url: '/a', created_at: '2026-10-07' }),
+  libraryEntry({
     id: 'chat:c:g.png',
-    kind: 'image',
     source: 'generated',
     origin: 'chat',
     name: 'g.png',
     url: '/g',
     conversation_title: 'Fox chat',
     prompt: 'fox in snow',
-  },
+  }),
 ]
 
 describe('useMediaFilters', () => {
@@ -49,35 +45,36 @@ describe('useMediaFilters', () => {
 
 // The picker pages and filters server-side now, so the stub has to answer the
 // way /api/media does: apply the query, then slice.
-function stubLibrary(all = ITEMS) {
-  const library = [...all]
-  globalThis.fetch = vi.fn(async url => {
-    const href = String(url)
-    if (href.endsWith('/api/media/upload')) {
+function stubLibrary(rows = ITEMS) {
+  const library = [...rows]
+  fakeServer(({ url }) => {
+    if (url.endsWith('/api/media/upload')) {
       // As the server does: it joins the library, so the next list request has it
-      const item = { id: 'lib:new.png', kind: 'image', source: 'upload', origin: 'library', name: 'new.png', url: '/n' }
+      const item = libraryEntry({ id: 'lib:new.png', name: 'new.png', url: '/n' })
       library.unshift(item)
-      return { ok: true, status: 200, json: async () => item }
+      return item
     }
-    const p = new URL(href, 'http://t').searchParams
-    const q = (p.get('q') || '').toLowerCase()
-    const matches = i =>
+    const p = new URL(url, 'http://t').searchParams
+    const q = (p.get('q') ?? '').toLowerCase()
+    const matches = (i: LibraryEntry): boolean =>
       (!p.get('kind') || i.kind === p.get('kind')) &&
       (!p.get('source') || i.source === p.get('source')) &&
       (!p.get('origin') || i.origin === p.get('origin')) &&
       (!q || [i.prompt, i.name, i.conversation_title].some(v => v?.toLowerCase().includes(q)))
     const hits = library.filter(matches)
-    const offset = Number(p.get('offset') || 0)
-    const limit = Number(p.get('limit') || 0)
+    const offset = Number(p.get('offset') ?? 0)
+    const limit = Number(p.get('limit') ?? 0)
     const items = limit ? hits.slice(offset, offset + limit) : hits.slice(offset)
-    return { ok: true, status: 200, json: async () => ({ items, total: hits.length, offset }) }
+    return { items, total: hits.length, offset }
   })
 }
 
 describe('MediaPicker', () => {
-  beforeEach(() => stubLibrary())
+  beforeEach(() => {
+    stubLibrary()
+  })
 
-  async function open(props = {}) {
+  async function open(props: Record<string, unknown> = {}) {
     const w = mount(MediaPicker, { props: { open: false, ...props }, attachTo: document.body })
     await w.setProps({ open: true })
     await flushPromises()
@@ -85,77 +82,73 @@ describe('MediaPicker', () => {
   }
 
   it('offers only images and emits the picked ones', async () => {
-    const withVideo = [
-      ...ITEMS,
-      { id: 'lib:v.mp4', kind: 'video', source: 'upload', origin: 'library', name: 'v.mp4', url: '/v' },
-    ]
+    const withVideo = [...ITEMS, libraryEntry({ id: 'lib:v.mp4', kind: 'video', name: 'v.mp4', url: '/v' })]
     stubLibrary(withVideo)
     const w = await open()
-    const tiles = document.body.querySelectorAll('.tile')
+    const tiles = all('.tile')
     expect(tiles).toHaveLength(2) // asked the server for images only, so the video isn't offered
-    tiles[0].click()
-    tiles[1].click()
+    tiles[0]?.click()
+    tiles[1]?.click()
     await flushPromises()
-    document.body.querySelector('.actions .btn-primary').click()
-    expect(w.emitted('pick')[0][0].map(i => i.id)).toEqual(['lib:a.png', 'chat:c:g.png'])
+    one('.actions .btn-primary').click()
+    expect(w.emitted('pick')?.[0]).toEqual([
+      [expect.objectContaining({ id: 'lib:a.png' }), expect.objectContaining({ id: 'chat:c:g.png' })],
+    ])
     expect(w.emitted('close')).toBeTruthy()
     w.unmount()
   })
 
   it('shows the given kinds and enforces per-kind caps', async () => {
-    const withVideo = [
-      ...ITEMS,
-      { id: 'lib:v.mp4', kind: 'video', source: 'upload', origin: 'library', name: 'v.mp4', url: '/v' },
-    ]
+    const withVideo = [...ITEMS, libraryEntry({ id: 'lib:v.mp4', kind: 'video', name: 'v.mp4', url: '/v' })]
     stubLibrary(withVideo)
     const w = await open({ kinds: ['image', 'video'], limits: { image: 1, video: 1 } })
-    expect(document.body.querySelectorAll('.tile')).toHaveLength(3) // both images + the video are offered
-    const tiles = document.body.querySelectorAll('.tile')
-    tiles[0].click() // image 1
-    tiles[1].click() // image 2 — over the image cap of 1, ignored
+    expect(all('.tile')).toHaveLength(3) // both images + the video are offered
+    const tiles = all('.tile')
+    tiles[0]?.click() // image 1
+    tiles[1]?.click() // image 2 — over the image cap of 1, ignored
     await flushPromises()
-    expect(document.body.querySelectorAll('.tile.selected')).toHaveLength(1)
+    expect(all('.tile.selected')).toHaveLength(1)
     w.unmount()
   })
 
   it('opens on the source it was given (uploads only)', async () => {
     const w = await open({ source: 'upload' })
     // ITEMS has one upload (lib:a.png) and one generated (chat:c:g.png)
-    expect(document.body.querySelectorAll('.tile')).toHaveLength(1)
-    expect(document.body.querySelector('select[aria-label="Source"]').value).toBe('upload')
+    expect(all('.tile')).toHaveLength(1)
+    expect(one(HTMLSelectElement, 'select[aria-label="Source"]').value).toBe('upload')
     w.unmount()
   })
 
   it('single mode swaps the selection', async () => {
     const w = await open({ multiple: false })
-    const tiles = document.body.querySelectorAll('.tile')
-    tiles[0].click()
-    tiles[1].click()
+    const tiles = all('.tile')
+    tiles[0]?.click()
+    tiles[1]?.click()
     await flushPromises()
-    expect(document.body.querySelectorAll('.tile.selected')).toHaveLength(1)
+    expect(all('.tile.selected')).toHaveLength(1)
     w.unmount()
   })
 
   it('uploads go to the library and come back selected', async () => {
     const w = await open()
-    const input = document.body.querySelector('input[type=file]')
+    const input = one(HTMLInputElement, 'input[type=file]')
     Object.defineProperty(input, 'files', { value: [new File(['x'], 'n.png', { type: 'image/png' })] })
     input.dispatchEvent(new Event('change'))
     await flushPromises()
-    expect(document.body.querySelectorAll('.tile.selected')).toHaveLength(1)
-    expect(document.body.querySelectorAll('.tile')).toHaveLength(3)
+    expect(all('.tile.selected')).toHaveLength(1)
+    expect(all('.tile')).toHaveLength(3)
     w.unmount()
   })
 
   it('opens on the origin it was given, widening it for an upload', async () => {
     const w = await open({ origin: 'chat' })
-    expect(document.body.querySelector('select[aria-label="Where from"]').value).toBe('chat')
-    expect(document.body.querySelectorAll('.tile')).toHaveLength(1)
-    const input = document.body.querySelector('input[type=file]')
+    expect(one(HTMLSelectElement, 'select[aria-label="Where from"]').value).toBe('chat')
+    expect(all('.tile')).toHaveLength(1)
+    const input = one(HTMLInputElement, 'input[type=file]')
     Object.defineProperty(input, 'files', { value: [new File(['x'], 'n.png', { type: 'image/png' })] })
     input.dispatchEvent(new Event('change'))
     await flushPromises()
-    expect(document.body.querySelectorAll('.tile')).toHaveLength(3)
+    expect(all('.tile')).toHaveLength(3)
     w.unmount()
   })
 })
@@ -163,27 +156,10 @@ describe('MediaPicker', () => {
 describe('MediaGrid lazy rendering', () => {
   it('renders a batch of thumbnail tiles, then more as the end scrolls into view', async () => {
     const { default: MediaGrid } = await import('../components/media/MediaGrid.vue')
-    let trigger
-    const observed = []
-    globalThis.IntersectionObserver = class {
-      constructor(cb) {
-        trigger = cb
-      }
-      observe(el) {
-        observed.push(el)
-      }
-      unobserve() {}
-      disconnect() {}
-    }
-    const items = Array.from({ length: 130 }, (_, n) => ({
-      id: `lib:${n}.png`,
-      kind: 'image',
-      source: 'upload',
-      origin: 'library',
-      name: `${n}.png`,
-      url: `/full/${n}`,
-      thumb_url: `/thumb/${n}`,
-    }))
+    const observer = stubIntersectionObserver()
+    const items = Array.from({ length: 130 }, (_, n) =>
+      libraryEntry({ id: `lib:${String(n)}.png`, url: `/full/${String(n)}`, thumb_url: `/thumb/${String(n)}` }),
+    )
     const w = mount(MediaGrid, { props: { items, pageSize: 50 } })
     await flushPromises()
     expect(w.findAll('.tile')).toHaveLength(50)
@@ -191,46 +167,38 @@ describe('MediaGrid lazy rendering', () => {
     const img = w.find('.tile img')
     expect(img.attributes('src')).toBe('/thumb/0')
     expect(img.attributes('loading')).toBe('lazy')
-    trigger([{ isIntersecting: true }])
+    observer.reveal()
     await flushPromises()
     expect(w.findAll('.tile')).toHaveLength(100)
-    trigger([{ isIntersecting: true }])
+    observer.reveal()
     await flushPromises()
     expect(w.findAll('.tile')).toHaveLength(130)
     expect(w.find('.sentinel').exists()).toBe(false)
     // New filter results start from the first page again
     await w.setProps({ items: items.slice(0, 80) })
     expect(w.findAll('.tile')).toHaveLength(50)
-    delete globalThis.IntersectionObserver
+    observer.restore()
     w.unmount()
   })
 
   it('asks the caller for more once every loaded tile is shown (server paging)', async () => {
     const { default: MediaGrid } = await import('../components/media/MediaGrid.vue')
-    let trigger
-    globalThis.IntersectionObserver = class {
-      constructor(cb) {
-        trigger = cb
-      }
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    }
+    const observer = stubIntersectionObserver()
     // A full server page already loaded, with more rows waiting on the server
-    const all = Array.from({ length: 80 }, (_, i) => ({ id: `lib:${i}.png`, kind: 'image', name: `${i}.png` }))
-    const w = mount(MediaGrid, { props: { items: all.slice(0, 50), pageSize: 50, hasMore: true } })
+    const pages = Array.from({ length: 80 }, (_, i) => libraryEntry({ id: `lib:${String(i)}.png` }))
+    const w = mount(MediaGrid, { props: { items: pages.slice(0, 50), pageSize: 50, hasMore: true } })
     await flushPromises()
     expect(w.findAll('.tile')).toHaveLength(50)
-    trigger([{ isIntersecting: true }]) // reaching the end of the loaded page asks for the next
+    observer.reveal() // reaching the end of the loaded page asks for the next
     await flushPromises()
     expect(w.emitted('more')).toHaveLength(1)
     // The parent appends the next page to the end — the window isn't reset to the top
-    await w.setProps({ items: all, hasMore: false })
-    trigger([{ isIntersecting: true }])
+    await w.setProps({ items: pages, hasMore: false })
+    observer.reveal()
     await flushPromises()
     expect(w.findAll('.tile')).toHaveLength(80)
     expect(w.find('.sentinel').exists()).toBe(false) // nothing more to load
-    delete globalThis.IntersectionObserver
+    observer.restore()
     w.unmount()
   })
 })
@@ -239,19 +207,10 @@ describe('MediaGrid thumbnails', () => {
   it('defaults to batches of 20, retries a failed thumbnail once, then shows a placeholder', async () => {
     vi.useFakeTimers()
     const { default: MediaGrid } = await import('../components/media/MediaGrid.vue')
-    globalThis.IntersectionObserver = class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    }
-    const items = Array.from({ length: 30 }, (_, n) => ({
-      id: `lib:${n}.png`,
-      kind: 'image',
-      source: 'upload',
-      origin: 'library',
-      name: `${n}.png`,
-      thumb_url: `/thumb/${n}`,
-    }))
+    const observer = stubIntersectionObserver()
+    const items = Array.from({ length: 30 }, (_, n) =>
+      libraryEntry({ id: `lib:${String(n)}.png`, thumb_url: `/thumb/${String(n)}` }),
+    )
     const w = mount(MediaGrid, { props: { items } })
     await flushPromises()
     expect(w.findAll('.tile')).toHaveLength(20)
@@ -260,8 +219,8 @@ describe('MediaGrid thumbnails', () => {
     vi.advanceTimersByTime(2000)
     expect(img.element.getAttribute('src')).toBe('/thumb/0?retry=1')
     await img.trigger('error')
-    expect(w.findAll('.tile')[0].find('.no-thumb').exists()).toBe(true)
-    delete globalThis.IntersectionObserver
+    expect(w.findAll('.tile')[0]?.find('.no-thumb').exists()).toBe(true)
+    observer.restore()
     vi.useRealTimers()
     w.unmount()
   })

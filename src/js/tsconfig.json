@@ -1,6 +1,6 @@
 {
-  // Every .ts file and every <script lang="ts"> in a .vue component, fully strict (vue-tsc). Components still
-  // written as plain JavaScript are skipped until they move to <script setup lang="ts">.
+  // Every .ts file and every <script lang="ts"> in a .vue component, fully strict (vue-tsc). There is no
+  // JavaScript left under src/.
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
@@ -8,7 +8,7 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["vitest/globals"],
+    "types": ["vitest/globals", "vite/client"],
 
     "strict": true,
     "noUncheckedIndexedAccess": true,
@@ -18,11 +18,7 @@
     "noFallthroughCasesInSwitch": true,
     "noPropertyAccessFromIndexSignature": true,
     "verbatimModuleSyntax": true,
-    "isolatedModules": true,
-
-    // Un-migrated JS that a .ts file imports is read for its shape but not checked here
-    "allowJs": true,
-    "checkJs": false
+    "isolatedModules": true
   },
   "include": ["src/**/*.ts", "src/**/*.vue"]
 }

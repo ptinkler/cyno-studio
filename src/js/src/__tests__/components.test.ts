@@ -34,7 +34,7 @@ describe('ToastContainer', () => {
     })
     await wrapper.find('.toast').trigger('click')
     expect(wrapper.emitted('remove')).toBeTruthy()
-    expect(wrapper.emitted('remove')[0]).toEqual([1])
+    expect(wrapper.emitted('remove')?.[0]).toEqual([1])
   })
 
   it('shows correct icons for types', () => {
@@ -48,9 +48,9 @@ describe('ToastContainer', () => {
       },
     })
     const icons = wrapper.findAll('.toast-icon')
-    expect(icons[0].text()).toBe('✓')
-    expect(icons[1].text()).toBe('✗')
-    expect(icons[2].text()).toBe('ℹ')
+    expect(icons[0]?.text()).toBe('✓')
+    expect(icons[1]?.text()).toBe('✗')
+    expect(icons[2]?.text()).toBe('ℹ')
   })
 })
 
@@ -70,7 +70,7 @@ describe('LengthSlider', () => {
     const wrapper = mount(LengthSlider, {
       props: { modelValue: 10, lengths: [5, 10, 15] },
     })
-    const input = wrapper.find('input[type=range]')
+    const input = wrapper.find<HTMLInputElement>('input[type=range]')
     expect(input.element.value).toBe('1')
     expect(input.attributes('max')).toBe('2')
   })
@@ -86,20 +86,20 @@ describe('LengthSlider', () => {
     const wrapper = mount(LengthSlider, {
       props: { modelValue: 10, lengths: [5, 10, 15] },
     })
-    const input = wrapper.find('input[type=range]')
+    const input = wrapper.find<HTMLInputElement>('input[type=range]')
     await input.setValue('0')
     expect(wrapper.emitted('update:modelValue')).toBeTruthy()
-    expect(wrapper.emitted('update:modelValue')[0]).toEqual([5])
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([5])
   })
 
   it('only ever exposes valid stops, even for a gappy list', async () => {
     const wrapper = mount(LengthSlider, {
       props: { modelValue: 12, lengths: [4, 5, 6, 7, 8, 9, 10, 11, 12, 15] },
     })
-    const input = wrapper.find('input[type=range]')
+    const input = wrapper.find<HTMLInputElement>('input[type=range]')
     expect(input.attributes('max')).toBe('9')
     await input.setValue('9')
-    expect(wrapper.emitted('update:modelValue')[0]).toEqual([15])
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([15])
   })
 })
 
@@ -126,8 +126,8 @@ describe('RatioPicker', () => {
     const wrapper = mount(RatioPicker, {
       props: { modelValue: '16:9', ratios: ['16:9', '9:16', '1:1'] },
     })
-    await wrapper.findAll('.ratio-btn')[1].trigger('click')
-    expect(wrapper.emitted('update:modelValue')[0]).toEqual(['9:16'])
+    await wrapper.findAll('.ratio-btn')[1]?.trigger('click')
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual(['9:16'])
   })
 
   it('renders ratio labels', () => {
@@ -160,7 +160,7 @@ describe('ToggleSwitch', () => {
       props: { modelValue: false, label: 'Audio', id: 'audio' },
     })
     await wrapper.find('input').setValue(true)
-    expect(wrapper.emitted('update:modelValue')[0]).toEqual([true])
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([true])
   })
 
   it('checkbox unchecked by default', () => {

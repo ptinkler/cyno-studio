@@ -1,87 +1,97 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import type { VueWrapper } from '@vue/test-utils'
 import InstructionEditor from '../components/chat/InstructionEditor.vue'
 import InstructionPicker from '../components/chat/InstructionPicker.vue'
 import StudioInstructionsPage from '../components/studio/StudioInstructionsPage.vue'
 import { useChatDefaults } from '../composables/useChatDefaults'
+import { asRecord } from '../utils/storage'
+import { all, one } from './dom'
+import { fakeServer } from './fakeServer'
+import type { Call } from './fakeServer'
+import { instruction, instructionGroup, space } from './models'
 
-const resp = j => ({ ok: true, status: 200, json: async () => j })
 const snippets = [
-  { id: 1, name: 'Terse tone', content: 'Be brief.' },
-  { id: 2, name: 'British spelling', content: 'Use British spelling.' },
-  { id: 3, name: 'No emoji', content: 'Never use emoji.' },
+  instruction({ id: 1, name: 'Terse tone', content: 'Be brief.' }),
+  instruction({ id: 2, name: 'British spelling', content: 'Use British spelling.' }),
+  instruction({ id: 3, name: 'No emoji', content: 'Never use emoji.' }),
 ]
-const groups = [{ id: 7, name: 'House style', snippet_ids: [1] }]
+const groups = [instructionGroup({ id: 7, name: 'House style', snippet_ids: [1] })]
 const EMPTY = { default_character_ids: [], default_instruction_ids: [], default_instruction_group_ids: [] }
-const spaces = [{ id: 4, name: 'Novel', ...EMPTY }]
+const spaces = [space({ id: 4, name: 'Novel' })]
 
-let calls
+let calls: Call[]
 beforeEach(() => {
-  calls = []
-  globalThis.fetch = vi.fn(async (url, opts = {}) => {
-    url = String(url)
-    calls.push([opts.method || 'GET', url, opts.body ? JSON.parse(opts.body) : null])
-    if (url.includes('/settings')) return resp(opts.method === 'PUT' ? JSON.parse(opts.body) : { ...EMPTY })
-    if (url.includes('/spaces/')) return resp({ id: 4, ...JSON.parse(opts.body) })
-    if (url.includes('/spaces')) return resp({ spaces })
-    if (url.endsWith('/instructions')) return resp({ instructions: snippets, groups })
-    if (opts.method === 'PUT') return resp({ id: Number(url.split('/').pop()), ...JSON.parse(opts.body) })
-    if (opts.method === 'POST') return resp({ id: 99, ...JSON.parse(opts.body) })
-    return resp({})
+  calls = fakeServer(({ method, url, body }) => {
+    if (url.includes('/settings')) return method === 'PUT' ? body : { ...EMPTY }
+    if (url.includes('/spaces/')) return { id: 4, ...asRecord(body) }
+    if (url.includes('/spaces')) return { spaces }
+    if (url.endsWith('/instructions')) return { instructions: snippets, groups }
+    if (method === 'PUT') return { id: Number(url.split('/').pop()), ...asRecord(body) }
+    if (method === 'POST') return { id: 99, ...asRecord(body) }
+    return {}
   })
 })
 
 describe('InstructionEditor', () => {
-  let w
-  afterEach(() => w?.unmount())
+  let w: VueWrapper | undefined
+  afterEach(() => {
+    w?.unmount()
+  })
 
-  async function open(target) {
-    w = mount(InstructionEditor, { props: { target: null, instructions: snippets, groups }, attachTo: document.body })
-    await w.setProps({ target })
+  async function open(target: { kind: 'snippet' | 'group'; id: number }) {
+    const mounted = mount(InstructionEditor, {
+      props: { target: null, instructions: snippets, groups },
+      attachTo: document.body,
+    })
+    w = mounted
+    await mounted.setProps({ target })
     await flushPromises()
-    return document.body.querySelector('.dialog[role="dialog"]')
+    return one('.dialog[role="dialog"]')
   }
 
   it("adds snippets to a group by searching, saves the group's snippets and closes", async () => {
     const dialog = await open({ kind: 'group', id: 7 })
-    expect(dialog.querySelector('input[aria-label="Name"]').value).toBe('House style')
-    const adder = dialog.querySelector('input[aria-label="Add a snippet"]')
+    expect(one(HTMLInputElement, 'input[aria-label="Name"]', dialog).value).toBe('House style')
+    const adder = one(HTMLInputElement, 'input[aria-label="Add a snippet"]', dialog)
     adder.value = 'emoji'
     adder.dispatchEvent(new Event('input'))
     await flushPromises()
-    const options = [...dialog.querySelectorAll('.adder-menu .item')]
+    const options = all('.adder-menu .item', dialog)
     expect(options.map(o => o.textContent.trim())).toEqual(['No emoji']) // members aren't offered again
-    options[0].click()
+    options[0]?.click()
     await flushPromises()
-    dialog.querySelector('.btn-primary').click()
+    one('.btn-primary', dialog).click()
     await flushPromises()
-    const put = calls.find(c => c[0] === 'PUT' && c[1].endsWith('/instruction-groups/7'))
-    expect(put[2]).toEqual({ name: 'House style', snippet_ids: [1, 3] })
-    expect(w.emitted('close')).toHaveLength(1)
+    const put = calls.find(c => c.method === 'PUT' && c.url.endsWith('/instruction-groups/7'))
+    expect(put?.body).toEqual({ name: 'House style', snippet_ids: [1, 3] })
+    expect(w?.emitted('close')).toHaveLength(1)
   })
 
   it('saves "Default for" picks with the Save button, for any space', async () => {
     useChatDefaults().setCurrentSpace(null)
     await useChatDefaults().loadDefaults()
     const dialog = await open({ kind: 'snippet', id: 1 })
-    const save = dialog.querySelector('.btn-primary')
+    const save = one(HTMLButtonElement, '.btn-primary', dialog)
     expect(save.disabled).toBe(true) // nothing changed yet
-    dialog.querySelector('.def-toggles .add').click()
+    one('.def-toggles .add', dialog).click()
     await flushPromises()
-    const option = name => [...dialog.querySelectorAll('.option')].find(o => o.textContent.includes(name))
-    option('All chats').click()
-    option('Novel').click()
+    const option = (name: string) => all('.option', dialog).find(o => o.textContent.includes(name))
+    option('All chats')?.click()
+    option('Novel')?.click()
     await flushPromises()
-    expect([...dialog.querySelectorAll('.def-toggles .pill-name')].map(p => p.textContent.trim())).toEqual([
-      '🌐 All chats',
-      '🗂 Novel',
-    ])
+    expect(all('.def-toggles .pill-name', dialog).map(p => p.textContent.trim())).toEqual(['🌐 All chats', '🗂 Novel'])
     expect(save.disabled).toBe(false) // picks alone are a change to save
-    expect(calls.some(c => c[0] === 'PUT')).toBe(false) // nothing written before Save
+    expect(calls.some(c => c.method === 'PUT')).toBe(false) // nothing written before Save
     save.click()
     await flushPromises()
-    expect(calls.find(c => c[0] === 'PUT' && c[1].includes('/settings'))[2].default_instruction_ids).toEqual([1])
-    expect(calls.find(c => c[0] === 'PUT' && c[1].endsWith('/spaces/4'))[2].default_instruction_ids).toEqual([1])
+    const saved = (match: (call: Call) => boolean): unknown => calls.find(match)?.body
+    expect(saved(c => c.method === 'PUT' && c.url.includes('/settings'))).toMatchObject({
+      default_instruction_ids: [1],
+    })
+    expect(saved(c => c.method === 'PUT' && c.url.endsWith('/spaces/4'))).toMatchObject({
+      default_instruction_ids: [1],
+    })
   })
 })
 
@@ -99,16 +109,15 @@ describe('StudioInstructionsPage', () => {
     expect(w.findAll('.card h3').map(h => h.text())).toEqual(['British spelling'])
     await w.find('.card').trigger('click')
     await flushPromises()
-    expect(document.body.querySelector('.dialog input[aria-label="Name"]').value).toBe('British spelling')
+    expect(one(HTMLInputElement, '.dialog input[aria-label="Name"]').value).toBe('British spelling')
     w.unmount()
   })
 })
 
 // The picker's dialog is teleported to <body>: query the document
-const pickCards = () => [...document.body.querySelectorAll('.dialog .card')]
-const pickNames = () => pickCards().map(c => c.querySelector('.name-text').textContent.trim())
-const actionButton = text =>
-  [...document.body.querySelectorAll('.dialog .actions button')].find(b => b.textContent.includes(text))
+const pickCards = () => all('.dialog .card')
+const pickNames = () => pickCards().map(c => one('.name-text', c).textContent.trim())
+const actionButton = (text: string) => all('.dialog .actions button').find(b => b.textContent.includes(text))
 
 describe('InstructionPicker', () => {
   it('opens the editor for a new snippet or group from the dialog', async () => {
@@ -117,13 +126,13 @@ describe('InstructionPicker', () => {
       attachTo: document.body,
     })
     await w.find('.add').trigger('click')
-    actionButton('New snippet').click()
+    actionButton('New snippet')?.click()
     await flushPromises()
-    expect(w.emitted('edit')[0]).toEqual([{ kind: 'snippet', id: null }])
+    expect(w.emitted('edit')?.[0]).toEqual([{ kind: 'snippet', id: null }])
     await w.find('.add').trigger('click')
-    actionButton('New group').click()
+    actionButton('New group')?.click()
     await flushPromises()
-    expect(w.emitted('edit')[1]).toEqual([{ kind: 'group', id: null }])
+    expect(w.emitted('edit')?.[1]).toEqual([{ kind: 'group', id: null }])
     w.unmount()
   })
 
@@ -132,8 +141,8 @@ describe('InstructionPicker', () => {
       props: { instructions: snippets, groups, snippetIds: [2], groupIds: [7] },
     })
     const chips = w.findAll('.chip-main')
-    await chips[0].trigger('click')
-    await chips[1].trigger('click')
+    await chips[0]?.trigger('click')
+    await chips[1]?.trigger('click')
     expect(w.emitted('edit')).toEqual([[{ kind: 'group', id: 7 }], [{ kind: 'snippet', id: 2 }]])
   })
 
@@ -152,15 +161,15 @@ describe('InstructionPicker', () => {
     })
     const inherited = w.findAll('.chip.inherited')
     expect(inherited.map(c => c.find('.chip-name').text())).toEqual(['📦 House style', 'Terse tone'])
-    expect(inherited[1].attributes('title')).toContain('From the Novel defaults')
-    await inherited[1].find('.chip-x').trigger('click')
+    expect(inherited[1]?.attributes('title')).toContain('From the Novel defaults')
+    await inherited[1]?.find('.chip-x').trigger('click')
     expect(w.emitted('hide')).toEqual([[{ kind: 'snippet', id: 1 }]])
     // The hidden one is offered to switch back on, not to attach as the chat's own
     await w.find('.add').trigger('click')
-    const hidden = pickCards().find(c => c.querySelector('.name-text').textContent.trim() === 'No emoji')
-    expect(hidden.classList).toContain('default')
-    expect(hidden.getAttribute('aria-pressed')).toBe('false')
-    hidden.click()
+    const hidden = pickCards().find(c => one('.name-text', c).textContent.trim() === 'No emoji')
+    expect(hidden?.classList).toContain('default')
+    expect(hidden?.getAttribute('aria-pressed')).toBe('false')
+    hidden?.click()
     await flushPromises()
     expect(w.emitted('unhide')).toEqual([[{ kind: 'snippet', id: 3 }]])
     expect(w.emitted('update:snippetIds')).toBeUndefined()
@@ -171,35 +180,37 @@ describe('InstructionPicker', () => {
     const w = mount(InstructionPicker, {
       props: { instructions: snippets, groups, snippetIds: [2], groupIds: [7], pausedSnippets: [2] },
     })
-    const chipNamed = name => w.findAll('.chip').find(c => c.find('.chip-name').text() === name)
+    const chipNamed = (name: string) => w.findAll('.chip').find(c => c.find('.chip-name').text() === name)
     // The paused snippet is dimmed and its control offers to resume
     const snippetChip = chipNamed('British spelling')
-    expect(snippetChip.classes()).toContain('paused')
-    expect(snippetChip.find('.chip-pause').text()).toBe('▶')
-    await snippetChip.find('.chip-pause').trigger('click')
+    expect(snippetChip?.classes()).toContain('paused')
+    expect(snippetChip?.find('.chip-pause').text()).toBe('▶')
+    await snippetChip?.find('.chip-pause').trigger('click')
     expect(w.emitted('resume')).toEqual([[{ kind: 'snippet', id: 2 }]])
     // The group isn't paused → its control pauses it, and it stays attached (no detach)
     const groupChip = chipNamed('📦 House style')
-    expect(groupChip.classes()).not.toContain('paused')
-    await groupChip.find('.chip-pause').trigger('click')
+    expect(groupChip?.classes()).not.toContain('paused')
+    await groupChip?.find('.chip-pause').trigger('click')
     expect(w.emitted('pause')).toEqual([[{ kind: 'group', id: 7 }]])
     expect(w.emitted('update:groupIds')).toBeUndefined()
     w.unmount()
   })
 
   it('searches names and text, and attaches with a tap', async () => {
-    const many = Array.from({ length: 10 }, (_, i) => ({ id: 100 + i, name: `Snippet ${i}`, content: `body ${i}` }))
+    const many = Array.from({ length: 10 }, (_, i) =>
+      instruction({ id: 100 + i, name: `Snippet ${String(i)}`, content: `body ${String(i)}` }),
+    )
     const w = mount(InstructionPicker, {
       props: { instructions: many, groups: [], snippetIds: [], groupIds: [] },
       attachTo: document.body,
     })
     await w.find('.add').trigger('click')
-    const search = document.body.querySelector('.dialog .search')
+    const search = one(HTMLInputElement, '.dialog .search')
     search.value = 'body 7'
     search.dispatchEvent(new Event('input'))
     await flushPromises()
     expect(pickNames()).toEqual(['Snippet 7'])
-    pickCards()[0].click()
+    pickCards()[0]?.click()
     await flushPromises()
     expect(w.emitted('update:snippetIds')).toEqual([[[107]]])
     w.unmount()

@@ -19,7 +19,7 @@ const MODELS = {
 }
 
 // What each endpoint the Studio calls on load answers; anything else gets an empty object
-const ANSWERS = [
+const ANSWERS: readonly (readonly [RegExp, unknown])[] = [
   [/\/api\/chat\/models/, MODELS],
   [/\/api\/chat\/status/, { openrouter: true, venice: false }],
   [/\/api\/chat\/conversations$/, { conversations: [] }],
@@ -50,26 +50,33 @@ const ANSWERS = [
   ],
   [/\/api\/chat\/credits/, { remaining: 0, total_credits: 0, total_usage: 0 }],
 ]
-const answer = url => ANSWERS.find(([re]) => re.test(url))?.[1] ?? {}
+const answer = (url: string): unknown => ANSWERS.find(([re]) => re.test(url))?.[1] ?? {}
 
-let problems
+let problems: string[] = []
+const report = (...parts: unknown[]): void => {
+  problems.push(parts.map(String).join(' '))
+}
 beforeEach(() => {
   problems = []
-  vi.spyOn(console, 'error').mockImplementation((...a) => problems.push(a.map(String).join(' ')))
-  vi.spyOn(console, 'warn').mockImplementation((...a) => problems.push(a.map(String).join(' ')))
+  vi.spyOn(console, 'error').mockImplementation(report)
+  vi.spyOn(console, 'warn').mockImplementation(report)
   vi.stubGlobal(
     'fetch',
-    vi.fn(async url => ({
-      ok: true,
-      status: 200,
-      headers: new Headers({ 'content-type': 'application/json' }),
-      json: async () => answer(String(url)),
-      text: async () => '',
-    })),
+    vi.fn((url: unknown) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve(answer(String(url))),
+        text: () => Promise.resolve(''),
+      }),
+    ),
   )
-  window.matchMedia ??= () => ({ matches: true, addEventListener() {} })
+  vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener: vi.fn() }))
 })
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 describe('the whole app', () => {
   it('opens every pane and the composer without an error or a warning', async () => {
@@ -78,7 +85,9 @@ describe('the whole app', () => {
     const el = document.createElement('div')
     document.body.appendChild(el)
     const app = createApp(App)
-    app.config.errorHandler = (e, _instance, info) => problems.push(`${info}: ${e.stack || e}`)
+    app.config.errorHandler = (e, _instance, info) => {
+      problems.push(`${info}: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`)
+    }
     app.use(router)
     app.mount(el)
 

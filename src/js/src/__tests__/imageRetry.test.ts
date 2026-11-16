@@ -2,7 +2,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { reloadImageLater } from '../utils/imageRetry'
 
 describe('reloadImageLater', () => {
-  afterEach(() => vi.useRealTimers())
+  afterEach(() => {
+    vi.useRealTimers()
+  })
 
   it('reloads the image after the delay, not before', () => {
     vi.useFakeTimers()

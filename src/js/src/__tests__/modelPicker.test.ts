@@ -7,8 +7,12 @@ import ModelPicker from '../components/chat/ModelPicker.vue'
 import { useModelFavourites } from '../composables/useModelFavourites'
 import { useModelFilters } from '../composables/useModelFilters'
 import { useShowHidden } from '../composables/useShowHidden'
-import { imageModel, videoModel, uiMessage } from './models'
+import { imageModel, mediaCard, videoModel, uiMessage } from './models'
+import type { MediaCard } from '../composables/chatConversationsApi'
 import { chatModelsKey } from '../injection'
+import { storedJson } from './dom'
+import type { Wrapper } from './dom'
+import { asRecord } from '../utils/storage'
 
 const MODELS = [
   imageModel({ id: 'a/alpha', name: 'Alpha' }),
@@ -16,7 +20,7 @@ const MODELS = [
   imageModel({ id: 'c/gamma', name: 'Gamma' }),
 ]
 
-async function openPicker(props = {}) {
+async function openPicker(props: Record<string, unknown> = {}) {
   const wrapper = mount(ModelPicker, {
     props: { models: MODELS, label: 'Image', kind: 'image', modelValue: '', ...props },
     attachTo: document.body,
@@ -26,13 +30,13 @@ async function openPicker(props = {}) {
   return wrapper
 }
 
-const names = w => w.findAll('.picker-item .item-name').map(n => n.text())
+const names = (w: Wrapper) => w.findAll('.picker-item .item-name').map(n => n.text())
 // The filter menu opens from the Filters button (when the list has anything to filter by)
-async function openFilters(w) {
+async function openFilters<W extends Wrapper>(w: W): Promise<W> {
   if (!w.find('.fpanel').exists() && w.find('.filters-btn').exists()) await w.find('.filters-btn').trigger('click')
   return w
 }
-const sections = w => w.findAll('.picker-section').map(n => n.text())
+const sections = (w: Wrapper) => w.findAll('.picker-section').map(n => n.text())
 
 describe('ModelPicker favourites', () => {
   beforeEach(() => {
@@ -52,10 +56,10 @@ describe('ModelPicker favourites', () => {
 
   it('starring pins a model into a Favourites section above the rest', async () => {
     const w = await openPicker()
-    await w.findAll('.star')[2].trigger('click') // Gamma
+    await w.findAll('.star')[2]?.trigger('click') // Gamma
     expect(sections(w)).toEqual(['★ Favourites', 'All models'])
     expect(names(w)).toEqual(['Gamma', 'None', 'Alpha', 'Beta'])
-    expect(JSON.parse(localStorage.getItem('chat.favourites')).image).toEqual(['c/gamma'])
+    expect(asRecord(storedJson('chat.favourites'))['image']).toEqual(['c/gamma'])
     // starring doesn't select the model or close the picker
     expect(w.emitted('update:modelValue')).toBeUndefined()
     expect(w.find('.picker-pop').exists()).toBe(true)
@@ -110,7 +114,7 @@ describe('ChatMessage user actions', () => {
   })
 
   it('Copy puts the prompt on the clipboard and shows feedback', async () => {
-    const writeText = vi.fn().mockResolvedValue()
+    const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
     const w = mount(ChatMessage, { props: { message: msg, convId: 'c1', canEdit: true } })
     await w.find('button[title="Copy prompt"]').trigger('click')
@@ -120,7 +124,7 @@ describe('ChatMessage user actions', () => {
   })
 
   it('media caption copies the prompt sent to the image model', async () => {
-    const writeText = vi.fn().mockResolvedValue()
+    const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
     const reply = uiMessage({
       id: 6,
@@ -189,13 +193,13 @@ describe('Failed media card', () => {
     })
     expect(w.find('.media-error strong').text()).toContain('blocked by moderation')
     await w.find('.retry-btn').trigger('click')
-    expect(w.emitted('regenerate')[0]).toEqual([{ mediaId: 'm1', model: null }])
+    expect(w.emitted('regenerate')?.[0]).toEqual([{ mediaId: 'm1', model: null }])
 
     await w.find('.picker-trigger').trigger('click')
     const items = w.findAll('.picker-item')
     expect(items.map(i => i.find('.item-name').text())).toEqual(['Strict', 'Lenient']) // no "None"
-    await items[1].trigger('click')
-    expect(w.emitted('regenerate')[1]).toEqual([{ mediaId: 'm1', model: 'y/lenient' }])
+    await items[1]?.trigger('click')
+    expect(w.emitted('regenerate')?.[1]).toEqual([{ mediaId: 'm1', model: 'y/lenient' }])
     w.unmount()
   })
 
@@ -209,10 +213,8 @@ describe('Failed media card', () => {
 })
 
 describe('Media note lines in replies', () => {
-  const reply = (content, media = []) => uiMessage({ id: 9, role: 'assistant', content, media })
-  const img = [
-    { id: 'm1', kind: 'image', source: 'generated', status: 'done', file: 'a.png', model: 'x/y', prompt: 'p' },
-  ]
+  const reply = (content: string, media: MediaCard[] = []) => uiMessage({ id: 9, role: 'assistant', content, media })
+  const img = [mediaCard({ id: 'm1', file: 'a.png', model: 'x/y', prompt: 'p' })]
 
   it('hides a reply that is only a [generated image: …] line, leaving the image', () => {
     const w = mount(ChatMessage, {
@@ -224,7 +226,7 @@ describe('Media note lines in replies', () => {
   })
 
   it('keeps the story and drops only the note lines', async () => {
-    const writeText = vi.fn().mockResolvedValue()
+    const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
     const w = mount(ChatMessage, {
       props: { message: reply('She laughed.\n\n[generated image: a gym]\n\nThe end.', img), convId: 'c' },
@@ -248,10 +250,12 @@ describe('ModelPicker provider & tag filters', () => {
     videoModel({ id: 'google/g', name: 'Gemini', tags: ['text2vid'] }),
     videoModel({ id: 'qwen/q', name: 'Qwen OR', tags: ['img2vid'] }),
   ]
-  const providerChips = w => w.findAll('.frow.provider').map(c => `${c.find('.fpill').text()} ${c.find('.fn').text()}`)
-  const tagChips = w => w.findAll('.frow.tag').map(c => `${c.find('.fpill').text()} ${c.find('.fn').text()}`)
-  const modelNames = w => names(w).filter(n => n !== 'None')
-  const openVid = async (props = {}) => openFilters(await openPicker({ kind: 'video', models: MIXED, ...props }))
+  const providerChips = (w: Wrapper) =>
+    w.findAll('.frow.provider').map(c => `${c.find('.fpill').text()} ${c.find('.fn').text()}`)
+  const tagChips = (w: Wrapper) => w.findAll('.frow.tag').map(c => `${c.find('.fpill').text()} ${c.find('.fn').text()}`)
+  const modelNames = (w: Wrapper) => names(w).filter(n => n !== 'None')
+  const openVid = async (props: Record<string, unknown> = {}) =>
+    openFilters(await openPicker({ kind: 'video', models: MIXED, ...props }))
 
   beforeEach(() => {
     const { favourites } = useModelFavourites()
@@ -273,8 +277,8 @@ describe('ModelPicker provider & tag filters', () => {
     expect(w.find('.fpanel').exists()).toBe(false)
     await w.find('.filters-btn').trigger('click')
     expect(w.find('.fpanel').exists()).toBe(true)
-    await w.findAll('.frow.provider input')[0].setValue(true)
-    await w.findAll('.frow.tag input')[0].setValue(true)
+    await w.findAll('.frow.provider input')[0]?.setValue(true)
+    await w.findAll('.frow.tag input')[0]?.setValue(true)
     expect(w.find('.filters-n').text()).toBe('2')
     expect(w.findAll('.achip').map(c => c.text().replace(/\s+/g, ' '))).toEqual(['Pollo ✕', 'Image→Video ✕'])
     await w.find('.achip').trigger('click') // remove a pick from its chip
@@ -292,9 +296,9 @@ describe('ModelPicker provider & tag filters', () => {
 
   it('a provider chip narrows the list to that provider, and persists', async () => {
     const w = await openVid()
-    await w.findAll('.frow.provider input')[0].setValue(true) // Pollo
+    await w.findAll('.frow.provider input')[0]?.setValue(true) // Pollo
     expect(modelNames(w)).toEqual(['Pollo A', 'Pollo B'])
-    expect(JSON.parse(localStorage.getItem('models.filters')).video.providers).toEqual(['pollo'])
+    expect(asRecord(asRecord(storedJson('models.filters'))['video'])['providers']).toEqual(['pollo'])
     w.unmount()
     // a freshly mounted picker remembers the filter
     const again = await openVid()
@@ -305,21 +309,21 @@ describe('ModelPicker provider & tag filters', () => {
   it('tag chips come from the models and narrow the list (OR within tags, AND across facets)', async () => {
     const w = await openVid()
     expect(tagChips(w)).toEqual(['Image→Video 3', 'Text→Video 1', 'Makes audio 1'])
-    await w.findAll('.frow.tag input')[2].setValue(true) // "Makes audio"
+    await w.findAll('.frow.tag input')[2]?.setValue(true) // "Makes audio"
     expect(modelNames(w)).toEqual(['Pollo A'])
     // add Text→Video: OR within the tag facet
-    await w.findAll('.frow.tag input')[1].setValue(true)
+    await w.findAll('.frow.tag input')[1]?.setValue(true)
     expect(modelNames(w)).toEqual(['Pollo A', 'Gemini'])
     // narrow by provider too: AND across facets (Gemini is OpenRouter, drops out)
-    await w.findAll('.frow.provider input')[0].setValue(true) // Pollo
+    await w.findAll('.frow.provider input')[0]?.setValue(true) // Pollo
     expect(modelNames(w)).toEqual(['Pollo A'])
     w.unmount()
   })
 
   it('Clear resets provider, tag and uncensored filters (keeping the search box)', async () => {
     const w = await openVid()
-    await w.findAll('.frow.provider input')[0].setValue(true)
-    await w.findAll('.frow.tag input')[0].setValue(true)
+    await w.findAll('.frow.provider input')[0]?.setValue(true)
+    await w.findAll('.frow.tag input')[0]?.setValue(true)
     expect(w.find('.fclear').exists()).toBe(true)
     await w.find('.fclear').trigger('click')
     expect(modelNames(w)).toEqual(['Pollo A', 'Pollo B', 'Gemini', 'Qwen OR'])
@@ -330,7 +334,7 @@ describe('ModelPicker provider & tag filters', () => {
 
   it('always keeps the current pick visible even when filtered out', async () => {
     const w = await openVid({ modelValue: 'google/g' }) // Gemini: OpenRouter + text2vid
-    await w.findAll('.frow.provider input')[0].setValue(true) // Pollo only
+    await w.findAll('.frow.provider input')[0]?.setValue(true) // Pollo only
     expect(modelNames(w)).toContain('Gemini')
     w.unmount()
   })
@@ -359,11 +363,11 @@ describe('ModelPicker provider & tag filters', () => {
       imageModel({ id: 'venice/flux-2-pro', name: 'Venice: Flux 2 Pro' }),
     ]
     const w = await openPicker({ models })
-    const badgesOf = name =>
+    const badgesOf = (name: string) =>
       w
         .findAll('.picker-item')
         .find(i => i.text().includes(name))
-        .findAll('.item-badge.uncensored')
+        ?.findAll('.item-badge.uncensored') ?? []
     expect(badgesOf('Lustify')).toHaveLength(1)
     expect(badgesOf('Flux 2 Pro')).toHaveLength(0)
     w.unmount()
@@ -381,11 +385,11 @@ describe('ModelPicker provider & tag filters', () => {
       imageModel({ id: 'venice/other', name: 'Venice: Other' }),
     ]
     const w = await openPicker({ models })
-    const item = name => w.findAll('.picker-item').find(i => i.text().includes(name))
-    expect(item('Lustify').find('.item-badge.private').text()).toBe('private')
-    expect(item('Flux 2 Pro').find('.item-badge.anonymized').text()).toBe('anonymized')
-    expect(item('Other').find('.item-badge.private').exists()).toBe(false)
-    expect(item('Other').find('.item-badge.anonymized').exists()).toBe(false)
+    const item = (name: string) => w.findAll('.picker-item').find(i => i.text().includes(name))
+    expect(item('Lustify')?.find('.item-badge.private').text()).toBe('private')
+    expect(item('Flux 2 Pro')?.find('.item-badge.anonymized').text()).toBe('anonymized')
+    expect(item('Other')?.find('.item-badge.private').exists()).toBe(false)
+    expect(item('Other')?.find('.item-badge.anonymized').exists()).toBe(false)
     w.unmount()
     const closed = mount(ModelPicker, {
       props: { models, label: 'Image', kind: 'image', modelValue: 'venice/lustify-v8' },
@@ -402,21 +406,21 @@ describe('ModelPicker row badges', () => {
       videoModel({ id: 'pollo/many', name: 'Many', tags: ['img2vid', 'text2vid', 'motion', 'audio'] }),
     ]
     const w = await openPicker({ kind: 'video', models })
-    const row = name => w.findAll('.picker-item').find(i => i.find('.item-name').text() === name)
-    expect(row('Few').find('.item-badges.collapsed').exists()).toBe(false)
+    const row = (name: string) => w.findAll('.picker-item').find(i => i.find('.item-name').text() === name)
+    expect(row('Few')?.find('.item-badges.collapsed').exists()).toBe(false)
     expect(
       row('Few')
-        .findAll('.item-badge')
+        ?.findAll('.item-badge')
         .map(b => b.text()),
     ).toEqual(['Image→Video', 'Motion / recast'])
     const many = row('Many')
-    expect(many.find('.item-badges.collapsed').exists()).toBe(true)
-    expect(many.findAll('.dot')).toHaveLength(4)
+    expect(many?.find('.item-badges.collapsed').exists()).toBe(true)
+    expect(many?.findAll('.dot')).toHaveLength(4)
     // every tag has its own colour, and each dot matches its label
-    const colours = many.findAll('.badge-list .item-badge').map(b => b.attributes('style'))
+    const colours = many?.findAll('.badge-list .item-badge').map(b => b.attributes('style'))
     expect(new Set(colours).size).toBe(4)
-    expect(many.findAll('.dot').map(d => d.attributes('style'))).toEqual(colours)
-    expect(many.findAll('.badge-list .item-badge')).toHaveLength(4) // the labels, shown on hover
+    expect(many?.findAll('.dot').map(d => d.attributes('style'))).toEqual(colours)
+    expect(many?.findAll('.badge-list .item-badge')).toHaveLength(4) // the labels, shown on hover
     w.unmount()
   })
 })
@@ -493,7 +497,7 @@ describe('ModelPicker prices', () => {
     })
     await vid.find('.picker-btn').trigger('click')
     const badge = vid.findAll('.item-badge').find(b => b.text() === '$0.65')
-    expect(badge.attributes('title')).toContain('5s · 720p')
+    expect(badge?.attributes('title')).toContain('5s · 720p')
     vid.unmount()
   })
 })
@@ -508,7 +512,17 @@ describe('ModelPicker pop-up placement', () => {
         kind: 'text',
       },
     })
-    w.element.getBoundingClientRect = () => ({ left: 900, right: 1180, top: 100, bottom: 140, width: 280, height: 40 })
+    vi.spyOn(w.find('.model-picker').element, 'getBoundingClientRect').mockReturnValue({
+      left: 900,
+      right: 1180,
+      top: 100,
+      bottom: 140,
+      width: 280,
+      height: 40,
+      x: 900,
+      y: 100,
+      toJSON: () => ({}),
+    })
     Object.assign(window, { innerWidth: 1200, innerHeight: 800 })
     await w.find('.picker-btn').trigger('click')
     const style = w.find('.picker-pop').attributes('style')
@@ -527,7 +541,7 @@ describe('ModelPicker hidden models', () => {
       hidden: 'Not enabled for API access on this key (403)',
     }),
   ]
-  const modelNames = w => names(w).filter(n => n !== 'None')
+  const modelNames = (w: Wrapper) => names(w).filter(n => n !== 'None')
 
   beforeEach(() => {
     localStorage.clear()
@@ -541,7 +555,7 @@ describe('ModelPicker hidden models', () => {
     await w.find('.show-hidden input').setValue(true)
     expect(modelNames(w)).toEqual(['Pollo: Seedream 5.0 Lite', 'Pollo: Seedream 5.0 Pro'])
     const badge = w.findAll('.item-badge').find(b => b.text() === 'hidden')
-    expect(badge.attributes('title')).toContain('403')
+    expect(badge?.attributes('title')).toContain('403')
     w.unmount()
   })
 

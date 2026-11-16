@@ -21,8 +21,8 @@ describe('useToast', () => {
     const { toasts, showToast } = useToast()
     showToast('Hello', 'success')
     expect(toasts.value).toHaveLength(1)
-    expect(toasts.value[0].message).toBe('Hello')
-    expect(toasts.value[0].type).toBe('success')
+    expect(toasts.value[0]?.message).toBe('Hello')
+    expect(toasts.value[0]?.type).toBe('success')
   })
 
   it('showToast auto-removes after duration', () => {
@@ -45,7 +45,7 @@ describe('useToast', () => {
     showToast('Second')
     removeToast(id1)
     expect(toasts.value).toHaveLength(1)
-    expect(toasts.value[0].message).toBe('Second')
+    expect(toasts.value[0]?.message).toBe('Second')
   })
 
   it('removeToast ignores invalid id', () => {
@@ -66,7 +66,7 @@ describe('useToast', () => {
   it('default type is success', () => {
     const { toasts, showToast } = useToast()
     showToast('Test')
-    expect(toasts.value[0].type).toBe('success')
+    expect(toasts.value[0]?.type).toBe('success')
   })
 
   it('default duration is 3000', () => {

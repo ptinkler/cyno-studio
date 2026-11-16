@@ -1,4 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import type { RouteRecordRaw } from 'vue-router'
+
+declare module 'vue-router' {
+  interface RouteMeta {
+    title?: string
+    fullBleed?: boolean
+  }
+}
+
 const StudioView = () => import('../views/StudioView.vue')
 
 // Studio IS the app and lives at the root. Its center panes are real paths so
@@ -8,15 +17,14 @@ const StudioView = () => import('../views/StudioView.vue')
 // with a pane name. Every route renders StudioView, which reads the route to
 // pick the pane. The backend serves index.html for any non-/api path, so these
 // deep links survive a reload.
-const page = (path, name, title, extra = {}) => ({
+const page = (path: string, name: string, title: string): RouteRecordRaw => ({
   path,
   name,
   component: StudioView,
   meta: { title, fullBleed: true },
-  ...extra,
 })
 
-const routes = [
+const routes: RouteRecordRaw[] = [
   page('/', 'studio', 'Cyno Studio'),
   page('/settings', 'studio-settings', 'Settings — Pollo'),
   page('/tools', 'studio-tools', 'Tools & library — Pollo'),
@@ -38,9 +46,8 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach((to, from, next) => {
-  document.title = to.meta.title || 'Cyno Studio'
-  next()
+router.beforeEach(to => {
+  document.title = to.meta.title ?? 'Cyno Studio'
 })
 
 export default router
