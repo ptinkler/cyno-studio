@@ -1,5 +1,3 @@
-import { apiGet } from './useApi'
-
 // Status, balances, defaults, instructions and spaces are typed in chatSettingsApi.ts; re-exported so
 // everything chat-related is still imported from here.
 export {
@@ -48,7 +46,9 @@ export {
   favouriteChatMedia,
 } from './chatMediaApi'
 
-export const fetchChatModels = (refresh = false) => apiGet(`/api/chat/models${refresh ? '?refresh=true' : ''}`)
+// The model catalogue is typed in chatModelsApi.ts
+export { fetchChatModels } from './chatModelsApi'
+
 // A chat's files, library, generation queue and request log are typed in chatFilesApi.ts
 export {
   uploadChatAttachment,

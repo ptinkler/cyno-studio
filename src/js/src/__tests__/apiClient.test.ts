@@ -5,6 +5,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Mock } from 'vitest'
 import { api } from '../composables/useApi'
+import { useAuth } from '../composables/useAuth'
 
 interface Reply {
   ok: boolean
@@ -32,7 +33,9 @@ function lastCall(fetchMock: FetchMock): [string, RequestInit] {
 }
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllGlobals()
+  useAuth().showLogin.value = false
 })
 
 describe('api.get', () => {
@@ -45,6 +48,45 @@ describe('api.get', () => {
   it('throws the HTTP status when the response is not ok', async () => {
     stubFetch(respond({}, { ok: false, status: 404 }))
     await expect(api.get('/api/auth/status')).rejects.toThrow('API error: 404')
+  })
+})
+
+describe('api.get retries', () => {
+  const status = { authenticated: true, user: null }
+
+  it('retries a server error and returns the answer that follows', async () => {
+    vi.useFakeTimers()
+    const fetchMock = stubFetch(respond({}, { ok: false, status: 500 }), respond(status))
+    const result = api.get('/api/auth/status')
+    await vi.runAllTimersAsync()
+    expect(await result).toEqual(status)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('retries a network error', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn().mockRejectedValueOnce(new Error('Network error')).mockResolvedValueOnce(respond(status))
+    vi.stubGlobal('fetch', fetchMock)
+    const result = api.get('/api/auth/status')
+    await vi.runAllTimersAsync()
+    expect(await result).toEqual(status)
+  })
+
+  it('gives up after the first try and three retries', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn().mockRejectedValue(new Error('Network error'))
+    vi.stubGlobal('fetch', fetchMock)
+    const outcome = expect(api.get('/api/auth/status')).rejects.toThrow('Network error')
+    await vi.runAllTimersAsync()
+    await outcome
+    expect(fetchMock).toHaveBeenCalledTimes(4)
+  })
+
+  it('asks for sign-in on a 401 instead of retrying', async () => {
+    const fetchMock = stubFetch(respond({}, { ok: false, status: 401 }))
+    await expect(api.get('/api/auth/status')).rejects.toThrow('API key required')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(useAuth().showLogin.value).toBe(true)
   })
 })
 

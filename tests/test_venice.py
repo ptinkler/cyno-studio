@@ -338,7 +338,11 @@ class TestCatalogue:
         self, client: TestClient, chat: None, venice: FakeVenice, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Test that chat catalogue includes venice alongside openrouter."""
-        monkeypatch.setattr(openrouter, "list_text_models", stub(lambda: [{"id": "or/text", "name": "OR"}]))
+        monkeypatch.setattr(
+            openrouter,
+            "list_text_models",
+            stub(lambda: [{"id": "or/text", "name": "OR", "input_modalities": ["text"], "supports_tools": False}]),
+        )
         monkeypatch.setattr(openrouter, "list_image_models", stub(list[ModelEntry]))
         monkeypatch.setattr(openrouter, "list_video_models", stub(list[ModelEntry]))
         data = client.get("/api/chat/models")

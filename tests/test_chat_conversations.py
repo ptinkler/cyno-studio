@@ -51,7 +51,11 @@ class TestModelCatalogue:
         catalogue.clear_models()
 
         def fake_list(kind: str, refresh: bool = False) -> list[ModelEntry]:
-            return [{"id": "pollo/seedream", "name": "Seedream"}] if kind == "image" else []
+            return (
+                [{"id": "pollo/seedream", "name": "Seedream", "input_modalities": ["text"], "conversational": False}]
+                if kind == "image"
+                else []
+            )
 
         monkeypatch.setattr(pollo_provider, "list_models", fake_list)
 

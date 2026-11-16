@@ -15,6 +15,7 @@ from web.chat.deps import router
 from web.chat.helpers import (
     require_text_provider,
 )
+from web.chat.model_schemas import ModelCatalogue, parse_catalogue
 from web.chat.models import (
     DefaultsIn,
     InstructionGroupIn,
@@ -36,7 +37,7 @@ from web.core.get_task import get_credit_balance
 from web.core.metadata import get_db
 from web.core.metadata.models import ChatSpace
 from web.providers import openrouter, venice
-from web.types import Catalogue, OpenRouterCredits, PolloBalance, VeniceBalances
+from web.types import OpenRouterCredits, PolloBalance, VeniceBalances
 
 
 @router.get("/status")
@@ -80,14 +81,14 @@ def api_venice_balance() -> VeniceBalances:
 
 
 @router.get("/models")
-def api_chat_models(*, refresh: bool = False) -> Catalogue:
+def api_chat_models(*, refresh: bool = False) -> ModelCatalogue:
     """Return the model catalogue for the configured providers."""
     # No provider gate: the catalogue lists each provider independently
     # (get_models swallows a provider's failure and an unconfigured provider
     # returns []), so media models show with only a Pollo key, and new
     # providers slot in without touching this endpoint. Chat generation still
     # requires a text provider — that gate lives on the turn routes.
-    return get_models(refresh=refresh)
+    return parse_catalogue(get_models(refresh=refresh))
 
 
 def require_hidden_defaults(value: dict[str, list[int]] | None) -> dict[str, list[int]]:

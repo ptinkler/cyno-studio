@@ -2,9 +2,6 @@ import { fetchWithRetry, statusError } from '../api/http'
 import { errorMessage, readJson } from '../api/json'
 import type { BodyFor, EndpointPattern, FormEndpoint, KnownEndpoint, ResponseFor, SendArgs } from '../api/paths'
 
-// Endpoints whose backend response has no model yet; see legacyApi.js.
-export { apiDelete, apiGet, apiPatch, apiPost, apiPut, apiUpload } from './legacyApi'
-
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 const REVOKE_AFTER_MS = 10_000
 

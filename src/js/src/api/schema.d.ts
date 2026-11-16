@@ -1865,6 +1865,33 @@ export interface components {
             file: string;
         };
         /**
+         * AudioModel
+         * @description A speech or music model.
+         */
+        AudioModel: {
+            /** Audio Input */
+            audio_input?: boolean | null;
+            /** Created */
+            created?: number | null;
+            /** Hidden */
+            hidden?: string | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Options */
+            options: string[];
+            price?: components["schemas"]["ModelPrice"] | null;
+            /** Privacy */
+            privacy?: ("private" | "anonymized") | null;
+            /** Tags */
+            tags: string[];
+            /** Type */
+            type?: string | null;
+            /** Uncensored */
+            uncensored?: boolean | null;
+        };
+        /**
          * AudioOptions
          * @description Speech / music settings; each applies only to models that take it.
          */
@@ -1978,24 +2005,6 @@ export interface components {
         Cancelled: {
             /** Cancelled */
             cancelled: boolean;
-        };
-        /**
-         * Catalogue
-         * @description Every provider's models by kind, plus the providers that failed to list.
-         */
-        Catalogue: {
-            /** Audio */
-            audio?: components["schemas"]["ModelEntry"][];
-            /** Errors */
-            errors?: {
-                [key: string]: string;
-            };
-            /** Image */
-            image?: components["schemas"]["ModelEntry"][];
-            /** Text */
-            text?: components["schemas"]["ModelEntry"][];
-            /** Video */
-            video?: components["schemas"]["ModelEntry"][];
         };
         /**
          * CharacterIn
@@ -2718,6 +2727,41 @@ export interface components {
             instruction_group: number[];
         };
         /**
+         * ImageModel
+         * @description An image model: a dedicated image API, or a chat model that can also make pictures.
+         */
+        ImageModel: {
+            /** Aspect Ratios */
+            aspect_ratios?: string[] | null;
+            /** Conversational */
+            conversational: boolean;
+            /** Created */
+            created?: number | null;
+            /** Hidden */
+            hidden?: string | null;
+            /** Id */
+            id: string;
+            /** Input Modalities */
+            input_modalities: string[];
+            /** Max Refs */
+            max_refs?: number | null;
+            /** Name */
+            name: string;
+            /** No Prompt */
+            no_prompt?: boolean | null;
+            price?: components["schemas"]["ModelPrice"] | null;
+            /** Privacy */
+            privacy?: ("private" | "anonymized") | null;
+            /** Resolutions */
+            resolutions?: string[] | null;
+            /** Tags */
+            tags: string[];
+            /** Tool */
+            tool?: string | null;
+            /** Uncensored */
+            uncensored?: boolean | null;
+        };
+        /**
          * ImportFailure
          * @description A chat that could not be imported, and why.
          */
@@ -3190,8 +3234,33 @@ export interface components {
             request?: components["schemas"]["JsonObject"] | null;
             response?: components["schemas"]["JsonObject"] | null;
         };
-        ModelEntry: {
-            [key: string]: components["schemas"]["JsonValue"];
+        /**
+         * ModelCatalogue
+         * @description Every provider's models by kind, and the providers that failed to list.
+         */
+        ModelCatalogue: {
+            /** Audio */
+            audio: components["schemas"]["AudioModel"][];
+            /** Errors */
+            errors: {
+                [key: string]: string;
+            };
+            /** Image */
+            image: components["schemas"]["ImageModel"][];
+            /** Text */
+            text: components["schemas"]["TextModel"][];
+            /** Video */
+            video: components["schemas"]["VideoModel"][];
+        };
+        /**
+         * ModelPrice
+         * @description A price badge: dollars, and what they buy ("1080p", "per 1M output tokens").
+         */
+        ModelPrice: {
+            /** Basis */
+            basis: string;
+            /** Usd */
+            usd: number;
         };
         /**
          * Ok
@@ -3314,6 +3383,45 @@ export interface components {
              * @default []
              */
             on?: string[];
+        };
+        /**
+         * RefLimits
+         * @description Per-type caps on reference files in the Reference-To-Video branch.
+         */
+        RefLimits: {
+            /** Audio */
+            audio?: number;
+            /** File */
+            file?: number;
+            /** Image */
+            image?: number;
+            /** Link */
+            link?: number;
+            /** Video */
+            video?: number;
+        };
+        /**
+         * RefMode
+         * @description A model's Reference-To-Video branch.
+         */
+        RefMode: {
+            /** Exclusive */
+            exclusive?: string[];
+            /** Hide Options */
+            hide_options?: string[];
+            /** Lengths */
+            lengths?: number[];
+            limits?: components["schemas"]["RefLimits"];
+            /** Max */
+            max?: number;
+            /** Max Length With Video */
+            max_length_with_video?: number;
+            /** No Audio With Video */
+            no_audio_with_video?: boolean;
+            /** Resolutions */
+            resolutions?: string[];
+            /** Types */
+            types?: string[];
         };
         /**
          * RegenerateMedia
@@ -3754,6 +3862,37 @@ export interface components {
             message_id: number;
         };
         /**
+         * TextModel
+         * @description A chat model.
+         */
+        TextModel: {
+            /** Completion Price */
+            completion_price?: number | null;
+            /** Context Length */
+            context_length?: number | null;
+            /** Created */
+            created?: number | null;
+            /** Hidden */
+            hidden?: string | null;
+            /** Id */
+            id: string;
+            /** Input Modalities */
+            input_modalities: string[];
+            /** Name */
+            name: string;
+            price?: components["schemas"]["ModelPrice"] | null;
+            /** Privacy */
+            privacy?: ("private" | "anonymized") | null;
+            /** Prompt Price */
+            prompt_price?: number | null;
+            /** Supports Tools */
+            supports_tools: boolean;
+            /** Tags */
+            tags: string[];
+            /** Uncensored */
+            uncensored?: boolean | null;
+        };
+        /**
          * TitleEvent
          * @description The chat got its title.
          */
@@ -3885,6 +4024,54 @@ export interface components {
             credits: number | null;
             /** Usd */
             usd: number | null;
+        };
+        /**
+         * VideoModel
+         * @description A video model.
+         */
+        VideoModel: {
+            /** Aspect Ratios */
+            aspect_ratios?: string[] | null;
+            /** Audio Input */
+            audio_input?: boolean | null;
+            /** Created */
+            created?: number | null;
+            /** Durations */
+            durations?: number[] | null;
+            /** Family */
+            family?: string | null;
+            /** Family Hint */
+            family_hint?: string | null;
+            /** Frame Images */
+            frame_images: string[];
+            /** Generate Audio */
+            generate_audio?: boolean | null;
+            /** Hidden */
+            hidden?: string | null;
+            /** Id */
+            id: string;
+            /** Modes */
+            modes?: string[] | null;
+            /** Name */
+            name: string;
+            /** No Prompt */
+            no_prompt?: boolean | null;
+            price?: components["schemas"]["ModelPrice"] | null;
+            /** Privacy */
+            privacy?: ("private" | "anonymized") | null;
+            ref_mode?: components["schemas"]["RefMode"] | null;
+            /** Reference Images */
+            reference_images?: boolean | null;
+            /** Resolutions */
+            resolutions?: string[] | null;
+            /** Tags */
+            tags: string[];
+            /** Type */
+            type?: string | null;
+            /** Uncensored */
+            uncensored?: boolean | null;
+            /** Video Input */
+            video_input?: boolean | null;
         };
         /**
          * VideoTurnOptions
@@ -6267,7 +6454,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Catalogue"];
+                    "application/json": components["schemas"]["ModelCatalogue"];
                 };
             };
             /** @description Validation Error */
