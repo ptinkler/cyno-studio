@@ -23,6 +23,7 @@ const sidebar = (threads: ConversationSummary[] = [thread({ id: 't1', title: 'A 
       search: '',
       filter: 'all',
     },
+    attachTo: document.body, // isVisible() only sees v-show when the tree is in the document
   })
 
 const hrefOf = (w: Pick<VueWrapper, 'findAll'>, text: string) =>

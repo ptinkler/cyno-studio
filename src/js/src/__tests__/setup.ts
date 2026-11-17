@@ -1,4 +1,9 @@
 // Test setup for Vitest
+import { enableAutoUnmount } from '@vue/test-utils'
+
+// Wrappers attached to document.body are removed after each test
+enableAutoUnmount(afterEach)
+
 // Mock localStorage
 const localStorageMock = (() => {
   let store: Record<string, string> = {}
