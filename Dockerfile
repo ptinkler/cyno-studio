@@ -16,6 +16,7 @@ LABEL org.opencontainers.image.source="https://github.com/ptinkler/cyno-studio"
 
 # System deps for opencv (cv2)
 RUN apt-get update && \
+    apt-get upgrade -y && \
     apt-get install -y --no-install-recommends \
         libgl1 libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1 && \
     rm -rf /var/lib/apt/lists/*
@@ -24,7 +25,9 @@ WORKDIR /app
 
 # Install Python deps
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# pip is dropped afterwards: its vendored msgpack/setuptools get flagged by scanners
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip uninstall -y pip
 
 # Copy application code in the repo's own layout (the code finds the repo root
 # three levels above web/api.py): the whole src/py tree so every subpackage —
