@@ -160,8 +160,7 @@ defineExpose({ focusPrompt })
           <div v-if="atMenu" class="atmenu" @mouseleave="atMenu = false">
             <button v-for="r in refItems" :key="r.key" @click="insertMention(r)">
               <img v-if="r.type === 'image'" :src="r.preview ?? undefined" alt="" />
-              <span v-else class="pill-ic">{{ r.type === 'audio' ? '🔊' : '🎞' }}</span
-              >{{ r.label }}
+              <span v-else class="pill-ic">{{ r.type === 'audio' ? '🔊' : '🎞' }}</span>{{ r.label }}
             </button>
           </div>
         </div>
