@@ -73,8 +73,7 @@ const byModel = computed(() => {
     <div v-if="open" class="pop">
       <div class="pop-title">Spent in this thread</div>
       <div v-for="r in byModel" :key="r.model" class="row">
-        <span class="m">{{ shortModel(r.model) }}</span
-        ><b>{{ fmtCost(r.usd) }}</b>
+        <span class="m">{{ shortModel(r.model) }}</span><b>{{ fmtCost(r.usd) }}</b>
       </div>
       <div v-if="spend?.inherited_usd || spend?.inherited_credits" class="row">
         <span class="m">Inherited from the branched chat</span>
