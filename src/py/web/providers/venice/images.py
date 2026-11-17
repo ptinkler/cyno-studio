@@ -11,8 +11,9 @@ from web.providers.openrouter import IMAGE_TIMEOUT
 from web.providers.venice import client, models
 from web.providers.venice.catalogue import image_price
 from web.providers.venice.errors import ContentViolationError, EditOnlyModelError, NoImageReturnedError
+from web.providers.venice.refs import data_urls
 from web.providers.venice.types import ImageSettings, ImageTarget
-from web.providers.venice.video import data_url, snap
+from web.providers.venice.video import snap
 
 if TYPE_CHECKING:
     from web.types import JsonValue
@@ -67,7 +68,7 @@ def _edit_image(
         "modelId": target.model,
         "prompt": prompt,
         "safe_mode": False,
-        "images": [data_url(p) for p in refs],
+        "images": data_urls(refs),
         **size,
     }
     resp = client.request(
