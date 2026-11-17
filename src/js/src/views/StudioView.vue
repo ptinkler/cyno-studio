@@ -96,6 +96,7 @@ const {
   canSend,
   loadModels,
   loadLists,
+  openThread,
   loadStatus,
   send,
   retry,
@@ -374,6 +375,7 @@ onMounted(() => {
           :conv-id="active ?? undefined"
           @open="openGeneration"
           @favourite="onGalleryFavourite"
+          @deleted="active && openThread(active)"
         />
 
         <StudioComposer

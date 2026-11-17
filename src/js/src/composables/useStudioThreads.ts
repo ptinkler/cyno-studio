@@ -164,16 +164,16 @@ export function useStudioThreads({ state, settings, link, polling, showToast }: 
     }
   }
 
-  // Deleting works on the prompt; given a reply (the gallery hands us the
-  // message holding the media) it deletes the prompt that produced it.
+  // The server finds the turn from either a prompt or one of its replies (the gallery hands us the reply holding
+  // the media), and deletes a reply with no prompt on its own.
   async function deleteExchange(msg: UiMessage): Promise<void> {
     if (sending.value) return
-    const promptId = msg.role === 'assistant' && msg.parent_id ? msg.parent_id : msg.id
-    if (typeof promptId !== 'number') return // a prompt the server hasn't saved yet
+    const id = msg.id
+    if (typeof id !== 'number') return // a message the server hasn't saved yet
     try {
-      const result = await confirmDialog(deleteDialogOptions(await fetchDeleteInfo(promptId)))
+      const result = await confirmDialog(deleteDialogOptions(await fetchDeleteInfo(id)))
       if (!result) return
-      showChat(await deleteChatExchange(promptId, { deleteMedia: result.checked }))
+      showChat(await deleteChatExchange(id, { deleteMedia: result.checked }))
     } catch (e) {
       showToast(messageOf(e), 'error')
     }
