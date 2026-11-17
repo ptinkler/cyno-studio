@@ -4,6 +4,7 @@ import type { MediaCard } from '../../composables/chatConversationsApi'
 import { refUrl, refsLabel, refsTitle } from '../../utils/cardSpecs'
 import type { CardParams } from '../../utils/cardSpecs'
 import { shortModel } from '../../utils/format'
+import InfoTip from '../InfoTip.vue'
 import { isMissing, markMissing, probeRef } from '../../utils/refAvailability'
 
 // What made a card's picture: the model, its settings, the cost, and what it was based on.
@@ -30,7 +31,7 @@ watch(
 )
 
 const refsPeek = ref<{ params: CardParams; x: number; y: number } | null>(null)
-function showRefs(event: MouseEvent, shown: CardParams): void {
+function showRefs(event: Event, shown: CardParams): void {
   if (!(event.currentTarget instanceof HTMLElement)) return
   const rect = event.currentTarget.getBoundingClientRect()
   refsPeek.value = { params: shown, x: rect.left, y: rect.top }
@@ -43,23 +44,32 @@ function showRefs(event: MouseEvent, shown: CardParams): void {
       <svg class="ic sm"><use :href="KIND_ICON[item.kind] || '#s-film'" /></svg>{{ shortModel(item.model) }}
     </span>
     <span v-if="specs.length" class="foot-specs">{{ specs.join(' · ') }}</span>
-    <span v-if="item.credits" class="chip" title="Billed to your Pollo account"
-      >{{ item.credits }} credit{{ item.credits === 1 ? '' : 's' }}</span
+    <InfoTip v-if="item.credits" text="Billed to your Pollo account"
+      ><span class="chip">{{ item.credits }} credit{{ item.credits === 1 ? '' : 's' }}</span></InfoTip
     >
-    <span v-if="params.context" class="chip" title="Sent with chat context">
-      <svg class="ic sm"><use href="#s-chat" /></svg>context
-    </span>
+    <InfoTip v-if="params.context" text="Sent with chat context">
+      <span class="chip"
+        ><svg class="ic sm"><use href="#s-chat" /></svg>context</span
+      >
+    </InfoTip>
     <span
       v-if="params.refs.length"
       class="chip caption-refs"
+      tabindex="0"
       @mouseenter="showRefs($event, params)"
+      @focus="showRefs($event, params)"
+      @click="refsPeek ? (refsPeek = null) : showRefs($event, params)"
       @mouseleave="refsPeek = null"
+      @blur="refsPeek = null"
+      @keydown.esc="refsPeek = null"
     >
       <svg class="ic sm"><use href="#s-link" /></svg>{{ refsLabel(params, missingRefs) }}
     </span>
-    <span v-if="params.upload_notice" class="chip caption-warn" :title="params.upload_notice">
-      <svg class="ic sm"><use href="#s-warn" /></svg>backup upload host
-    </span>
+    <InfoTip v-if="params.upload_notice" :text="params.upload_notice">
+      <span class="chip caption-warn"
+        ><svg class="ic sm"><use href="#s-warn" /></svg>backup upload host</span
+      >
+    </InfoTip>
   </div>
   <Teleport to="body">
     <div v-if="refsPeek" class="refs-peek" :style="{ left: `${refsPeek.x}px`, top: `${refsPeek.y}px` }">
