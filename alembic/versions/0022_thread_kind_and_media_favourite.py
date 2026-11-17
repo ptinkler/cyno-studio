@@ -51,9 +51,7 @@ def _backfill_message_favourites(session: Session) -> None:
     """Set favourite=true on every pinned item in a chat message's media list."""
     for mid, media_json in cast(
         "list[tuple[str, str | None]]",
-        session.execute(sa.text("SELECT id, media_json FROM chat_messages WHERE media_json LIKE '%\"pinned\"%'"))
-        .tuples()
-        .all(),
+        session.execute(sa.text("SELECT id, media_json FROM chat_messages WHERE media_json LIKE '%\"pinned\"%'")).all(),
     ):
         try:
             items = cast("list[dict[str, object]]", json.loads(media_json)) if media_json else []
@@ -70,9 +68,9 @@ def _backfill_library_favourites(session: Session) -> None:
     """Set favourite=true on every pinned library item."""
     for lid, item_json in cast(
         "list[tuple[str, str | None]]",
-        session.execute(sa.text("SELECT id, item_json FROM chat_library_items WHERE item_json LIKE '%\"pinned\"%'"))
-        .tuples()
-        .all(),
+        session.execute(
+            sa.text("SELECT id, item_json FROM chat_library_items WHERE item_json LIKE '%\"pinned\"%'")
+        ).all(),
     ):
         try:
             item = cast("dict[str, object]", json.loads(item_json)) if item_json else {}
@@ -118,9 +116,9 @@ def downgrade() -> None:
     try:
         for mid, media_json in cast(
             "list[tuple[str, str | None]]",
-            session.execute(sa.text("SELECT id, media_json FROM chat_messages WHERE media_json LIKE '%\"favourite\"%'"))
-            .tuples()
-            .all(),
+            session.execute(
+                sa.text("SELECT id, media_json FROM chat_messages WHERE media_json LIKE '%\"favourite\"%'")
+            ).all(),
         ):
             try:
                 items = cast("list[dict[str, object]]", json.loads(media_json)) if media_json else []

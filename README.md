@@ -221,7 +221,7 @@ WIREGUARD_ADDRESSES=...
 ## Development
 
 ```bash
-python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+uv sync          # creates .venv from uv.lock
 cd src/js && npm install && cd -
 make dev        # API on :5000, Vite dev server on :5173
 make test       # pytest + vitest

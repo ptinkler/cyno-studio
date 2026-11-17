@@ -9,7 +9,7 @@ Rules that apply to everything below:
 - Run `ruff check`, `ruff format --check`, `basedpyright` (strict, no baseline), `pytest`, and in `src/js` `npm run lint`, `npm run format:check`, `npm test` before calling anything done.
 - Lint and type rules are mandatory. Do not add ignores, `noqa`, `type: ignore` or a pyright baseline; fix the code. A suppression that is truly unavoidable needs the maintainer's approval first. Adding *stricter* rules is fine.
 - Never submit real Pollo jobs (billable, no cancel or refund) without explicit per-run consent.
-- Do not `git commit` or `git push` from an agent session; the maintainer commits.
+- Commits and pushes are fine from an agent session, but with no Claude or Co-Authored-By attribution.
 
 Layout: Python lives in `src/py/web/` (an import root: `src/py` is on the path, the package is still `web`), the Vue app in `src/js/`; `tests/`, `alembic/`, `scripts/` stay at the repo root. Paths below are relative to the repo root.
 

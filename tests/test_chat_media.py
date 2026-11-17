@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -97,7 +97,7 @@ class TestEditAndLibrary:
     def _messages(self, client: TestClient, conv: ConversationOut) -> list[dict[str, JsonValue]]:
         return jp.rows(client.get(f"/api/chat/conversations/{conv['id']}"), "messages")
 
-    def _switch(self, client: TestClient, conv: ConversationOut, message_id: int) -> httpx.Response:
+    def _switch(self, client: TestClient, conv: ConversationOut, message_id: int) -> httpx2.Response:
         """Document the  switch test helper."""
         return client.post(f"/api/chat/conversations/{conv['id']}/branch", json={"message_id": message_id})
 
@@ -809,7 +809,7 @@ class TestFork:
         )
         return u1, a1, u2, a2
 
-    def _fork(self, client: TestClient, conv: ConversationOut, message_id: int) -> httpx.Response:
+    def _fork(self, client: TestClient, conv: ConversationOut, message_id: int) -> httpx2.Response:
         return client.post(f"/api/chat/conversations/{conv['id']}/fork", json={"message_id": message_id})
 
     def test_new_chat_ends_at_the_prompt_and_its_reply(

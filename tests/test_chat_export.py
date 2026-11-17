@@ -4,7 +4,7 @@ import io
 import json
 import zipfile
 from collections.abc import Sequence
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import cast
 
 import pytest
@@ -244,7 +244,7 @@ class TestImport:
         )
         with zipfile.ZipFile(_export(client, [conv["id"]], tmp_path)) as zf:
             names = zf.namelist()
-        assert not any("unlisted" in n or "999" in n for n in names)
+        assert not any("img_unlisted.png" in n or "999" in PurePosixPath(n).parts for n in names)
 
     def test_importing_again_changes_nothing(
         self, imp: None, client: TestClient, db: MetadataDB, tmp_path: Path

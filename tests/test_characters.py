@@ -7,7 +7,7 @@ from typing import TypedDict, cast
 
 import pytest
 from fastapi.testclient import TestClient
-from httpx import Response
+from httpx2 import Response
 
 import web.characters as characters_mod
 import web.chat as chat_pkg

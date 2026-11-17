@@ -46,20 +46,25 @@ def upgrade() -> None:
         sa.column("space_id", sa.Integer),
         *(sa.column(c, sa.Text()) for c in own_cols),
     )
-    glob = cast(
-        "tuple[str | None, ...] | None",
-        bind.execute(sa.select(*(settings.c[c] for c in default_cols)).where(settings.c.id == 1)).tuples().first(),
+    glob_q = cast("sa.Select[tuple[str | None, ...]]", sa.select(*(settings.c[c] for c in default_cols)))
+    glob = cast("tuple[str | None, ...] | None", bind.execute(glob_q.where(settings.c.id == 1)).first())
+    spaces_q = cast(
+        "sa.Select[tuple[int, *tuple[str | None, ...]]]",
+        sa.select(spaces_t.c.id, *(spaces_t.c[c] for c in default_cols)),
     )
     spaces = {
         row[0]: row[1:]
         for row in cast(
             "list[tuple[int, *tuple[str | None, ...]]]",
-            bind.execute(sa.select(spaces_t.c.id, *(spaces_t.c[c] for c in default_cols))).tuples().all(),
+            bind.execute(spaces_q).all(),
         )
     }
+    convs_q = cast(
+        "sa.Select[tuple[str, int | None, *tuple[str | None, ...]]]",
+        sa.select(convs.c.id, convs.c.space_id, *(convs.c[c] for c in own_cols)),
+    )
     for conv_id, space_id, *own in cast(
-        "list[tuple[str, int | None, *tuple[str | None, ...]]]",
-        bind.execute(sa.select(convs.c.id, convs.c.space_id, *(convs.c[c] for c in own_cols))).tuples().all(),
+        "list[tuple[str, int | None, *tuple[str | None, ...]]]", bind.execute(convs_q).all()
     ):
         buckets = [b for b in (glob, spaces.get(space_id) if space_id is not None else None) if b]
         changes: dict[str, str] = {}

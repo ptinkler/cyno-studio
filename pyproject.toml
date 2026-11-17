@@ -1,4 +1,43 @@
-# Tool configuration only — the app is run from source (see README / Makefile).
+[project]
+name = "cyno-studio"
+version = "0.0.0"
+requires-python = ">=3.13"
+# Ranges only; uv.lock holds the exact versions (`make lock`)
+dependencies = [
+    "alembic",
+    "anyio",
+    "argon2-cffi",
+    "Authlib",
+    "beautifulsoup4",
+    "cryptography",
+    "fastapi",
+    "httpx",
+    "itsdangerous",
+    "openai",
+    "opencv-python",
+    "Pillow",
+    "pip-system-certs",
+    "pydantic",
+    "python-dotenv",
+    "python-multipart",
+    "requests",
+    "SQLAlchemy",
+    "starlette",
+    "uvicorn[standard]",
+]
+
+[dependency-groups]
+dev = [
+    "basedpyright",
+    "httpx2",  # Starlette's TestClient
+    "pre-commit",
+    "pytest",
+    "ruff",
+]
+
+[tool.uv]
+package = false  # the app runs from source; nothing to build
+
 
 [tool.ruff]
 target-version = "py313"
