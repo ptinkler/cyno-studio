@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { ref, computed, inject, onMounted, onBeforeUnmount } from 'vue'
 import { chatModelsKey } from '../../injection'
 import type { MediaCard } from '../../composables/chatConversationsApi'
@@ -148,7 +149,7 @@ const requestItem = ref<MediaCard | null>(null)
         <button :disabled="!canSwitch || versionAt(item) === 0" title="Previous version" @click="stepVersion(item, -1)">
           ‹
         </button>
-        <span :title="`Version ${versionAt(item) + 1}: ${item.prompt || ''}`">
+        <span v-tip="`Version ${versionAt(item) + 1}: ${item.prompt || ''}`">
           {{ versionAt(item) + 1 }}/{{ versionCount(item) }}
         </span>
         <button
@@ -167,23 +168,30 @@ const requestItem = ref<MediaCard | null>(null)
       <div class="media-overlay">
         <template v-if="item.kind === 'image'">
           <button
+            v-tip="'Use in Image mode'"
             class="media-btn"
-            title="Use in Image mode"
             aria-label="Use in Image mode"
             @click.stop="emit('use-image', { file: item.file, mode: 'image' })"
           >
             <svg class="ic"><use href="#s-image" /></svg>
           </button>
           <button
+            v-tip="'Use in Video mode'"
             class="media-btn"
-            title="Use in Video mode"
             aria-label="Use in Video mode"
             @click.stop="emit('use-image', { file: item.file, mode: 'video' })"
           >
             <svg class="ic"><use href="#s-film" /></svg>
           </button>
         </template>
-        <a :href="mediaUrl(item)" :download="item.file" class="media-btn" title="Download" @click.stop>
+        <a
+          v-tip="'Download'"
+          :href="mediaUrl(item)"
+          :download="item.file"
+          class="media-btn"
+          aria-label="Download"
+          @click.stop
+        >
           <svg class="ic"><use href="#s-download" /></svg>
         </a>
       </div>
@@ -198,7 +206,7 @@ const requestItem = ref<MediaCard | null>(null)
         <span v-else>Rendering video… {{ elapsed() }}</span>
       </div>
       <div v-if="specs.length" class="pending-specs">{{ specs.join(' · ') }}</div>
-      <div v-if="item.prompt" class="pending-prompt" :title="item.prompt">{{ item.prompt }}</div>
+      <div v-if="item.prompt" v-tip="item.prompt" class="pending-prompt">{{ item.prompt }}</div>
     </div>
 
     <div v-else class="media-error">
@@ -211,20 +219,20 @@ const requestItem = ref<MediaCard | null>(null)
       <div v-if="item.source === 'generated' && item.prompt && message.status !== 'streaming'" class="error-actions">
         <button
           v-if="versionsOf(item).length && canSwitch"
+          v-tip="'Keep previous picture'"
           class="retry-btn"
-          title="Keep previous picture"
           @click="emit('media-version', { mediaId: item.id, index: versionsOf(item).length - 1 })"
         >
           ‹ Back to the previous picture
         </button>
         <button
+          v-tip="'Retry on selected model'"
           class="retry-btn primary"
-          title="Retry on selected model"
           @click="emit('regenerate', { mediaId: item.id, model: null })"
         >
           Try again
         </button>
-        <button class="retry-btn" title="Retry with a new prompt" @click="openPrompt(item, false)">
+        <button v-tip="'Retry with a new prompt'" class="retry-btn" @click="openPrompt(item, false)">
           Try a new prompt…
         </button>
         <ModelPicker
@@ -245,8 +253,8 @@ const requestItem = ref<MediaCard | null>(null)
       <div class="foot-actions">
         <button
           v-if="canRemake(item) && item.kind === 'image' && item.file"
+          v-tip="'Edit picture'"
           class="iconbtn boxed"
-          title="Edit picture"
           aria-label="Edit picture"
           @click="openPrompt(item, true)"
         >
@@ -254,8 +262,8 @@ const requestItem = ref<MediaCard | null>(null)
         </button>
         <button
           v-if="canRemake(item)"
+          v-tip="'Redo picture'"
           class="iconbtn boxed"
-          title="Redo picture"
           aria-label="Redo picture"
           @click="openPrompt(item, false)"
         >
@@ -263,17 +271,18 @@ const requestItem = ref<MediaCard | null>(null)
         </button>
         <button
           v-if="item.prompt"
+          v-tip="`Copy prompt`"
           class="iconbtn boxed"
           :class="{ on: copiedKey === item.id }"
-          :title="`Copy prompt`"
+          :aria-label="`Copy prompt`"
           @click="copy(item.prompt, item.id)"
         >
           <svg class="ic"><use :href="copiedKey === item.id ? '#s-check' : '#s-copy'" /></svg>
         </button>
         <button
           v-if="item.request"
+          v-tip="'View request'"
           class="iconbtn boxed"
-          title="View request"
           aria-label="View request"
           @click="requestItem = item"
         >

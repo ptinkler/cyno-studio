@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { ref, reactive, computed, watch, inject, onBeforeUnmount } from 'vue'
 import { showToastKey, noToast } from '../../injection'
 import { useFocusTrap } from '../../composables/useFocusTrap'
@@ -224,7 +225,7 @@ function confirm(): void {
       >
         <div class="head">
           <h3>{{ title }}</h3>
-          <button class="iconbtn x" title="Close" @click="emit('close')">✕</button>
+          <button v-tip="'Close'" class="iconbtn x" aria-label="Close" @click="emit('close')">✕</button>
         </div>
 
         <div class="toolbar">

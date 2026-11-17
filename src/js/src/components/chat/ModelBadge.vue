@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import type { Badge } from '../../utils/modelBadges'
 
 withDefaults(
@@ -14,9 +15,9 @@ withDefaults(
 
 <template>
   <span
+    v-tip="dot ? undefined : badge.title"
     :class="[dot ? 'dot' : 'item-badge', badge.cls, { picked }]"
     :style="badge.color ? { '--b': badge.color } : undefined"
-    :title="dot ? undefined : badge.title"
     :aria-hidden="dot ? 'true' : undefined"
     >{{ dot ? '' : badge.t }}</span
   >

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { ref } from 'vue'
 import { composerSettingsKey, injectRequired } from '../../injection'
 import { useRouter } from 'vue-router'
@@ -35,7 +36,7 @@ async function onPick(event: Event): Promise<void> {
         <option value="__manage">Manage presets…</option>
       </select>
     </label>
-    <button class="add" title="Save as preset" @click="creating = true">+</button>
+    <button v-tip="'Save as preset'" class="add" aria-label="Save as preset" @click="creating = true">+</button>
     <PresetEditor :open="creating" @close="creating = false" />
   </div>
 </template>

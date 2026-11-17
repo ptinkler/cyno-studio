@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { ref } from 'vue'
 import type { ThemeChoice } from '../../composables/useStudioTheme'
 import { TEXT_SIZES, useTextSize } from '../../composables/useTextSize'
@@ -55,8 +56,8 @@ const THEMES: readonly { id: ThemeChoice; label: string }[] = [
             <button
               v-for="size in TEXT_SIZES"
               :key="size.id"
+              v-tip="`${size.label}: ${size.hint} base text`"
               :class="{ on: textSize === size.id }"
-              :title="`${size.label}: ${size.hint} base text`"
               @click="setTextSize(size.id)"
             >
               {{ size.label }}

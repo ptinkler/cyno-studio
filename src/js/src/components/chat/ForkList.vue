@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { useDropdown } from '../../composables/useDropdown'
 
 // The chats branched off at a message: "⑂ 2 branches", opening a list of them
@@ -22,11 +23,11 @@ function pick(id: string): void {
 
 <template>
   <span ref="root" class="fork-list">
-    <button class="fork-toggle" title="Chats branched off here" @click="toggle">
+    <button v-tip="'Chats branched off here'" class="fork-toggle" @click="toggle">
       ⑂ {{ forks.length }} branch{{ forks.length === 1 ? '' : 'es' }}
     </button>
     <span v-if="open" class="fork-menu" :class="align">
-      <button v-for="f in forks" :key="f.id" class="fork-item" :title="f.title" @click="pick(f.id)">
+      <button v-for="f in forks" :key="f.id" v-tip="f.title" class="fork-item" @click="pick(f.id)">
         {{ f.title }}
       </button>
     </span>

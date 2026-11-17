@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { components } from '../../api/schema'
 import {
@@ -253,7 +254,7 @@ async function start(): Promise<void> {
           >
         </li>
         <li v-for="c in shownChats" :key="c.id" class="file-item pick">
-          <label :title="c.title">
+          <label v-tip="c.title">
             <input type="checkbox" :checked="picked.has(c.id)" @change="togglePick(c.id)" />
             <span class="file-name">{{ c.title || 'Untitled' }}</span>
             <span class="file-meta"
@@ -320,10 +321,10 @@ async function start(): Promise<void> {
       <button class="btn btn-secondary" @click="emit('close')">Close</button>
       <a
         v-if="picked.size"
+        v-tip="`Download ${picked.size} chat${picked.size === 1 ? '' : 's'} as a zip`"
         class="btn btn-primary"
         :href="exportHref"
         download
-        :title="`Download ${picked.size} chat${picked.size === 1 ? '' : 's'} as a zip`"
         >Download {{ picked.size }} chat{{ picked.size === 1 ? '' : 's' }}</a
       >
       <button v-else class="btn btn-primary" disabled>Pick chats to export</button>

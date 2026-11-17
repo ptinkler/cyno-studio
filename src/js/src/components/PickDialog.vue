@@ -21,6 +21,7 @@ export interface PickItem {
 
 <script setup lang="ts" generic="T extends PickItem">
 import { computed, nextTick, ref, watch } from 'vue'
+import { vTip } from '../directives/tip'
 import BaseDialog from './BaseDialog.vue'
 
 // Pick what a chat (or a space's defaults) uses: a searchable grid of cards,
@@ -92,15 +93,15 @@ const onCount = computed(() => props.items.filter(i => i.on).length)
         <button
           v-for="item in list"
           :key="item.key"
-          type="button"
-          class="card"
-          :class="{ on: item.on, default: !!item.from }"
-          :aria-pressed="item.on"
-          :title="
+          v-tip="
             item.from
               ? `${item.name} — ${item.from}. ${item.on ? 'Click to hide it in this chat' : 'Click to use it here again'}`
               : `${item.name}${item.sub ? `\n${item.sub}` : ''}`
           "
+          type="button"
+          class="card"
+          :class="{ on: item.on, default: !!item.from }"
+          :aria-pressed="item.on"
           @click="emit('toggle', item)"
         >
           <span v-if="'img' in item" class="thumb">

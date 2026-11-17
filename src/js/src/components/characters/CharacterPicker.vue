@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { computed, ref } from 'vue'
 import type { Character } from '../../composables/charactersApi'
 import type { InheritedDefault } from '../../composables/useChatDefaults'
@@ -130,8 +131,8 @@ function onToggle(item: CharacterCard): void {
       <span
         v-for="c in fromDefaults"
         :key="`d${c.id}`"
+        v-tip="`${c.name} · ${fromTitle(c.from)}`"
         class="chip inherited"
-        :title="`${c.name} · ${fromTitle(c.from)}`"
       >
         <button class="chip-main" @click="emit('edit', c)">
           <img v-if="characterAvatar(c)" :src="characterAvatar(c) ?? undefined" alt="" />
@@ -139,21 +140,28 @@ function onToggle(item: CharacterCard): void {
           {{ c.name }}
         </button>
         <span class="chip-src">{{ defaultIcon(c.from) }}</span>
-        <button class="chip-x" :title="`Hide ${c.name} in this chat`" @click="emit('hide', c.id)">✕</button>
+        <button
+          v-tip="`Hide ${c.name} in this chat`"
+          class="chip-x"
+          :aria-label="`Hide ${c.name} in this chat`"
+          @click="emit('hide', c.id)"
+        >
+          ✕
+        </button>
       </span>
       <span
         v-for="c in attached"
         :key="c.id"
+        v-tip="(c.adhoc ? 'This chat only — ' : '') + (c.description || c.name)"
         class="chip"
         :class="{ adhoc: c.adhoc }"
-        :title="(c.adhoc ? 'This chat only — ' : '') + (c.description || c.name)"
       >
         <button class="chip-main" @click="emit('edit', c)">
           <img v-if="characterAvatar(c)" :src="characterAvatar(c) ?? undefined" alt="" />
           <span v-else class="avatar-blank">👤</span>
           {{ c.name }}
         </button>
-        <button class="chip-x" :title="`Detach ${c.name}`" @click="detach(c)">✕</button>
+        <button v-tip="`Detach ${c.name}`" class="chip-x" :aria-label="`Detach ${c.name}`" @click="detach(c)">✕</button>
       </span>
       <button class="add" @click="toggle">
         {{ attached.length || fromDefaults.length ? '＋' : '＋ Add character' }}

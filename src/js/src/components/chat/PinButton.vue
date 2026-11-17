@@ -1,17 +1,23 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 withDefaults(defineProps<{ pinned?: boolean }>(), { pinned: false })
 defineEmits<{ toggle: [] }>()
 </script>
 
 <template>
   <button
-    :class="['pin-btn', { on: pinned }]"
-    :title="
+    v-tip="
       pinned
         ? 'Pinned: sent as a reference with every new image. Click to unpin'
         : 'Pin as a reference: send it with every new image in this chat'
     "
+    :class="['pin-btn', { on: pinned }]"
     :aria-pressed="pinned"
+    :aria-label="
+      pinned
+        ? 'Pinned: sent as a reference with every new image. Click to unpin'
+        : 'Pin as a reference: send it with every new image in this chat'
+    "
     @click.stop="$emit('toggle')"
   >
     <svg class="ic sm"><use href="#s-pin" /></svg>

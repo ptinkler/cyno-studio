@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useChatDefaults } from '../../composables/useChatDefaults'
 import type { DefaultKind } from '../../composables/useChatDefaults'
@@ -98,16 +99,24 @@ defineExpose({ commit, dirty })
 <template>
   <div ref="root" class="def-toggles">
     <span class="label">Default for</span>
-    <span v-for="o in pills" :key="o.key" class="pill" :title="o.name">
+    <span v-for="o in pills" :key="o.key" v-tip="o.name" class="pill">
       <span class="pill-name">{{ o.icon }} {{ o.name }}</span>
-      <button type="button" class="pill-x" :title="`Not a default for ${o.name}`" @click="toggle(o.key)">✕</button>
+      <button
+        v-tip="`Not a default for ${o.name}`"
+        type="button"
+        class="pill-x"
+        :aria-label="`Not a default for ${o.name}`"
+        @click="toggle(o.key)"
+      >
+        ✕
+      </button>
     </span>
     <div class="picker">
       <button
+        v-tip="pills.length ? 'Add or remove' : 'Make it a default'"
         type="button"
         class="add"
         :aria-expanded="open"
-        :title="pills.length ? 'Add or remove' : 'Make it a default'"
         @click="openMenu"
       >
         {{ pills.length ? '＋' : '＋ Add' }}

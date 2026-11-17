@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { computed, ref } from 'vue'
 import { costRows, fmtCost } from '../../utils/format'
 import type { CostRow } from '../../utils/format'
@@ -32,7 +33,7 @@ const rows = computed<CostRow[]>(() => costRows(props.total, props.media))
     <div v-if="open" class="pop" role="tooltip">
       <div class="pop-title">Cost of this reply</div>
       <div v-for="row in rows" :key="row.label + row.value" class="pop-row">
-        <span class="pop-label" :title="row.label">{{ row.label }}</span>
+        <span v-tip="row.label" class="pop-label">{{ row.label }}</span>
         <span class="pop-value">{{ row.value }}</span>
       </div>
       <div class="pop-row pop-total">

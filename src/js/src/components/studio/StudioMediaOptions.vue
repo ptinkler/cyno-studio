@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { computed } from 'vue'
 import { composerSettingsKey, injectRequired } from '../../injection'
 
@@ -83,7 +84,7 @@ function onDuration(event: Event): void {
          own fill, and these are two unrelated settings. -->
     <div class="card">
       <div class="crow">
-        <span class="clabel" :title="videoInfo?.generate_audio ? '' : 'This model decides its own audio'">Audio</span>
+        <span v-tip="videoInfo?.generate_audio ? '' : 'This model decides its own audio'" class="clabel">Audio</span>
         <div v-if="videoInfo?.generate_audio" class="seg" role="group" aria-label="Generate audio">
           <button :class="{ on: videoOpts.generate_audio }" @click="videoOpts.generate_audio = true">On</button>
           <button :class="{ on: !videoOpts.generate_audio }" @click="videoOpts.generate_audio = false">Off</button>

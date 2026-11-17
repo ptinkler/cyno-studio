@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { computed } from 'vue'
 import type { UiMessage } from '../../composables/studioTypes'
 import ForkList from './ForkList.vue'
@@ -44,17 +45,23 @@ function goBranch(by: number): void {
       next-title="Next version"
       @step="goBranch"
     />
-    <button v-if="streaming" class="btn btn-sm" title="Stop generating" @click="emit('stop')">
+    <button v-if="streaming" v-tip="'Stop generating'" class="btn btn-sm" @click="emit('stop')">
       <svg class="ic sm"><use href="#s-stop" /></svg> Stop
     </button>
     <template v-else>
-      <button v-if="canRetry" class="iconbtn boxed" title="Retry reply" aria-label="Retry reply" @click="emit('retry')">
+      <button
+        v-if="canRetry"
+        v-tip="'Retry reply'"
+        class="iconbtn boxed"
+        aria-label="Retry reply"
+        @click="emit('retry')"
+      >
         <svg class="ic"><use href="#s-repeat" /></svg>
       </button>
       <button
         v-if="canBranch"
+        v-tip="'Branch from here'"
         class="iconbtn boxed"
-        title="Branch from here"
         aria-label="Branch from here"
         @click="emit('fork')"
       >

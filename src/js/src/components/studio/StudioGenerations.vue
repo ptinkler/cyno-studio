@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { computed, ref, watch } from 'vue'
 import type { MediaCard } from '../../composables/chatConversationsApi'
 import { fetchMediaPage } from '../../composables/useMedia'
@@ -112,7 +113,7 @@ const shownItems = computed(() => (showOrphans.value ? orphans.value : items.val
   >
     <!-- Sits with the grid's own filters rather than floating above them -->
     <template #filters>
-      <button class="pillbtn" :class="{ on: showOrphans }" title="Unused files" @click="toggleOrphans">
+      <button v-tip="'Unused files'" class="pillbtn" :class="{ on: showOrphans }" @click="toggleOrphans">
         Orphaned<template v-if="showOrphans && !loadingOrphans"> ({{ orphans.length }})</template>
       </button>
     </template>

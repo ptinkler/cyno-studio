@@ -4,6 +4,7 @@ const openStack: ((event: KeyboardEvent) => void)[] = []
 </script>
 
 <script setup lang="ts">
+import { vTip } from '../directives/tip'
 import { onBeforeUnmount, ref, toRef, watch } from 'vue'
 import { useFocusTrap } from '../composables/useFocusTrap'
 
@@ -65,7 +66,7 @@ onBeforeUnmount(release)
         <div class="head">
           <h3>{{ title }}</h3>
           <slot name="head" />
-          <button type="button" class="iconbtn x" title="Close" @click="emit('close')">✕</button>
+          <button v-tip="'Close'" type="button" class="iconbtn x" aria-label="Close" @click="emit('close')">✕</button>
         </div>
         <div class="body"><slot /></div>
         <div v-if="$slots['actions']" class="actions"><slot name="actions" /></div>

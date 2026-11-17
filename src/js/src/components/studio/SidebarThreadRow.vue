@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import type { ConversationSummary } from '../../composables/chatConversationsApi'
 import { typedValue, vFocusSelect } from '../../utils/focusSelect'
 
@@ -44,8 +45,8 @@ const threadIcon = (thread: ConversationSummary): string => (thread.kind === 'ga
   <div class="nactions">
     <template v-if="renaming">
       <button
+        v-tip="'Confirm rename'"
         class="nact"
-        title="Confirm rename"
         aria-label="Confirm rename"
         @mousedown.prevent
         @click="emit('commit-rename')"
@@ -53,8 +54,8 @@ const threadIcon = (thread: ConversationSummary): string => (thread.kind === 'ga
         <svg class="ic sm"><use href="#s-check" /></svg>
       </button>
       <button
+        v-tip="'Cancel rename'"
         class="nact"
-        title="Cancel rename"
         aria-label="Cancel rename"
         @mousedown.prevent
         @click="emit('cancel-rename')"
@@ -63,20 +64,20 @@ const threadIcon = (thread: ConversationSummary): string => (thread.kind === 'ga
       </button>
     </template>
     <template v-else>
-      <button class="nact" title="Rename" aria-label="Rename" @click.stop="emit('start-rename')">
+      <button v-tip="'Rename'" class="nact" aria-label="Rename" @click.stop="emit('start-rename')">
         <svg class="ic sm"><use href="#s-pencil" /></svg>
       </button>
       <button
+        v-tip="alwaysPinned || pinned ? 'Unpin' : 'Pin'"
         class="nact"
         :class="{ on: alwaysPinned || pinned }"
-        :title="alwaysPinned || pinned ? 'Unpin' : 'Pin'"
         :aria-label="alwaysPinned || pinned ? 'Unpin chat' : 'Pin chat'"
         :aria-pressed="alwaysPinned || pinned"
         @click.stop="emit('pin')"
       >
         <svg class="ic sm"><use href="#s-pin" /></svg>
       </button>
-      <button class="nact danger" title="Delete" aria-label="Delete chat" @click.stop="emit('delete')">
+      <button v-tip="'Delete'" class="nact danger" aria-label="Delete chat" @click.stop="emit('delete')">
         <svg class="ic sm"><use href="#s-trash" /></svg>
       </button>
     </template>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import type { Attachment } from '../../composables/useChatAttachments'
 import type { RefItem } from '../../utils/refItems'
 
@@ -39,8 +40,9 @@ const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, R
   <div v-if="props.attachments.length || mediaMode || audioClip" class="atts">
     <div v-if="mediaMode || audioClip" class="plus">
       <button
+        v-tip="audioClip ? 'Upload an audio clip' : 'Add references — pick from your media or upload'"
         class="addtile"
-        :title="audioClip ? 'Upload an audio clip' : 'Add references — pick from your media or upload'"
+        :aria-label="audioClip ? 'Upload an audio clip' : 'Add references — pick from your media or upload'"
         @click="audioClip ? $emit('add-clip') : $emit('library')"
       >
         +
@@ -49,19 +51,19 @@ const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, R
     <div
       v-for="a in props.attachments"
       :key="a.key"
-      class="att"
-      :class="{ uploading: a.uploading, ins: canInsert(a, props.insertable), unused: props.unused.has(a.key) }"
-      :title="
+      v-tip="
         props.unused.has(a.key)
           ? 'This model can\'t use this — it won\'t be sent'
           : canInsert(a, props.insertable)
             ? 'Click to add this reference to the prompt'
             : ''
       "
+      class="att"
+      :class="{ uploading: a.uploading, ins: canInsert(a, props.insertable), unused: props.unused.has(a.key) }"
       @click="$emit('insert', a)"
     >
       <div class="att-media">
-        <div v-if="a.audio" class="att-audio" title="Audio reference">🔊</div>
+        <div v-if="a.audio" v-tip="'Audio reference'" class="att-audio">🔊</div>
         <video
           v-else-if="a.video"
           :src="a.preview ?? undefined"
@@ -72,7 +74,7 @@ const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, R
         ></video>
         <img v-else :src="a.preview ?? undefined" alt="attachment" />
       </div>
-      <button class="attx" title="Remove" @click.stop="$emit('remove', a)">×</button>
+      <button v-tip="'Remove'" class="attx" aria-label="Remove" @click.stop="$emit('remove', a)">×</button>
       <!-- Hover: a slightly larger still preview (no playback / PiP) -->
       <div class="att-zoom">
         <video
@@ -94,7 +96,7 @@ const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, R
     <button class="clearall" @click="$emit('remove-unused')">Remove</button>
   </div>
   <div v-if="props.attachments.length" class="clearrow">
-    <button class="clearall" title="Clear all" @click="$emit('clear')">Clear all</button>
+    <button v-tip="'Clear all'" class="clearall" @click="$emit('clear')">Clear all</button>
   </div>
 </template>
 

@@ -24,7 +24,7 @@ describe('ChatMessage "make a video from this image"', () => {
         }),
       },
     })
-    const buttons = w.findAll('button[title="Use in Video mode"]')
+    const buttons = w.findAll('button[data-tip="Use in Video mode"]')
     expect(buttons).toHaveLength(1)
     await buttons[0]?.trigger('click')
     expect(w.emitted('use-image')).toEqual([[{ file: 'img_a.png', mode: 'video' }]])
@@ -43,7 +43,7 @@ describe('ChatMessage "make a video from this image"', () => {
         }),
       },
     })
-    await w.find('button[title="Use in Video mode"]').trigger('click')
+    await w.find('button[data-tip="Use in Video mode"]').trigger('click')
     expect(w.emitted('use-image')).toEqual([[{ file: 'up_b.png', mode: 'video' }]])
   })
 
@@ -153,7 +153,7 @@ describe('ChatMessage "make a picture" and text-to-media', () => {
         }),
       },
     })
-    await w.find('button[title="Use in Image mode"]').trigger('click')
+    await w.find('button[data-tip="Use in Image mode"]').trigger('click')
     expect(w.emitted('use-image')).toEqual([[{ file: 'img_a.png', mode: 'image' }]])
   })
 
@@ -164,8 +164,8 @@ describe('ChatMessage "make a picture" and text-to-media', () => {
         message: uiMessage({ id: 9, role: 'assistant', content: 'Some words.', status: 'done', media: [] }),
       },
     })
-    expect(w.find('button[title$="as an Image-mode prompt"]').exists()).toBe(false)
-    expect(w.find('button[title$="as a Video-mode prompt"]').exists()).toBe(false)
+    expect(w.find('button[data-tip$="as an Image-mode prompt"]').exists()).toBe(false)
+    expect(w.find('button[data-tip$="as a Video-mode prompt"]').exists()).toBe(false)
   })
 })
 
@@ -247,7 +247,7 @@ describe('ChatMessage delete', () => {
         }),
       },
     })
-    await user.find('button[title^="Delete prompt"]').trigger('click')
+    await user.find('button[data-tip^="Delete prompt"]').trigger('click')
     expect(user.emitted('delete')).toHaveLength(1)
     const reply = mount(ChatMessage, {
       props: {
@@ -262,7 +262,7 @@ describe('ChatMessage delete', () => {
         }),
       },
     })
-    expect(reply.find('button[title^="Delete prompt"]').exists()).toBe(false)
+    expect(reply.find('button[data-tip^="Delete prompt"]').exists()).toBe(false)
   })
 })
 
@@ -281,7 +281,7 @@ describe('ChatMessage branch to a new chat', () => {
         }),
       },
     })
-    await user.find('button[title^="Branch from here"]').trigger('click')
+    await user.find('button[data-tip^="Branch from here"]').trigger('click')
     expect(user.emitted('fork')).toHaveLength(1)
     const reply = mount(ChatMessage, {
       props: {
@@ -295,7 +295,7 @@ describe('ChatMessage branch to a new chat', () => {
         }),
       },
     })
-    expect(reply.find('button[title^="Branch from here"]').exists()).toBe(false)
+    expect(reply.find('button[data-tip^="Branch from here"]').exists()).toBe(false)
   })
 })
 
@@ -314,7 +314,7 @@ describe('ChatMessage branches', () => {
         }),
       },
     })
-    await w.find('button[title^="Branch from here"]').trigger('click')
+    await w.find('button[data-tip^="Branch from here"]').trigger('click')
     expect(w.emitted('fork')).toHaveLength(1)
   })
 
@@ -480,7 +480,7 @@ describe('ChatMessage request view', () => {
         }),
       },
     })
-    await w.find('button[title="View request"]').trigger('click')
+    await w.find('button[data-tip="View request"]').trigger('click')
     const dialog = one('.req-dialog')
     expect(dialog.textContent).toContain('"model": "seedream-v5-pro-edit"')
     expect(dialog.textContent).toContain('Venice: blocked')
@@ -503,7 +503,7 @@ describe('ChatMessage request view', () => {
         }),
       },
     })
-    expect(w.find('button[title="View request"]').exists()).toBe(false)
+    expect(w.find('button[data-tip="View request"]').exists()).toBe(false)
   })
 })
 
@@ -517,16 +517,16 @@ const reply = (media: MediaCard[], extra: Partial<UiMessage> = {}) => ({
 describe('ChatMessage edit and redo a picture in place', () => {
   it('offers Edit only on a picture, Redo on anything it can make again', () => {
     const img = mount(ChatMessage, reply([image]))
-    expect(img.find('button[title^="Edit picture"]').exists()).toBe(true)
-    expect(img.find('button[title^="Redo picture"]').exists()).toBe(true)
+    expect(img.find('button[data-tip^="Edit picture"]').exists()).toBe(true)
+    expect(img.find('button[data-tip^="Redo picture"]').exists()).toBe(true)
     const vid = mount(ChatMessage, reply([{ ...video, prompt: 'waves' }]))
-    expect(vid.find('button[title^="Edit picture"]').exists()).toBe(false)
-    expect(vid.find('button[title^="Redo picture"]').exists()).toBe(true)
+    expect(vid.find('button[data-tip^="Edit picture"]').exists()).toBe(false)
+    expect(vid.find('button[data-tip^="Redo picture"]').exists()).toBe(true)
   })
 
   it('Edit opens an empty box and asks to edit this picture', async () => {
     const w = mount(ChatMessage, reply([image]))
-    await w.find('button[title^="Edit picture"]').trigger('click')
+    await w.find('button[data-tip^="Edit picture"]').trigger('click')
     const box = w.find<HTMLTextAreaElement>('.prompt-box textarea')
     expect(box.element.value).toBe('')
     expect(box.attributes('placeholder')).toBe('Describe the change…')
@@ -543,7 +543,7 @@ describe('ChatMessage edit and redo a picture in place', () => {
 
   it('Redo pre-fills the prompt it was made with and does not edit', async () => {
     const w = mount(ChatMessage, reply([image]))
-    await w.find('button[title^="Redo picture"]').trigger('click')
+    await w.find('button[data-tip^="Redo picture"]').trigger('click')
     expect(w.find<HTMLTextAreaElement>('.prompt-box textarea').element.value).toBe('a fox')
     await w.find('.prompt-box .edit-send').trigger('click')
     expect(w.emitted('regenerate')?.[0]?.[0]).toMatchObject({ prompt: 'a fox', edit: false, replace: true })
@@ -551,7 +551,7 @@ describe('ChatMessage edit and redo a picture in place', () => {
 
   it('will not send an empty prompt', async () => {
     const w = mount(ChatMessage, reply([image]))
-    await w.find('button[title^="Edit picture"]').trigger('click')
+    await w.find('button[data-tip^="Edit picture"]').trigger('click')
     expect(w.find('.prompt-box .edit-send').attributes('disabled')).toBeDefined()
     await w.find('.prompt-box .edit-send').trigger('click')
     expect(w.emitted('regenerate')).toBeUndefined()
@@ -559,7 +559,7 @@ describe('ChatMessage edit and redo a picture in place', () => {
 
   it('Cancel closes the box without regenerating', async () => {
     const w = mount(ChatMessage, reply([image]))
-    await w.find('button[title^="Redo picture"]').trigger('click')
+    await w.find('button[data-tip^="Redo picture"]').trigger('click')
     await w.find('.prompt-box .meta-btn').trigger('click')
     expect(w.find('.prompt-box').exists()).toBe(false)
     expect(w.emitted('regenerate')).toBeUndefined()
@@ -567,8 +567,8 @@ describe('ChatMessage edit and redo a picture in place', () => {
 
   it('neither is offered while the reply is still streaming', () => {
     const w = mount(ChatMessage, reply([image], { status: 'streaming' }))
-    expect(w.find('button[title^="Edit picture"]').exists()).toBe(false)
-    expect(w.find('button[title^="Redo picture"]').exists()).toBe(false)
+    expect(w.find('button[data-tip^="Edit picture"]').exists()).toBe(false)
+    expect(w.find('button[data-tip^="Redo picture"]').exists()).toBe(false)
   })
 })
 
@@ -649,20 +649,20 @@ describe('ChatMessage references on an Edit or Redo', () => {
 
   it('Redo starts with the pictures the card was made from, without the characters', async () => {
     const w = mount(ChatMessage, reply([withRefs]))
-    await w.find('button[title^="Redo picture"]').trigger('click')
+    await w.find('button[data-tip^="Redo picture"]').trigger('click')
     expect(thumbs(w)).toEqual(['/api/chat/media/c1/up_1.png', '/api/chat/media/c1/up_2.png'])
   })
 
   it('Edit starts with none: the picture itself is the reference', async () => {
     const w = mount(ChatMessage, reply([withRefs]))
-    await w.find('button[title^="Edit picture"]').trigger('click')
+    await w.find('button[data-tip^="Edit picture"]').trigger('click')
     expect(thumbs(w)).toEqual([])
     expect(w.find('.prompt-box .addtile').exists()).toBe(true)
   })
 
   it('sends no references when they are left as they were', async () => {
     const w = mount(ChatMessage, reply([withRefs]))
-    await w.find('button[title^="Redo picture"]').trigger('click')
+    await w.find('button[data-tip^="Redo picture"]').trigger('click')
     await w.find('.prompt-box .edit-send').trigger('click')
     expect(w.emitted('regenerate')?.[0]?.[0]).not.toHaveProperty('refs')
   })
@@ -670,7 +670,7 @@ describe('ChatMessage references on an Edit or Redo', () => {
   it('sends the pictures that are left once one is taken away', async () => {
     fakeServer(() => ({ deleted: false }))
     const w = mount(ChatMessage, reply([withRefs]))
-    await w.find('button[title^="Redo picture"]').trigger('click')
+    await w.find('button[data-tip^="Redo picture"]').trigger('click')
     await w.find('.prompt-box .attx').trigger('click')
     await w.find('.prompt-box .edit-send').trigger('click')
     expect(w.emitted('regenerate')?.[0]?.[0]).toMatchObject({ refs: ['up_2.png'], edit: false })
@@ -678,7 +678,7 @@ describe('ChatMessage references on an Edit or Redo', () => {
 
   it('an edit sends what was added', async () => {
     const w = mount(ChatMessage, reply([image]))
-    await w.find('button[title^="Edit picture"]').trigger('click')
+    await w.find('button[data-tip^="Edit picture"]').trigger('click')
     // Pasting a picture uploads it to the chat first, then it is a reference
     fakeServer(() => ({ file: 'up_new.png' }))
     const png = new File(['x'], 'p.png', { type: 'image/png' })
@@ -691,7 +691,7 @@ describe('ChatMessage references on an Edit or Redo', () => {
 
   it('waits for an upload to finish before sending', async () => {
     const w = mount(ChatMessage, reply([image]))
-    await w.find('button[title^="Edit picture"]').trigger('click')
+    await w.find('button[data-tip^="Edit picture"]').trigger('click')
     vi.stubGlobal(
       'fetch',
       vi.fn(() => new Promise(() => undefined)),
@@ -706,7 +706,7 @@ describe('ChatMessage references on an Edit or Redo', () => {
   it('cancelling throws away what was uploaded for it', async () => {
     const calls = fakeServer(() => ({ file: 'up_new.png', deleted: true }))
     const w = mount(ChatMessage, reply([image]))
-    await w.find('button[title^="Edit picture"]').trigger('click')
+    await w.find('button[data-tip^="Edit picture"]').trigger('click')
     const png = new File(['x'], 'p.png', { type: 'image/png' })
     await w.find('.prompt-box textarea').trigger('paste', { clipboardData: { files: [png] } })
     await flushPromises()
@@ -763,7 +763,7 @@ describe('ChatMessage earlier versions of a picture', () => {
   it('offers the previous picture back after a failed redo', async () => {
     const failed: MediaCard = { ...versioned, status: 'error', file: null, error: 'nope' }
     const w = mount(ChatMessage, { props: { ...reply([failed]).props, canSwitch: true } })
-    await w.find('button[title^="Keep previous picture"]').trigger('click')
+    await w.find('button[data-tip^="Keep previous picture"]').trigger('click')
     expect(w.emitted('media-version')).toEqual([[{ mediaId: failed.id, index: 0 }]])
   })
 })
@@ -777,24 +777,24 @@ describe('ChatMessage edit and redo the text in place', () => {
 
   it('Redo text is offered on a reply that made media, and emits reword with no instruction', async () => {
     const w = mount(ChatMessage, rewordable([image]))
-    await w.find('button[title^="Redo text"]').trigger('click')
+    await w.find('button[data-tip^="Redo text"]').trigger('click')
     expect(w.emitted('reword')).toEqual([['']])
   })
 
   it('a picture-only reply keeps Redo text under the picture, not in a bar above it', async () => {
     const w = mount(ChatMessage, rewordable([image], { content: '' }))
     expect(w.find('.text-bar').exists()).toBe(false)
-    await w.find('.msg-meta button[title^="Redo text"]').trigger('click')
+    await w.find('.msg-meta button[data-tip^="Redo text"]').trigger('click')
     expect(w.emitted('reword')).toEqual([['']])
   })
 
   it('Redo text is not offered on a reply with no media to keep (Retry covers it)', () => {
-    expect(mount(ChatMessage, rewordable([])).find('button[title^="Redo text"]').exists()).toBe(false)
+    expect(mount(ChatMessage, rewordable([])).find('button[data-tip^="Redo text"]').exists()).toBe(false)
   })
 
   it('Edit text sends the instruction', async () => {
     const w = mount(ChatMessage, rewordable([image]))
-    await w.find('button[title^="Edit text"]').trigger('click')
+    await w.find('button[data-tip^="Edit text"]').trigger('click')
     await w.find('.text-box textarea').setValue('make it shorter')
     await w.find('.text-box .edit-send').trigger('click')
     expect(w.emitted('reword')).toEqual([['make it shorter']])
@@ -803,13 +803,13 @@ describe('ChatMessage edit and redo the text in place', () => {
 
   it('is not offered while the reply cannot be reworded', () => {
     const w = mount(ChatMessage, reply([image]))
-    expect(w.find('button[title^="Redo text"]').exists()).toBe(false)
-    expect(w.find('button[title^="Edit text"]').exists()).toBe(false)
+    expect(w.find('button[data-tip^="Redo text"]').exists()).toBe(false)
+    expect(w.find('button[data-tip^="Edit text"]').exists()).toBe(false)
   })
 
   it('is not offered while a picture is still being made', () => {
     const w = mount(ChatMessage, rewordable([{ ...image, status: 'pending', file: null }]))
-    expect(w.find('button[title^="Redo text"]').exists()).toBe(false)
+    expect(w.find('button[data-tip^="Redo text"]').exists()).toBe(false)
   })
 })
 
@@ -915,8 +915,8 @@ describe('ChatMessage a failed picture can be changed and retried', () => {
 
   it('offers Change prompt beside Retry', async () => {
     const w = mount(ChatMessage, failed)
-    expect(w.find('button[title^="Retry on selected model"]').exists()).toBe(true)
-    await w.find('button[title="Retry with a new prompt"]').trigger('click')
+    expect(w.find('button[data-tip^="Retry on selected model"]').exists()).toBe(true)
+    await w.find('button[data-tip="Retry with a new prompt"]').trigger('click')
     const box = w.find<HTMLTextAreaElement>('.prompt-box textarea')
     expect(box.element.value).toBe('a fox') // pre-filled with what failed
     await box.setValue('a fox, softer lighting')

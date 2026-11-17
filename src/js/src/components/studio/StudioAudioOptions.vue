@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { ref, computed, watch } from 'vue'
 import { composerSettingsKey, injectRequired } from '../../injection'
 import { fetchAudioVoices } from '../../composables/useChat'
@@ -47,15 +48,15 @@ const voiceLabel = (voice: Voice): string => [voice.voiceName, voice.language, v
     <div v-if="voicesError" class="aerr">{{ voicesError }}</div>
 
     <div v-if="has('tuning')" class="orow">
-      <label class="ifield" title="Speed (0.5–2×)">
+      <label v-tip="'Speed (0.5–2×)'" class="ifield">
         <span class="fcap">Speed</span>
         <input v-model.number="audioOpts.speed" type="number" min="0.5" max="2" step="0.1" placeholder="1×" />
       </label>
-      <label class="ifield" title="Volume (0.5–2×)">
+      <label v-tip="'Volume (0.5–2×)'" class="ifield">
         <span class="fcap">Volume</span>
         <input v-model.number="audioOpts.volume" type="number" min="0.5" max="2" step="0.1" placeholder="1×" />
       </label>
-      <label class="ifield" title="Pitch (semitones)">
+      <label v-tip="'Pitch (semitones)'" class="ifield">
         <span class="fcap">Pitch</span>
         <input v-model.number="audioOpts.pitch" type="number" min="-12" max="12" step="1" placeholder="0" />
       </label>
@@ -74,7 +75,7 @@ const voiceLabel = (voice: Voice): string => [voice.voiceName, voice.language, v
         </label>
       </div>
       <div v-if="has('lyrics')" class="orow">
-        <label class="ifield" title="Style and title together: lyrics mode">
+        <label v-tip="'Style and title together: lyrics mode'" class="ifield">
           <span class="fcap">Style</span>
           <input v-model="audioOpts.style" placeholder="e.g. synthwave" />
         </label>

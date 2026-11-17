@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { ref, computed } from 'vue'
 import type { Model, ModelKind } from '../../composables/chatModelsApi'
 import { useDropdown } from '../../composables/useDropdown'
@@ -109,10 +110,10 @@ function onKeydown(event: KeyboardEvent): void {
     </button>
     <button
       v-else
+      v-tip="modelValue || 'None selected'"
       type="button"
       class="picker-btn"
       :class="{ active: open }"
-      :title="modelValue || 'None selected'"
       @click="toggle"
     >
       <span class="picker-icon">{{ icon }}</span>
@@ -121,9 +122,9 @@ function onKeydown(event: KeyboardEvent): void {
           >{{ label
           }}<span
             v-if="showProviders && modelValue"
+            v-tip="ALL_PROVIDERS[providerOf(modelValue)].title"
             class="provider-tag"
             :class="providerOf(modelValue)"
-            :title="ALL_PROVIDERS[providerOf(modelValue)].title"
           >
             · {{ ALL_PROVIDERS[providerOf(modelValue)].label }}</span
           ></span
@@ -155,10 +156,10 @@ function onKeydown(event: KeyboardEvent): void {
         />
         <button
           v-if="hasFacets"
+          v-tip="'Filters'"
           type="button"
           class="filters-btn"
           :class="{ on: filtersOpen || anyFilter }"
-          title="Filters"
           aria-haspopup="true"
           :aria-expanded="filtersOpen"
           @click="filtersOpen = !filtersOpen"
@@ -196,10 +197,10 @@ function onKeydown(event: KeyboardEvent): void {
         <button
           v-for="c in activeChips"
           :key="c.key"
+          v-tip="`Remove ${c.label}`"
           type="button"
           class="achip"
           :style="colorVar(c)"
-          :title="`Remove ${c.label}`"
           @click="c.off()"
         >
           {{ c.label }} ✕
