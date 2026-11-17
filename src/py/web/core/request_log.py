@@ -356,3 +356,21 @@ def take_last() -> dict[str, JsonValue] | None:
 def forget_last() -> None:
     """Call before a generation, so take_last() can't return an older call."""
     _last.entry = None
+
+
+def scrub_urls(urls: list[str], placeholder: str) -> int:
+    """Replace each URL in every user's request logs; returns how many files changed."""
+    changed = 0
+    with _lock:
+        for path in (config.ROOT_DIR / "logs").rglob("requests*.jsonl"):
+            try:
+                text = path.read_text(encoding="utf-8")
+                new = text
+                for url in urls:
+                    new = new.replace(url, placeholder)
+                if new != text:
+                    path.write_text(new, encoding="utf-8")
+                    changed += 1
+            except OSError:
+                continue
+    return changed
