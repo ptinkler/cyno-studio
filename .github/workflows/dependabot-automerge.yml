@@ -1,5 +1,6 @@
-# Dependabot minor/patch updates merge themselves once CI passes; majors are left for a human.
-# Needs "Allow auto-merge" in the repo settings and CI as a required check on main.
+# Dependabot PRs merge themselves once CI passes, majors included.
+# Needs "Allow auto-merge" in the repo settings and CI as a required status check on main:
+# without a required check, GitHub merges at once instead of waiting for CI.
 name: Dependabot auto-merge
 
 on: pull_request
@@ -13,19 +14,8 @@ jobs:
     if: github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
-      - name: Enable auto-merge for non-major updates
+      - name: Enable auto-merge
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TITLE: ${{ github.event.pull_request.title }}
           PR_URL: ${{ github.event.pull_request.html_url }}
-        run: |
-          # The *-minor-and-patch groups (dependabot.yml) hold no majors; other PRs say "from X to Y"
-          if [[ "$TITLE" != *"-minor-and-patch group"* ]]; then
-            from=$(sed -nE 's/.* from v?([0-9]+)[.0-9]* to v?([0-9]+).*/\1/p' <<<"$TITLE")
-            to=$(sed -nE 's/.* from v?([0-9]+)[.0-9]* to v?([0-9]+).*/\2/p' <<<"$TITLE")
-            if [[ -z "$from" || "$from" != "$to" ]]; then
-              echo "Major or unparseable update ($TITLE): leaving it for review"
-              exit 0
-            fi
-          fi
-          gh pr merge --auto --squash "$PR_URL"
+        run: gh pr merge --auto --squash "$PR_URL"
