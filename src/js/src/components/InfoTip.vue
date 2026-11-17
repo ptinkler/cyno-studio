@@ -66,11 +66,11 @@ const flip = (): void => {
   z-index: var(--z-popover);
   max-width: 18rem;
   padding: 0.4rem 0.6667rem;
-  background: var(--spanel2);
-  border: 1px solid var(--sborder);
+  background: var(--stip-bg);
+  border: 1px solid var(--stip-border);
   border-radius: var(--r-lg);
-  box-shadow: var(--shadow-pop);
-  color: var(--sfg);
+  box-shadow: var(--shadow-tip);
+  color: var(--stip-fg);
   font-size: 0.8rem;
   pointer-events: none;
 }

@@ -21,6 +21,9 @@
   --saccent-soft: color-mix(in srgb, var(--saccent) 16%, transparent);
   --sbg2: #0d0f13;
   --spanel2: #1a1e26;
+  /* Tooltips sit above panels of every shade, so they get their own raised surface and a visible edge */
+  --stip-bg: #333b4b;
+  --stip-border: #5d687e;
 
   /* One pastel per provider, used wherever a provider is named (model picker
      tags, the usage cards) so the same thing is always the same colour. */
@@ -67,6 +70,8 @@
   --r-lg: 12px; /* cards, menus, popovers */
   --r-xl: 14px; /* dialogs */
   --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-tip: 0 6px 20px rgba(0, 0, 0, 0.6);
+  --stip-fg: #f4f6fa;
   --shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.5);
 
   /* Legacy aliases (pre-Studio components) */
@@ -100,6 +105,8 @@
   --saccent-soft: color-mix(in srgb, var(--saccent) 12%, transparent);
   --sbg2: #f7f8fa;
   --spanel2: #f1f3f7;
+  --stip-bg: #1f2531;
+  --stip-border: #1f2531;
 
   --p-pollo: #4560d0;
   --p-venice: #9c560b;
@@ -112,6 +119,8 @@
   --sstar: #d9a400;
 
   --shadow-pop: 0 8px 24px rgba(20, 30, 50, 0.14);
+  --shadow-tip: 0 6px 20px rgba(20, 30, 50, 0.28);
+  --stip-fg: #f4f6fa;
   --shadow-modal: 0 16px 48px rgba(20, 30, 50, 0.22);
 }
 
@@ -660,11 +669,11 @@ label:has(> input[type='radio']) {
   z-index: var(--z-popover);
   max-width: 18rem;
   padding: 0.4rem 0.6667rem;
-  background: var(--spanel2);
-  border: 1px solid var(--sborder);
+  background: var(--stip-bg);
+  border: 1px solid var(--stip-border);
   border-radius: var(--r-lg);
-  box-shadow: var(--shadow-pop);
-  color: var(--sfg);
+  box-shadow: var(--shadow-tip);
+  color: var(--stip-fg);
   font-size: 0.8rem;
   pointer-events: none;
 }
