@@ -39,6 +39,7 @@ from web.auth.user_keys import router as keys_router
 from web.auth.users import admin_emails, require_user, resolve_current_user
 from web.chat import router as chat_router
 from web.chat import startup_resume_chat
+from web.core.backup import start_backups
 from web.core.env import bool_env
 from web.core.metadata import User, get_db, reset_tenant, set_tenant
 from web.core.metadata.schema import ensure_schema
@@ -77,8 +78,10 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     # Dev: seed the one-click dev account when enabled (no-op otherwise).
     seed_dev_user()
     startup_resume_chat()
+    stop_backups = start_backups()
     yield
-    # Shutdown: nothing to do
+    if stop_backups:
+        stop_backups.set()
 
 
 # The interactive API docs (/docs, /redoc, /openapi.json) expose the whole API

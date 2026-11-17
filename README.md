@@ -136,6 +136,8 @@ docker image prune -f
 
 ### Backup
 
+The app also copies its database by itself: every `BACKUP_INTERVAL_HOURS` (default 24, `0` = off) a consistent snapshot goes to `backups/` in the data directory, and all but the newest `BACKUP_KEEP` (default 7) are deleted. That guards against a bad migration or a deleted row, not a dead disk, so still copy the data directory elsewhere. To restore: stop the app, copy a snapshot over `data/metadata.db`, start it.
+
 Everything lives in `CYNO_HOST_DATA_DIR` (SQLite DB, videos, images). Also keep a copy of `.env`: without the original `KEYS_SECRET` and `PASSWORD_PEPPER`, a restored database is unusable. Stop the stack for a consistent copy:
 
 ```bash
@@ -175,6 +177,7 @@ See `.env.example` for the full list.
 | `PUBLIC_BASE_URL`                             | Public https base URL for OAuth callbacks (behind a proxy/DDNS)               |
 | `*_OAUTH_CLIENT_ID` / `*_OAUTH_CLIENT_SECRET` | Google/Microsoft/X credentials; a provider turns on when both are set         |
 | `MICROSOFT_OAUTH_TENANT`                      | Your Microsoft tenant id or domain — required, or Microsoft sign-in is refused |
+| `BACKUP_INTERVAL_HOURS` / `BACKUP_KEEP`       | Database snapshot every N hours (default 24, `0` = off) and how many to keep (default 7) |
 | `CYNO_HOST_DATA_DIR`                          | Host path for persistent data (videos, DB)                                    |
 | `APP_PORT`                                    | Host port to expose the app on (default `8080`)                               |
 | `COMPOSE_PROFILES`                            | `novpn` (default) or `vpn` — selects the stack                                |
