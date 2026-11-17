@@ -55,4 +55,12 @@ describe('StudioMedia selecting', () => {
     expect(media.deleteMediaMany).toHaveBeenCalledWith(['lib:b.png', 'lib:d.png'])
     expect(w.find('.bulkbar').exists()).toBe(false)
   })
+
+  it('filters from the dropdowns, asking the server again', async () => {
+    const w = await mountMedia()
+    await w.findAll('select')[0]?.setValue('video')
+    await w.findAll('select')[2]?.setValue('orphan')
+    const last = vi.mocked(media.fetchMediaPage).mock.calls.at(-1)?.[0]
+    expect(last).toMatchObject({ kind: 'video', origin: 'orphan' })
+  })
 })

@@ -21,13 +21,13 @@ const KINDS: readonly Choice[] = [
   { id: 'video', label: 'Videos' },
 ]
 const SOURCES: readonly Choice[] = [
-  { id: 'all', label: 'Any source' },
+  { id: 'all', label: 'Any' },
   { id: 'generated', label: 'Generated' },
   { id: 'upload', label: 'Uploaded' },
 ]
 
 const ORIGINS: readonly Choice[] = [
-  { id: 'all', label: 'Everywhere' },
+  { id: 'all', label: 'Anywhere' },
   { id: 'chat', label: 'Chats' },
   { id: 'library', label: 'Library' },
   { id: 'orphan', label: 'Orphaned' },
@@ -112,20 +112,6 @@ async function loadMore(): Promise<void> {
   const { items: page } = await fetchMediaPage(params(items.value.length))
   items.value = [...items.value, ...page]
 }
-function setKind(k: string): void {
-  kind.value = k
-  void load()
-}
-function setSource(s: string): void {
-  source.value = s
-  void load()
-}
-
-function setOrigin(o: string): void {
-  origin.value = o
-  void load()
-}
-
 onMounted(load)
 </script>
 
@@ -140,21 +126,24 @@ onMounted(load)
       </button>
     </div>
     <div class="mbar">
-      <div class="seg">
-        <button v-for="k in KINDS" :key="k.id" :class="{ on: kind === k.id }" @click="setKind(k.id)">
-          {{ k.label }}
-        </button>
-      </div>
-      <div class="seg">
-        <button v-for="s in SOURCES" :key="s.id" :class="{ on: source === s.id }" @click="setSource(s.id)">
-          {{ s.label }}
-        </button>
-      </div>
-      <div class="seg">
-        <button v-for="o in ORIGINS" :key="o.id" :class="{ on: origin === o.id }" @click="setOrigin(o.id)">
-          {{ o.label }}
-        </button>
-      </div>
+      <label class="fsel">
+        <span>Type</span>
+        <select v-model="kind" @change="load">
+          <option v-for="k in KINDS" :key="k.id" :value="k.id">{{ k.label }}</option>
+        </select>
+      </label>
+      <label class="fsel">
+        <span>Source</span>
+        <select v-model="source" @change="load">
+          <option v-for="o in SOURCES" :key="o.id" :value="o.id">{{ o.label }}</option>
+        </select>
+      </label>
+      <label class="fsel">
+        <span>From</span>
+        <select v-model="origin" @change="load">
+          <option v-for="o in ORIGINS" :key="o.id" :value="o.id">{{ o.label }}</option>
+        </select>
+      </label>
       <button v-if="items.length" class="btn btn-sm" @click="selectAll">Select all</button>
       <div class="sbox msearch">
         <svg class="ic"><use href="#s-search" /></svg>
@@ -223,6 +212,39 @@ h1 {
   flex-wrap: wrap;
   gap: 0.5333rem 0.9333rem;
   padding: 0.6667rem 1.2rem;
+}
+.fsel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--smuted);
+}
+.fsel select {
+  appearance: none;
+  padding: 0.3333rem 1.6rem 0.3333rem 0.6667rem;
+  border: 1px solid var(--sborder);
+  border-radius: var(--r);
+  background-color: var(--sbg2);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--smuted) 50%),
+    linear-gradient(135deg, var(--smuted) 50%, transparent 50%);
+  background-size:
+    0.3333rem 0.3333rem,
+    0.3333rem 0.3333rem;
+  background-position:
+    calc(100% - 0.8rem) 55%,
+    calc(100% - 0.5rem) 55%;
+  background-repeat: no-repeat;
+  color: var(--sfg);
+  font: inherit;
+  font-size: 0.8667rem;
+  cursor: pointer;
+}
+.fsel select:hover,
+.fsel select:focus-visible {
+  border-color: var(--saccent);
+  outline: none;
 }
 .msearch {
   flex: 1;
