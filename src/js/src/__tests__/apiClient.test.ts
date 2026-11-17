@@ -13,7 +13,7 @@ interface Reply {
   json: () => Promise<unknown>
 }
 
-type FetchMock = Mock<[string, RequestInit], Promise<Reply>>
+type FetchMock = Mock<(url: string, init: RequestInit) => Promise<Reply>>
 
 function respond(body: unknown, init: { ok?: boolean; status?: number } = {}): Reply {
   return { ok: init.ok ?? true, status: init.status ?? 200, json: () => Promise.resolve(body) }

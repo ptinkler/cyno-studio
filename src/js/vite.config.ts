@@ -5,6 +5,8 @@ export default defineConfig({
   plugins: [vue()],
   base: '/',
   server: {
+    // The model-tags test reads a Python file from src/py with ?raw
+    fs: { allow: ['../..'] },
     proxy: {
       '/api': 'http://localhost:5000',
       '/video': 'http://localhost:5000',
