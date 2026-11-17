@@ -5,7 +5,6 @@ from web.media.kinds import IMAGE_EXTS
 __all__ = ["IMAGE_EXTS"]  # re-exported for the chat package
 
 MAX_TOOL_ROUNDS = 4
-CONSISTENCY_REFS = 2  # recent images passed to the image model to keep characters consistent
 # Chat images per request unless the composer's slider says otherwise: the most
 # recent images sent to the chat model as pixels, and the cap on chat images sent
 # as references (edit source + recent + pins + attachments). Character images

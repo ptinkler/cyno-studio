@@ -98,6 +98,7 @@ class TestConsistencyReferences:
         chat: None,
         monkeypatch: pytest.MonkeyPatch,
         tool_args: dict[str, JsonValue],
+        **settings: JsonValue,
     ) -> tuple[ImageApiSpy, dict[str, JsonValue]]:
         replies = iter([tool_chunks("generate_image", tool_args, text="Next scene."), text_chunks("Done.")])
         monkeypatch.setattr(openrouter, "stream_chat", stub(lambda: next(replies)))
@@ -105,30 +106,38 @@ class TestConsistencyReferences:
         monkeypatch.setattr(openrouter, "generate_image", got)
         ev = sse_events(
             client.post(
-                f"/api/chat/conversations/{conv['id']}/messages", json={"content": "continue the story", **SETTINGS}
+                f"/api/chat/conversations/{conv['id']}/messages",
+                json={"content": "continue the story", **SETTINGS, **settings},
             )
         )
         return got, jp.obj(ev[-1], "message", "media", 0)
 
-    def test_no_references_unless_the_model_asks(
+    def test_recent_images_go_without_the_model_asking(
         self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that no references unless the model asks."""
+        """The chat model needn't set anything: the latest images are the references."""
         self._prior_images(chat, db, conv, 1)
         got, item = self._run(client, conv, chat, monkeypatch, {"prompt": "the same woman, now turned around"})
+        assert len(jp.must(got.input_images)) == 1
+        assert jp.dig(item, "params", "refs") == ["g0.png"]
+
+    def test_the_images_slider_at_zero_sends_none(
+        self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """How a chat opts out."""
+        self._prior_images(chat, db, conv, 2)
+        got, item = self._run(client, conv, chat, monkeypatch, {"prompt": "something new"}, image_limit=0)
         assert got.input_images is None
         assert jp.dig(item, "params", "refs") == []
 
-    def test_model_opts_in_and_prompt_is_passed_verbatim(
+    def test_prompt_is_passed_verbatim(
         self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that model opts in and prompt is passed verbatim."""
+        """The model's prompt reaches the image model unchanged."""
         self._prior_images(chat, db, conv, 1)
         replies = iter(
             [
-                tool_chunks(
-                    "generate_image", {"prompt": "exactly what the model wrote", "keep_consistent": True}, text="Next."
-                ),
+                tool_chunks("generate_image", {"prompt": "exactly what the model wrote"}, text="Next."),
                 text_chunks("Done."),
             ]
         )
@@ -141,19 +150,30 @@ class TestConsistencyReferences:
         assert got.prompt == "exactly what the model wrote"
         assert len(jp.must(got.input_images)) == 1
 
-    def test_uses_only_the_most_recent_two(
-        self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
+    @pytest.mark.parametrize(
+        ("limit", "expected"),
+        [(2, ["g2.png", "g1.png"]), (6, ["g2.png", "g1.png", "g0.png"])],
+    )
+    def test_the_images_slider_caps_how_many_go(
+        self,
+        client: TestClient,
+        conv: ConversationOut,
+        chat: None,
+        db: MetadataDB,
+        monkeypatch: pytest.MonkeyPatch,
+        limit: int,
+        expected: list[str],
     ) -> None:
-        """Test that uses only the most recent two."""
+        """The most recent ones, newest first."""
         self._prior_images(chat, db, conv, 3)
-        _got, item = self._run(client, conv, chat, monkeypatch, {"prompt": "scene 4", "keep_consistent": True})
-        assert jp.dig(item, "params", "refs") == ["g2.png", "g1.png"]
+        _got, item = self._run(client, conv, chat, monkeypatch, {"prompt": "scene 4"}, image_limit=limit)
+        assert jp.dig(item, "params", "refs") == expected
 
     def test_first_image_in_chat_has_no_refs(
         self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Test that first image in chat has no refs."""
-        got, _item = self._run(client, conv, chat, monkeypatch, {"prompt": "Linh", "keep_consistent": True})
+        got, _item = self._run(client, conv, chat, monkeypatch, {"prompt": "Linh"})
         assert got.input_images is None
 
     def test_skipped_for_image_models_without_reference_support(
@@ -164,7 +184,7 @@ class TestConsistencyReferences:
             {"text": [], "video": [], "image": [{"id": "i/model", "input_modalities": ["text"]}]}
         )
         self._prior_images(chat, db, conv, 1)
-        got, _item = self._run(client, conv, chat, monkeypatch, {"prompt": "next", "keep_consistent": True})
+        got, _item = self._run(client, conv, chat, monkeypatch, {"prompt": "next"})
         assert got.input_images is None
 
     def test_edit_source_comes_first(
@@ -177,17 +197,17 @@ class TestConsistencyReferences:
             conv,
             chat,
             monkeypatch,
-            {"prompt": "make it night", "source_image": "latest", "keep_consistent": True},
+            {"prompt": "make it night", "source_image": "latest"},
         )
         assert jp.dig(item, "params", "refs") == ["g1.png", "g0.png"]
 
-    def test_edit_alone_sends_just_the_source(
+    def test_edit_sends_the_source_first(
         self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that edit alone sends just the source."""
+        """The edit source leads; the other recent images follow."""
         self._prior_images(chat, db, conv, 2)
         _got, item = self._run(client, conv, chat, monkeypatch, {"prompt": "make it night", "source_image": "latest"})
-        assert jp.dig(item, "params", "refs") == ["g1.png"]
+        assert jp.dig(item, "params", "refs") == ["g1.png", "g0.png"]
 
     def _pin(
         self, client: TestClient, db: MetadataDB, conv: ConversationOut, media_id: str, pinned: bool = True
@@ -197,16 +217,16 @@ class TestConsistencyReferences:
         assert r.status_code == 200
         return jp.dig(r)
 
-    def test_pinned_images_are_sent_without_the_model_asking(
+    def test_pinned_images_go_ahead_of_the_recent_ones(
         self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that pinned images are sent without the model asking."""
+        """Pins keep their place even when they are old."""
         self._prior_images(chat, db, conv, 3)
         out = self._pin(client, db, conv, "g0")
         assert jp.dig(out, "media", 0, "pinned") is True
         got, item = self._run(client, conv, chat, monkeypatch, {"prompt": "next scene"})
-        assert jp.dig(item, "params", "refs") == ["g0.png"]
-        assert len(jp.must(got.input_images)) == 1
+        assert jp.dig(item, "params", "refs") == ["g0.png", "g2.png", "g1.png"]
+        assert len(jp.must(got.input_images)) == 3
 
     def test_order_is_edit_source_then_pins_then_recent_picks(
         self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
@@ -219,20 +239,20 @@ class TestConsistencyReferences:
             conv,
             chat,
             monkeypatch,
-            {"prompt": "make it night", "source_image": "latest", "keep_consistent": True},
+            {"prompt": "make it night", "source_image": "latest"},
         )
         assert jp.dig(item, "params", "refs") == ["g2.png", "g0.png", "g1.png"]
-        assert jp.dig(item, "params", "ref_args") == {"source_image": "latest", "keep_consistent": True}
+        assert jp.dig(item, "params", "ref_args") == {"source_image": "latest"}
 
-    def test_unpinned_images_stop_being_sent(
+    def test_an_unpinned_image_loses_its_place(
         self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that unpinned images stop being sent."""
-        self._prior_images(chat, db, conv, 2)
+        """With room for one, the newest wins once the old pin is gone."""
+        self._prior_images(chat, db, conv, 3)
         self._pin(client, db, conv, "g0")
         self._pin(client, db, conv, "g0", pinned=False)
-        _got, item = self._run(client, conv, chat, monkeypatch, {"prompt": "next"})
-        assert jp.dig(item, "params", "refs") == []
+        _got, item = self._run(client, conv, chat, monkeypatch, {"prompt": "next"}, image_limit=1)
+        assert jp.dig(item, "params", "refs") == ["g2.png"]
 
     def test_pinned_upload_is_a_reference_in_image_mode(
         self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch

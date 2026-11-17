@@ -275,8 +275,8 @@ class ToolsTurn(GenerationTurn):
         # picked there wins; left on "auto" it becomes the image model's own
         # "auto" value if it has one, else nothing — the model's natural shape.
         ratio = self.s.image_options.aspect_ratio or auto_ratio("image", self.s.image_model)
-        refs, dropped = self._image_refs(args, source, chars)
-        ref_args = {k: args[k] for k in ("source_image", "keep_consistent", "characters") if k in args}
+        refs, dropped = self._image_refs(source, chars)
+        ref_args = {k: args[k] for k in ("source_image", "characters") if k in args}
         self._generate_image(ImageSpec(prompt, ratio, refs, ref_args, chars, dropped))
         result: dict[str, JsonValue] = {"ok": True, "result": IMAGE_TOOL_RESULT}
         if chars:

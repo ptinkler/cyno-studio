@@ -528,7 +528,8 @@ class TestUseByName:
         enum = _find_tool(tools_seen[1], "generate_image")
         assert "Mai" in seq(enum, "function", "parameters", "properties", "characters", "items", "enum")
         assert "Freckles" in got.prompt
-        assert _params(ev)["refs"] == [f"char:{mai.id}/{mai.images[0]}"]
+        # Her image first, then the chat's latest picture (the one she was made from)
+        assert _params(ev)["refs"] == [f"char:{mai.id}/{mai.images[0]}", "g.png"]
 
     def _chat_image(self, chat: None, conv: ConversationOut, db: MetadataDB) -> None:
         (chat_pkg.conversation_dir(conv["id"]) / "g.png").write_bytes(png_bytes())

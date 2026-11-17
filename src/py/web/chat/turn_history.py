@@ -1,21 +1,18 @@
 """What a turn looks up in the chat so far: latest media, pins, instructions, references, characters."""
 
 import logging
-from collections.abc import Mapping
 from datetime import datetime
 
 from web import characters
 from web.characters import CharacterInfo
 from web.chat.catalogue import RefMode
-from web.chat.constants import (
-    CONSISTENCY_REFS,
-)
 from web.chat.generation import (
     HistoryShape,
     RefLimits,
     characters_note,
     conversation,
     dedupe,
+    is_conversational,
     plan_refs,
 )
 from web.chat.helpers import effective_ids
@@ -40,8 +37,8 @@ class HistoryTurn(TurnBase):
         images = self._latest_images(1)
         return images[0] if images else None
 
-    def _latest_images(self, n: int) -> list[str]:
-        """The n most recent finished images (this turn first, then history)."""
+    def _latest_images(self, n: int | None) -> list[str]:
+        """The n most recent finished images (None = all), this turn first, then history."""
 
         def done_images(media: list[dict[str, JsonValue]]) -> list[str]:
             return [
@@ -55,7 +52,7 @@ class HistoryTurn(TurnBase):
         found = done_images(self.media)
         for msg in reversed(self.history):
             found.extend(done_images(msg.media))
-        return found[:n]
+        return found if n is None else found[:n]
 
     def _pinned_images(self) -> list[str]:
         """Images the user pinned on this branch, oldest first."""
@@ -127,22 +124,22 @@ class HistoryTurn(TurnBase):
                 ids.update(group.snippet_ids)
         return [i for i in self.db.list_instructions() if i.id in ids]
 
-    def _image_refs(
-        self, args: Mapping[str, JsonValue], source: str | None, chars: list[Character]
-    ) -> tuple[list[str], list[str]]:
+    def _image_refs(self, source: str | None, chars: list[Character]) -> tuple[list[str], list[str]]:
         """Choose reference images for image generation and report any omitted.
 
-        Priority is the edit source, selected characters, pinned images, then
-        recent images requested with `keep_consistent`. Pins are user-selected.
+        Priority is the edit source, selected characters, pinned images, then the
+        most recent chat images. The composer's Images slider caps the chat images
+        (`plan_refs`), so the model needn't ask for them: leave the slider at 0 or
+        switch an image off to keep it out.
         """
         if not self._accepts_refs():
             return [], []  # this image model can't take references
         lead = [source] if source else []
         pinned = self._pinned_images()
-        recent = []
-        if args.get("keep_consistent") is True:
-            recent = [f for f in self._latest_images(CONSISTENCY_REFS) if f not in pinned and f not in lead]
-        chat_refs = dedupe(lead + pinned + recent[: max(CONSISTENCY_REFS - len(lead), 0)])
+        # A conversational model already has the chat's images in its context, as pixels
+        recent = [] if is_conversational(self.s.image_model) else self._latest_images(self.s.image_limit)
+        recent = [f for f in recent if f not in pinned and f not in lead]
+        chat_refs = dedupe(lead + pinned + recent)
         limits = RefLimits(self.s.image_limit, after=len(lead), max_refs=self._max_refs(), choices=self.s.ref_choices)
         return plan_refs(chat_refs, chars, limits)
 
