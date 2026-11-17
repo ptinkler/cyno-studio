@@ -8,6 +8,7 @@ import logging
 import threading
 import time
 from collections.abc import Mapping
+from datetime import datetime, timedelta
 from html.parser import HTMLParser
 from http import HTTPStatus
 from pathlib import Path
@@ -16,6 +17,7 @@ import httpx2
 from pydantic import TypeAdapter
 
 from web.core import net_guard
+from web.core.metadata import get_db
 from web.media.public import selfhost_url
 from web.types import JsonValue
 from web.uploads.settings import UploadPrefs, current_upload_prefs
@@ -278,8 +280,19 @@ def upload_file(filepath: Path, prefs: UploadPrefs | None = None) -> str:
                 errors.append(f"{_HOST_LABEL.get(host, host)}: {exc}")
                 continue
         _note_fallback(order, host, errors)
+        _remember_hosted(url, host, expiry)
         return url
     raise ValueError("All upload hosts failed — " + "; ".join(errors))
+
+
+def _remember_hosted(url: str, host: str, expiry_minutes: int) -> None:
+    """Record when this URL dies, so the app can scrub it from stored requests afterwards."""
+    minutes = min(expiry_minutes, _FIXED_RETENTION_MIN.get(host, expiry_minutes))
+    gone = datetime.now().astimezone().replace(tzinfo=None) + timedelta(minutes=minutes)
+    try:
+        get_db().record_hosted_upload(url, gone)
+    except Exception:  # bookkeeping must never fail an upload
+        log.warning("couldn't record the hosted upload", exc_info=True)
 
 
 _HOST_LABEL = {"litterbox": "Litterbox", "uguu": "uguu.se", "tmpfiles": "tmpfiles.org", "selfhost": "self-host"}

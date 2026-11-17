@@ -36,6 +36,14 @@ class Base(DeclarativeBase):
     """Base class for metadata SQLAlchemy models."""
 
 
+class HostedUpload(Base):
+    """A public upload URL, kept until the host drops it so it can be scrubbed from stored requests."""
+
+    __tablename__ = "hosted_uploads"
+    url: Mapped[str] = mapped_column(String(1000), primary_key=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+
+
 class SigninRequest(Base):
     """A sign-in the allow-lists refused, kept so the admin can approve it from Settings.
 
