@@ -225,3 +225,15 @@ describe('MediaGrid thumbnails', () => {
     w.unmount()
   })
 })
+
+describe('MediaGrid tick circle', () => {
+  it('toggles without following the tile link (it used to open the picture)', async () => {
+    const { default: MediaGrid } = await import('../components/media/MediaGrid.vue')
+    const w = mount(MediaGrid, { props: { items: ITEMS, checkboxes: true } })
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true })
+    w.find('.check').element.dispatchEvent(click)
+    expect(click.defaultPrevented).toBe(true)
+    expect(w.emitted('toggle')).toHaveLength(1)
+    expect(w.emitted('open')).toBeUndefined()
+  })
+})

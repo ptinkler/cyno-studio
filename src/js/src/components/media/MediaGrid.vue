@@ -127,7 +127,7 @@ function onThumbError(item: LibraryEntry, event: Event): void {
         role="checkbox"
         :aria-checked="props.selected.has(item.id)"
         :aria-label="`Select ${item.name}`"
-        @click.stop="emit('toggle', item, $event)"
+        @click.stop.prevent="emit('toggle', item, $event)"
         >{{ props.selected.has(item.id) ? '✓' : '' }}</span
       >
     </component>

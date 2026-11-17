@@ -43,9 +43,17 @@ const loading = ref(false)
 const preview = ref<LibraryEntry | null>(null)
 const picked = ref<ReadonlySet<string>>(new Set()) // ids chosen for a bulk action
 const busy = ref(false)
-function toggle(item: LibraryEntry): void {
+let lastPicked: string | null = null // the tile a shift-click selects a range from
+function toggle(item: LibraryEntry, event?: MouseEvent): void {
   const next = new Set(picked.value)
-  if (!next.delete(item.id)) next.add(item.id)
+  const from = items.value.findIndex(i => i.id === lastPicked)
+  const to = items.value.findIndex(i => i.id === item.id)
+  if (event?.shiftKey && from !== -1 && to !== -1) {
+    for (const i of items.value.slice(Math.min(from, to), Math.max(from, to) + 1)) next.add(i.id)
+  } else if (!next.delete(item.id)) {
+    next.add(item.id)
+  }
+  lastPicked = item.id
   picked.value = next
 }
 const selectAll = (): void => {
@@ -53,6 +61,7 @@ const selectAll = (): void => {
 }
 const clearPicked = (): void => {
   picked.value = new Set()
+  lastPicked = null
 }
 async function bulkDownload(): Promise<void> {
   busy.value = true
@@ -146,6 +155,7 @@ onMounted(load)
           {{ o.label }}
         </button>
       </div>
+      <button v-if="items.length" class="btn btn-sm" @click="selectAll">Select all</button>
       <div class="sbox msearch">
         <svg class="ic"><use href="#s-search" /></svg>
         <input v-model="q" type="search" placeholder="Search prompts…" @keyup.enter="load" />
@@ -171,7 +181,6 @@ onMounted(load)
       <span>{{ picked.size }} selected</span>
       <button class="btn btn-sm" :disabled="busy" @click="bulkDownload">Download</button>
       <button class="btn btn-sm btn-danger-quiet" :disabled="busy" @click="bulkDelete">Delete</button>
-      <button class="btn btn-sm" @click="selectAll">Select all loaded</button>
       <button class="btn btn-sm btn-quiet" @click="clearPicked">Clear</button>
     </div>
 
