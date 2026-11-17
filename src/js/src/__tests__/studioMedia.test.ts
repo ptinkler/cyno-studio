@@ -29,17 +29,17 @@ describe('StudioMedia selecting', () => {
 
   it('offers Select all from the start, and shows the bar with the count', async () => {
     const w = await mountMedia()
-    expect(w.find('.bulkbar').exists()).toBe(false)
+    expect(w.find('.selbar').exists()).toBe(false)
     const selectAll = w.findAll('button').find(b => b.text() === 'Select all')
     await selectAll?.trigger('click')
-    expect(w.find('.bulkbar').text()).toContain('4 selected')
+    expect(w.find('.selbar').text()).toContain('4 selected')
   })
 
   it('shift-click selects the range from the last tick', async () => {
     const w = await mountMedia()
     await w.findAll('.check')[0]?.trigger('click')
     await w.findAll('.check')[2]?.trigger('click', { shiftKey: true })
-    expect(w.find('.bulkbar').text()).toContain('3 selected')
+    expect(w.find('.selbar').text()).toContain('3 selected')
   })
 
   it('deletes the picked items after asking, then reloads', async () => {
@@ -47,13 +47,10 @@ describe('StudioMedia selecting', () => {
     const w = await mountMedia()
     await w.findAll('.check')[1]?.trigger('click')
     await w.findAll('.check')[3]?.trigger('click')
-    await w
-      .findAll('.bulkbar button')
-      .find(b => b.text() === 'Delete')
-      ?.trigger('click')
+    await w.find('.selbar button[aria-label="Delete"]').trigger('click')
     await flushPromises()
     expect(media.deleteMediaMany).toHaveBeenCalledWith(['lib:b.png', 'lib:d.png'])
-    expect(w.find('.bulkbar').exists()).toBe(false)
+    expect(w.find('.selbar').exists()).toBe(false)
   })
 
   it('filters from the dropdowns, asking the server again', async () => {

@@ -2,7 +2,7 @@
 import { vTip } from '../../directives/tip'
 import { computed, inject, ref, watch } from 'vue'
 import { confirmDialog } from '../../composables/useDialog'
-import { deleteMediaMany } from '../../composables/mediaApi'
+import { deleteMediaMany, downloadMediaMany } from '../../composables/mediaApi'
 import { showToastKey, noToast } from '../../injection'
 import { messageOf } from '../../utils/errors'
 import type { MediaCard } from '../../composables/chatConversationsApi'
@@ -100,6 +100,8 @@ function onOpen(item: GenerationItem): void {
 function onFavourite(item: GenerationItem): void {
   if (!item.orphan) emit('favourite', item)
 }
+const mediaId = (i: GenerationItem): string => `chat:${i.conversation_id}:${i.file ?? ''}`
+
 // Delete the picked files (not their prompts, which stay in the chat)
 async function deleteMany(picked: GenerationItem[]): Promise<void> {
   const n = picked.length
@@ -112,8 +114,15 @@ async function deleteMany(picked: GenerationItem[]): Promise<void> {
   })
   if (!ok) return
   try {
-    await deleteMediaMany(picked.map(i => `chat:${i.conversation_id}:${i.file ?? ''}`))
+    await deleteMediaMany(picked.map(mediaId))
     emit('deleted')
+  } catch (e) {
+    showToast(messageOf(e), 'error')
+  }
+}
+async function downloadMany(picked: GenerationItem[]): Promise<void> {
+  try {
+    await downloadMediaMany(picked.map(mediaId))
   } catch (e) {
     showToast(messageOf(e), 'error')
   }
@@ -135,6 +144,7 @@ const shownItems = computed(() => (showOrphans.value ? orphans.value : items.val
     @open="onOpen"
     @favourite="onFavourite"
     @delete-many="deleteMany"
+    @download-many="downloadMany"
   >
     <!-- Sits with the grid's own filters rather than floating above them -->
     <template #filters>
