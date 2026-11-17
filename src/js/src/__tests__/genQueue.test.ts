@@ -3,7 +3,7 @@ import { mount } from '@vue/test-utils'
 import type { Generation } from '../composables/chatFilesApi'
 import { generation } from './models'
 
-const active = vi.fn<[number[]], Promise<{ items: Generation[] }>>()
+const active = vi.fn<(ids: number[]) => Promise<{ items: Generation[] }>>()
 vi.mock('../composables/useChat', () => ({
   fetchActiveGenerations: (known: number[]) => active(known),
   chatMediaUrl: (conv: string, file: string) => `/m/${conv}/${file}`,
