@@ -21,7 +21,7 @@ the library never breaks what used it.
 import io
 import zipfile
 from dataclasses import dataclass
-from typing import Annotated, Literal, TypedDict
+from typing import TYPE_CHECKING, Annotated, Literal, TypedDict
 
 from anyio import to_thread
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -37,13 +37,15 @@ from web.media.durations import fill_durations
 from web.media.index import all_items, invalidate_list, item_matches, library_items
 from web.media.paths import LibraryEntry, chat_dir, library_dir, library_kind, resolve
 from web.media.thumbs import forget_file, thumb_response
-from web.types import JsonValue
 from web.uploads.files import (
     read_image_upload,
     read_video_upload,
     safe_filename,
     store_deduped,
 )
+
+if TYPE_CHECKING:
+    from web.types import JsonValue
 
 router = APIRouter(prefix="/api/media", dependencies=[Depends(require_user)])
 

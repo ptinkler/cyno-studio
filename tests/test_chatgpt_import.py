@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from httpx import Response
+from httpx2 import Response
 
 import web.transfer.chatgpt as imp_mod
 from tests.chat_fixtures import SETTINGS, png_bytes, text_chunks

@@ -17,7 +17,7 @@ from web.chat import routes_settings
 from web.core.metadata import MetadataDB
 
 if TYPE_CHECKING:
-    from httpx import Response
+    from httpx2 import Response
 
 pytest_plugins = ["tests.api_fixtures"]
 

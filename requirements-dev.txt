@@ -1,6 +1,0 @@
-# Development and CI tools (on top of requirements.txt)
--r requirements.txt
-pytest==9.1.1
-ruff==0.16.10
-pre-commit==4.6.2
-basedpyright==1.40.2

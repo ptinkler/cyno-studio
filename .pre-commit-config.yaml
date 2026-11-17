@@ -14,17 +14,20 @@ repos:
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
 
-  # Keep in step with ruff in requirements-dev.txt and CI
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.10
-    hooks:
-      - id: ruff-check
-        args: [--fix]
-      - id: ruff-format
-
-  # The frontend's own ESLint and Prettier (run `npm install` in src/js first)
+  # The Python tools come from the project's .venv (`uv sync`), so uv.lock is the one place their versions are set.
+  # The frontend's own ESLint and Prettier need `npm install` in src/js first.
   - repo: local
     hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: .venv/bin/ruff check --fix
+        language: system
+        types: [python]
+      - id: ruff-format
+        name: ruff format
+        entry: .venv/bin/ruff format
+        language: system
+        types: [python]
       - id: basedpyright
         name: basedpyright
         entry: .venv/bin/basedpyright

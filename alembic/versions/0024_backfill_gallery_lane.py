@@ -36,9 +36,7 @@ def backfill(conn: Connection) -> int:
             "list[tuple[str, str, str | None, str | None]]",
             conn.execute(
                 sa.text("SELECT id, role, mode, lane FROM chat_messages WHERE conversation_id = :c"), {"c": cid}
-            )
-            .tuples()
-            .all(),
+            ).all(),
         )
         users = [r for r in rows if r[1] == "user"]
         if not users or any(r[3] for r in rows) or any(r[2] not in ("image", "video") for r in users):

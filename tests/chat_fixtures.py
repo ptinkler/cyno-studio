@@ -15,7 +15,7 @@ from typing import Required, TypedDict, cast
 
 import pytest
 from fastapi.testclient import TestClient
-from httpx import Response
+from httpx2 import Response
 from PIL import Image
 from pydantic import TypeAdapter
 

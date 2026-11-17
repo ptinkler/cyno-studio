@@ -105,9 +105,7 @@ def _rewrite_columns(bind: Connection, tables: set[str], *, to_v1: bool) -> int:
         target = _table(table, column)
         rows = cast(
             "list[tuple[int, str]]",
-            bind.execute(sa.select(target.c.rowid, target.c[column]).where(target.c[column].like(f"{PREFIX}%")))
-            .tuples()
-            .all(),
+            bind.execute(sa.select(target.c.rowid, target.c[column]).where(target.c[column].like(f"{PREFIX}%"))).all(),
         )
         for rowid, value in rows:
             new = _renamed(value, to_v1=to_v1)
@@ -126,9 +124,7 @@ def _rewrite_json_columns(bind: Connection, tables: set[str], *, to_v1: bool) ->
         target = _table(table, column)
         json_rows = cast(
             "list[tuple[int, str | None]]",
-            bind.execute(sa.select(target.c.rowid, target.c[column]).where(target.c[column].like(f"%{PREFIX}%")))
-            .tuples()
-            .all(),
+            bind.execute(sa.select(target.c.rowid, target.c[column]).where(target.c[column].like(f"%{PREFIX}%"))).all(),
         )
         for rowid, raw in json_rows:
             try:

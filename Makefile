@@ -3,7 +3,7 @@ IMAGE_APP := $(REGISTRY)/cyno-studio
 IMAGE_NGX := $(REGISTRY)/cyno-studio-nginx
 TAG       := latest
 
-.PHONY: build push tag dev dev-api dev-frontend lint format test gen-api hooks vpn-restart vpn-status vpn-logs db-migrate db-upgrade db-downgrade db-history
+.PHONY: lock build push tag dev dev-api dev-frontend lint format test gen-api hooks vpn-restart vpn-status vpn-logs db-migrate db-upgrade db-downgrade db-history
 
 build:
 	docker build -t $(IMAGE_APP):$(TAG) .
@@ -60,6 +60,10 @@ gen-api:
 
 # Pollo model maintenance scripts (src/py is put on the path for you). Pass options with ARGS, e.g.
 #   make audit-models ARGS="--key sk-..."
+# Re-resolve uv.lock (add --upgrade to move everything forward)
+lock:
+	uv lock
+
 audit-models:
 	PYTHONPATH=src/py .venv/bin/python -m scripts.audit_pollo_models $(ARGS)
 
