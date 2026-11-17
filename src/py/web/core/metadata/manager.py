@@ -11,11 +11,13 @@ from web.core.metadata.imports import ImportMixin
 from web.core.metadata.instructions import InstructionMixin
 from web.core.metadata.library import LibraryMixin
 from web.core.metadata.messages import MessageMixin
+from web.core.metadata.signins import SigninMixin
 from web.core.metadata.users import UserMixin
 
 
 class MetadataDB(
     UserMixin,
+    SigninMixin,
     ConversationMixin,
     InstructionMixin,
     CharacterMixin,

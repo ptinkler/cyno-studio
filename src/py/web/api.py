@@ -34,6 +34,7 @@ from web.auth.oauth_routes import router as oauth_router
 from web.auth.passwords import hash_password, needs_rehash, spend_verification_time, verify_password
 from web.auth.schemas import AuthStatus, LoginResult, Ok, login_result, session_user
 from web.auth.session import USER_COOKIE, check_secrets, set_user_cookie, user_secret
+from web.auth.signin_requests import router as signin_requests_router
 from web.auth.user_keys import router as keys_router
 from web.auth.users import admin_emails, require_user, resolve_current_user
 from web.chat import router as chat_router
@@ -310,6 +311,7 @@ async def api_auth_status(user_session: Annotated[str | None, Cookie()] = None) 
 
 # Must be registered before the SPA catch-all below.
 app.include_router(oauth_router)
+app.include_router(signin_requests_router)
 app.include_router(keys_router)
 app.include_router(upload_settings_router)
 app.include_router(public_media_router)

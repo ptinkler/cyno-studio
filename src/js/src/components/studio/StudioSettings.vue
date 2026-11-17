@@ -6,6 +6,7 @@ import StudioAccount from './StudioAccount.vue'
 import StudioTitleModel from './StudioTitleModel.vue'
 import StudioKeys from './StudioKeys.vue'
 import StudioUploads from './StudioUploads.vue'
+import StudioSigninRequests from './StudioSigninRequests.vue'
 import StudioVpnCard from './StudioVpnCard.vue'
 
 withDefaults(defineProps<{ theme?: ThemeChoice | undefined }>(), { theme: 'system' })
@@ -71,6 +72,8 @@ const THEMES: readonly { id: ThemeChoice; label: string }[] = [
       <StudioKeys />
 
       <StudioUploads />
+
+      <StudioSigninRequests v-if="isAdmin" />
 
       <StudioVpnCard v-if="isAdmin" />
     </div>

@@ -83,7 +83,10 @@ async def callback(provider: str, request: Request) -> RedirectResponse:
     db = get_db()
     identity = f"{provider}:{sub}"
     allowed, is_admin = users.admit(email, is_first_user=db.count_users() == 0, identity=identity)
+    if not allowed and db.signin_approved(identity):
+        allowed = True  # the admin let this one in from Settings
     if not allowed:
+        db.record_signin_request(identity, provider=provider, email=email, name=profile.get("name"))
         # Without an email the person can't say who they are, so the id is what the admin needs to let them in
         shown = "" if email else f"&id={quote(identity)}"
         return RedirectResponse(url=f"/?auth=denied{shown}", status_code=302)

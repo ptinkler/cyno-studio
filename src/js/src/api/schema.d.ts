@@ -1755,6 +1755,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/signin-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Requests
+         * @description List refused sign-ins and the ones already approved.
+         */
+        get: operations["list_requests_api_signin_requests_get"];
+        put?: never;
+        post?: never;
+        /**
+         * Deny
+         * @description Remove a request (deny it, or revoke an approval that was not yet used).
+         */
+        delete: operations["deny_api_signin_requests_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/signin-requests/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve
+         * @description Let this sign-in in on its next attempt.
+         */
+        post: operations["approve_api_signin_requests_approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/vpn/countries": {
         parameters: {
             query?: never;
@@ -3794,6 +3838,32 @@ export interface components {
             text_shown: number;
             /** Text Versions */
             text_versions: number;
+        };
+        /**
+         * SigninRequestList
+         * @description The whole list, newest first.
+         */
+        SigninRequestList: {
+            /** Requests */
+            requests: components["schemas"]["SigninRequestOut"][];
+        };
+        /**
+         * SigninRequestOut
+         * @description One refused sign-in.
+         */
+        SigninRequestOut: {
+            /** Approved */
+            approved: boolean;
+            /** Email */
+            email: string | null;
+            /** Identity */
+            identity: string;
+            /** Last Seen */
+            last_seen: string | null;
+            /** Name */
+            name: string | null;
+            /** Provider */
+            provider: string;
         };
         /**
          * Space
@@ -7487,6 +7557,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SelfhostCheck"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_requests_api_signin_requests_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                user_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SigninRequestList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deny_api_signin_requests_delete: {
+        parameters: {
+            query: {
+                identity: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                user_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SigninRequestList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_api_signin_requests_approve_post: {
+        parameters: {
+            query: {
+                identity: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                user_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SigninRequestList"];
                 };
             };
             /** @description Validation Error */

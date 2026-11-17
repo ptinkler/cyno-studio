@@ -23,6 +23,7 @@ from web.core.metadata.models import (
     ChatMessage,
     ChatSettings,
     ChatSpace,
+    SigninRequest,
     User,
     iso,
 )
@@ -41,6 +42,7 @@ __all__ = [
     "ChatSettings",
     "ChatSpace",
     "MetadataDB",
+    "SigninRequest",
     "User",
     "current_tenant",
     "get_db",
