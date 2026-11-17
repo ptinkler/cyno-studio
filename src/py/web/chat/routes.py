@@ -502,7 +502,7 @@ def api_delete_exchange_info(message_id: int) -> DeleteInfo:
     msg = get_db().get_chat_message(message_id)
     info = msg and get_db().chat_exchange_delete_info(msg.conversation_id, message_id)
     if not info:
-        raise HTTPException(404, "Prompt not found")
+        raise HTTPException(404, "Message not found")
     return DeleteInfo.model_validate(info)
 
 
@@ -520,7 +520,7 @@ def _delete_detached_media(db: MetadataDB, conv_id: str, detached: list[dict[str
 
 @router.delete("/messages/{message_id}")
 def api_delete_exchange(message_id: int, *, delete_media: bool = False) -> ShownBranch:
-    """Delete a prompt turn and return the updated conversation.
+    """Delete a prompt turn (given the prompt or any of its replies) and return the updated conversation.
 
     Replies and alternate prompt versions are removed while later messages on
     the shown branch remain. Generated media moves to the library unless
@@ -530,8 +530,6 @@ def api_delete_exchange(message_id: int, *, delete_media: bool = False) -> Shown
     msg = db.get_chat_message(message_id)
     if not msg:
         raise HTTPException(404, "Message not found")
-    if msg.role != "user":
-        raise HTTPException(400, "Delete the prompt; its reply goes with it")
     require_idle(msg.conversation_id)
     detached = db.delete_chat_exchange(msg.conversation_id, message_id)
     if delete_media:

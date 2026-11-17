@@ -313,6 +313,21 @@ describe('useStudio', () => {
     expect(studio.messages.value).toEqual([])
   })
 
+  it('deletes by the message it is given: a reply from the gallery goes to the server as itself', async () => {
+    fetchConversation.mockResolvedValue({
+      conversation: openConversation({ id: 'c9' }),
+      messages: [serverMessage({ id: 7, role: 'assistant', parent_id: null, content: '' })],
+    })
+    fetchDeleteInfo.mockResolvedValue({ other_versions: 0, other_messages: 0, media: {} })
+    confirmDialog.mockResolvedValue({ checked: false })
+    deleteChatExchange.mockResolvedValue({ conversation: openConversation({ id: 'c9' }), messages: [] })
+    const { studio } = setup()
+    await studio.openThread('c9')
+    await studio.deleteExchange(defined(studio.messages.value[0]))
+    expect(fetchDeleteInfo).toHaveBeenCalledWith(7)
+    expect(deleteChatExchange).toHaveBeenCalledWith(7, { deleteMedia: false })
+  })
+
   it('leaves the exchange alone when the dialog is declined', async () => {
     fetchConversation.mockResolvedValue({
       conversation: openConversation({ id: 'c9' }),

@@ -105,3 +105,42 @@ describe('GenerationModal teleport', () => {
     studio.remove()
   })
 })
+
+describe('GenerationGrid selecting', () => {
+  const selectable = () => mount(GenerationGrid, { props: { items: ITEMS, selectable: true } })
+
+  it('offers Select only when the page can delete', () => {
+    expect(mount(GenerationGrid, { props: { items: ITEMS } }).text()).not.toContain('Select')
+    expect(selectable().text()).toContain('Select')
+  })
+
+  it('picks finished tiles instead of opening them, then emits the picked ones', async () => {
+    const w = selectable()
+    await w
+      .findAll('button')
+      .find(b => b.text() === 'Select')
+      ?.trigger('click')
+    await w.findAll('.cell.done .thumb')[0]?.trigger('click')
+    expect(w.emitted('open')).toBeUndefined()
+    expect(w.text()).toContain('1 selected')
+    await w
+      .findAll('button')
+      .find(b => b.text() === 'Delete')
+      ?.trigger('click')
+    expect(w.emitted('deleteMany')?.[0]).toEqual([[expect.objectContaining({ id: 'd1' })]])
+    expect(w.text()).not.toContain('selected') // back to normal
+  })
+
+  it('All picks only the tiles that have a file', async () => {
+    const w = selectable()
+    await w
+      .findAll('button')
+      .find(b => b.text() === 'Select')
+      ?.trigger('click')
+    await w
+      .findAll('.pillbtn')
+      .find(b => b.text() === 'All')
+      ?.trigger('click')
+    expect(w.text()).toContain('2 selected') // the pending and failed tiles have nothing to delete
+  })
+})

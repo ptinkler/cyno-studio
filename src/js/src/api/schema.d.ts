@@ -1063,7 +1063,7 @@ export interface paths {
         post?: never;
         /**
          * Api Delete Exchange
-         * @description Delete a prompt turn and return the updated conversation.
+         * @description Delete a prompt turn (given the prompt or any of its replies) and return the updated conversation.
          *
          *     Replies and alternate prompt versions are removed while later messages on
          *     the shown branch remain. Generated media moves to the library unless

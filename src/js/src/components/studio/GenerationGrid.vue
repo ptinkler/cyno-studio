@@ -11,10 +11,42 @@ const props = withDefaults(
     empty?: string | undefined
     /** The Favourites page is already favourites-only, so it hides the ★ filter. */
     favFilter?: boolean | undefined
+    /** Shows Select, for picking several finished files and deleting them together. */
+    selectable?: boolean | undefined
   }>(),
-  { items: () => [], empty: 'Nothing here yet.', favFilter: true },
+  { items: () => [], empty: 'Nothing here yet.', favFilter: true, selectable: false },
 )
-const emit = defineEmits<{ open: [item: GenerationItem]; favourite: [item: GenerationItem] }>()
+const emit = defineEmits<{
+  open: [item: GenerationItem]
+  favourite: [item: GenerationItem]
+  deleteMany: [items: GenerationItem[]]
+}>()
+
+// Picking: only finished files can be picked (a pending or failed tile has no file to delete)
+const picking = ref(false)
+const picked = ref<ReadonlySet<string>>(new Set())
+const pickable = (item: GenerationItem): boolean => item.status !== 'pending' && item.status !== 'error' && !!item.file
+const pickedItems = computed(() => props.items.filter(it => picked.value.has(it.id)))
+function togglePicking(): void {
+  picking.value = !picking.value
+  picked.value = new Set()
+}
+function onThumb(item: GenerationItem): void {
+  if (!picking.value) {
+    emit('open', item)
+    return
+  }
+  const next = new Set(picked.value)
+  if (!next.delete(item.id)) next.add(item.id)
+  picked.value = next
+}
+function pickAll(): void {
+  picked.value = new Set(shown.value.filter(pickable).map(it => it.id))
+}
+function deletePicked(): void {
+  emit('deleteMany', pickedItems.value)
+  togglePicking()
+}
 
 type Size = 's' | 'm' | 'l'
 const SIZES: readonly Size[] = ['s', 'm', 'l']
@@ -79,6 +111,15 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
         <!-- Extra filters from the page using the grid, in the same toolbar -->
         <slot name="filters"></slot>
       </div>
+      <div v-if="selectable && picking" class="gleft">
+        <span class="gcount">{{ picked.size }} selected</span>
+        <button class="pillbtn" @click="pickAll">All</button>
+        <button class="pillbtn danger" :disabled="!picked.size" @click="deletePicked">Delete</button>
+        <button class="pillbtn" @click="togglePicking">Cancel</button>
+      </div>
+      <button v-else-if="selectable" v-tip="'Pick several to delete'" class="pillbtn" @click="togglePicking">
+        Select
+      </button>
       <div class="seg" role="group" aria-label="Card size">
         <button v-for="s in SIZES" :key="s" :class="{ on: size === s }" @click="setSize(s)">
           {{ s.toUpperCase() }}
@@ -93,7 +134,7 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
         :key="item.id + '-' + i"
         v-tip="item.prompt || item.file || undefined"
         class="cell"
-        :class="item.status"
+        :class="[item.status, { picked: picked.has(item.id) }]"
       >
         <div v-if="item.status === 'pending'" class="thumb state pending">
           <div class="spinner"></div>
@@ -112,7 +153,7 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
           <div class="shint">Click for details</div>
         </button>
         <template v-else>
-          <a class="thumb" :href="item.url" @click.prevent="emit('open', item)">
+          <a class="thumb" :href="item.url" @click.prevent="onThumb(item)">
             <img
               v-if="item.kind === 'image'"
               :src="item.preview || item.url"
@@ -123,7 +164,9 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
             <video v-else :src="item.url" preload="metadata" muted playsinline></video>
             <span v-if="item.kind === 'video'" class="vtag">▶</span>
           </a>
+          <span v-if="picking" class="tick" :class="{ on: picked.has(item.id) }">✓</span>
           <button
+            v-if="!picking"
             v-tip="item.favourite ? 'Unfavourite' : 'Favourite'"
             class="fav"
             :class="{ on: item.favourite }"
@@ -224,6 +267,30 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
   cursor: pointer;
   padding: 0;
   display: block;
+}
+.cell.picked .thumb {
+  border-color: var(--saccent);
+  outline: 2px solid var(--saccent);
+}
+.tick {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  display: grid;
+  place-items: center;
+  width: 1.3333rem;
+  height: 1.3333rem;
+  border-radius: 50%;
+  border: 1px solid var(--sborder);
+  background: var(--sbg2);
+  color: transparent;
+  font-size: 0.8rem;
+  pointer-events: none;
+}
+.tick.on {
+  background: var(--saccent);
+  border-color: var(--saccent);
+  color: #fff;
 }
 .thumb:hover {
   border-color: var(--saccent);
