@@ -8,7 +8,7 @@ interface Reply {
   json: () => Promise<unknown>
 }
 
-type FetchMock = Mock<[string, RequestInit], Promise<Reply>>
+type FetchMock = Mock<(url: string, init: RequestInit) => Promise<Reply>>
 
 function stubFetch(body: unknown): FetchMock {
   const fetchMock: FetchMock = vi.fn()

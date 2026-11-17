@@ -1,5 +1,5 @@
 # ── Stage 1: Build the Vue frontend ──────────────────────────────────
-FROM mirror.gcr.io/library/node:24-alpine AS frontend-builder
+FROM mirror.gcr.io/library/node:26-alpine AS frontend-builder
 
 # Same layout as the repo, so the build lands where the API looks for it (src/js/dist)
 WORKDIR /build/src/js
