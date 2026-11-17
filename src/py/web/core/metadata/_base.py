@@ -94,6 +94,14 @@ class DBBase:
         Base.metadata.create_all(self.engine)
         self.is_fresh = fresh
 
+    def backup_to(self, target: Path) -> None:
+        """Write a consistent copy of the database to `target` (which must not exist).
+
+        The one connection holds an exclusive lock, so the copy goes through it, under the thread lock.
+        """
+        with self._lock, self.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            conn.exec_driver_sql("VACUUM INTO ?", (str(target),))
+
     @contextmanager
     def _session(self) -> Generator[Session]:
         """Yield a Session while holding the thread lock.
