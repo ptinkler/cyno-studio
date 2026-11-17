@@ -96,20 +96,20 @@ describe('the client', () => {
 
   it('refuses an endpoint the backend does not serve', () => {
     // Not a route of any shape: the endpoint constraint rejects it
-    expectTypeOf<'/api/nope'>().not.toMatchTypeOf<EndpointPattern<'get'>>()
+    expectTypeOf<'/api/nope'>().not.toExtend<EndpointPattern<'get'>>()
     // Shaped like a route but with a slash inside a {param} segment: the trailing check demands an argument no caller can give
     expectTypeOf<KnownEndpoint<'get', `/api/chat/conversations/${string}/x/y`>>().toEqualTypeOf<
       [endpointIsNotABackendRoute: never]
     >()
     // A route with no PUT is refused for PUT
-    expectTypeOf<'/api/auth/status'>().not.toMatchTypeOf<EndpointPattern<'put'>>()
+    expectTypeOf<'/api/auth/status'>().not.toExtend<EndpointPattern<'put'>>()
   })
 
   it('takes the backend model as the request body', () => {
     expectTypeOf(api.put<'/api/keys'>)
       .parameter(1)
       .toEqualTypeOf<Schemas['KeysUpdate']>()
-    expectTypeOf<{ keys: { pollo: number } }>().not.toMatchTypeOf<Schemas['KeysUpdate']>()
+    expectTypeOf<{ keys: { pollo: number } }>().not.toExtend<Schemas['KeysUpdate']>()
   })
 })
 
