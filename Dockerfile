@@ -1,5 +1,5 @@
 # ── Stage 1: Build the Vue frontend ──────────────────────────────────
-FROM mirror.gcr.io/library/node:24-alpine AS frontend-builder
+FROM mirror.gcr.io/library/node:26-alpine AS frontend-builder
 
 # Same layout as the repo, so the build lands where the API looks for it (src/js/dist)
 WORKDIR /build/src/js
@@ -9,7 +9,7 @@ COPY src/js/ ./
 RUN npm run build
 
 # ── Stage 2: Python API runtime ─────────────────────────────────────
-FROM mirror.gcr.io/library/python:3.13-slim
+FROM mirror.gcr.io/library/python:3.15-slim
 
 # Links the GHCR package to this repo (so it inherits the repo's visibility and access)
 LABEL org.opencontainers.image.source="https://github.com/ptinkler/cyno-studio"
