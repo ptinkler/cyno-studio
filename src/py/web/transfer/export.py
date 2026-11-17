@@ -11,6 +11,9 @@ importer tells them apart by what's inside:
                               its detached library media
     chats/<chat id>/<file>    the chat's media files, as stored
 
+The character images a card was made from do travel, as plain files of the chat (see
+character_refs.py).
+
 What doesn't travel: attached characters and instructions (their ids belong to
 the exporting server; the importing server's space/global defaults apply
 instead) and forks' links to the chat they came from. A chat's space goes by
@@ -28,7 +31,7 @@ import zipfile
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, cast
+from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -40,6 +43,8 @@ from web.chat import ConversationCreate, api_create_conversation, conversation_d
 from web.core.metadata import get_db, iso
 from web.core.metadata.imports import ImportStamp
 from web.core.metadata.models import ChatConversation
+from web.transfer.character_refs import snapshot_card
+from web.transfer.limits import EntryTooLargeError, copy_entry, is_media_file
 from web.transfer.schemas import ExportableChat, ExportableChats
 from web.types import JsonValue
 from web.uploads.files import safe_filename
@@ -65,7 +70,10 @@ def _space_names() -> dict[int, str]:
     return {s.id: s.name for s in get_db().list_spaces()}
 
 
-def _conversation_out(conv: ChatConversation, spaces: Mapping[int, str]) -> dict[str, JsonValue]:
+def _conversation_out(
+    conv: ChatConversation, spaces: Mapping[int, str], taken: dict[str, Path]
+) -> dict[str, JsonValue]:
+    """One chat for the manifest. `taken` collects character images its cards used (see character_refs)."""
     db = get_db()
     return {
         "id": conv.id,
@@ -88,7 +96,7 @@ def _conversation_out(conv: ChatConversation, spaces: Mapping[int, str]) -> dict
                 "parent_id": m.parent_id,
                 "role": m.role,
                 "content": m.content,
-                "media": cast("list[JsonValue]", m.media),
+                "media": [snapshot_card(item, taken) for item in m.media],
                 "model": m.model,
                 "mode": m.mode,
                 "lane": m.lane,
@@ -103,7 +111,7 @@ def _conversation_out(conv: ChatConversation, spaces: Mapping[int, str]) -> dict
         "library": [
             {
                 "media_id": lib.media_id,
-                "item": lib.item,
+                "item": snapshot_card(lib.item, taken),
                 "created_at": iso(lib.created_at),
                 "detached_at": iso(lib.detached_at),
             }
@@ -129,9 +137,14 @@ def write_export(conv_ids: list[str], out: Path) -> int:
             conv = db.get_conversation(conv_id)
             if not conv:
                 continue
-            chats.append(_conversation_out(conv, spaces))
-            for path in _chat_files(conv.id):
+            taken: dict[str, Path] = {}
+            chats.append(_conversation_out(conv, spaces, taken))
+            files = _chat_files(conv.id)
+            for path in files:
                 zf.write(path, f"chats/{conv.id}/{path.name}")
+            for name, path in taken.items():
+                if name not in {f.name for f in files}:
+                    zf.write(path, f"chats/{conv.id}/{name}")
         manifest = {
             "format": FORMAT,
             "version": VERSION,
@@ -330,11 +343,13 @@ def _copy_files(zf: zipfile.ZipFile, src_id: str, conv_id: str, stats: dict[str,
             continue
         file = safe_filename(name[len(prefix) :])
         target = folder / file
-        if not file or target.exists():
+        if not is_media_file(file) or target.exists():
+            continue  # a chat's folder holds pictures, videos and audio, so that is all that is unpacked
+        try:
+            copy_entry(zf, name, target)
+        except (EntryTooLargeError, zipfile.BadZipFile):
+            log.warning("import: skipped %s (too large or damaged)", name)
             continue
-        with zf.open(name) as src, target.open("wb") as dst:
-            while chunk := src.read(1 << 20):
-                dst.write(chunk)
         written.append(target)
         stats["images"] = int(_num(stats.get("images")) or 0) + 1
     return written

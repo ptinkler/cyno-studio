@@ -64,26 +64,30 @@ function label(entry: Generation): string {
          order it reads on screen.) -->
     <div v-show="!collapsed" class="qpop">
       <div class="qbody">
-        <button
-          v-for="e in entries"
-          :key="e.media_id"
-          type="button"
-          class="qrow"
-          :class="e.status"
-          @click="emit('open', e)"
-        >
-          <span class="qthumb" :class="e.kind">
-            <img v-if="e.status === 'done' && e.file && e.kind === 'image'" :src="thumb(e)" loading="lazy" alt="" />
-            <video v-else-if="e.status === 'done' && e.file" :src="thumb(e)" muted preload="metadata"></video>
-            <span v-else-if="e.status === 'pending'" class="qspin sm"></span>
-            <span v-else class="qfail">✕</span>
-          </span>
-          <span class="qinfo">
-            <span class="qlabel">{{ label(e) }}</span>
-            <span class="qsub">{{ e.conversation_title || 'Untitled thread' }}</span>
-          </span>
-          <span class="qx" title="Remove from queue" @click.stop="emit('clear-one', e.media_id)">×</span>
-        </button>
+        <!-- The remove button is the row's sibling, not inside it: a button can't hold another -->
+        <div v-for="e in entries" :key="e.media_id" class="qitem">
+          <button type="button" class="qrow" :class="e.status" @click="emit('open', e)">
+            <span class="qthumb" :class="e.kind">
+              <img v-if="e.status === 'done' && e.file && e.kind === 'image'" :src="thumb(e)" loading="lazy" alt="" />
+              <video v-else-if="e.status === 'done' && e.file" :src="thumb(e)" muted preload="metadata"></video>
+              <span v-else-if="e.status === 'pending'" class="qspin sm"></span>
+              <span v-else class="qfail">✕</span>
+            </span>
+            <span class="qinfo">
+              <span class="qlabel">{{ label(e) }}</span>
+              <span class="qsub">{{ e.conversation_title || 'Untitled thread' }}</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            class="qx"
+            title="Remove from queue"
+            aria-label="Remove from queue"
+            @click="emit('clear-one', e.media_id)"
+          >
+            ×
+          </button>
+        </div>
       </div>
       <div v-if="done" class="qfoot">
         <button class="qclear" @click="emit('clear')">Clear {{ done }} finished</button>
@@ -95,11 +99,11 @@ function label(entry: Generation): string {
 <style scoped>
 .qdock {
   position: fixed;
-  bottom: 16px;
-  right: 16px;
-  z-index: 60;
-  width: 300px;
-  max-width: calc(100vw - 32px);
+  bottom: 1.0667rem;
+  right: 1.0667rem;
+  z-index: var(--z-dock);
+  width: 20rem;
+  max-width: calc(100vw - 2.1333rem);
   display: flex;
   flex-direction: column-reverse; /* pill sits at the bottom; the list opens upward */
 }
@@ -108,11 +112,11 @@ function label(entry: Generation): string {
 }
 .qhead {
   border: 1px solid var(--sborder);
-  border-radius: 999px;
+  border-radius: 66.6rem;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 10px 10px 12px;
+  gap: 0.5333rem;
+  padding: 0.6667rem 0.6667rem 0.6667rem 0.8rem;
   cursor: pointer;
   background: var(--spanel2);
 }
@@ -120,31 +124,31 @@ function label(entry: Generation): string {
   flex: 1;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
+  gap: 0.5333rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--sfg);
 }
 .qcount {
-  font-size: 11px;
+  font-size: 0.8rem;
   color: var(--smuted);
   background: var(--shover);
-  border-radius: 10px;
-  padding: 1px 8px;
+  border-radius: 0.6667rem;
+  padding: 1px 0.5333rem;
 }
 .qbtn {
   border: none;
   background: transparent;
   color: var(--smuted);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 0.8667rem;
   line-height: 1;
-  padding: 2px 4px;
+  padding: 2px 0.2667rem;
 }
 .qpop {
   display: flex;
   flex-direction: column;
-  margin-bottom: 6px;
+  margin-bottom: 0.4rem;
   overflow: hidden;
   border: 1px solid var(--sborder);
   border-radius: var(--r-lg);
@@ -152,36 +156,43 @@ function label(entry: Generation): string {
   box-shadow: var(--shadow-pop);
 }
 .qbody {
-  max-height: min(55vh, 420px);
+  max-height: min(55dvh, 28rem);
   overflow-y: auto;
-  padding: 6px;
+  padding: 0.4rem;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
+.qitem {
+  display: flex;
+  align-items: center;
+  border-radius: 0.5333rem;
+  padding-right: 0.4rem;
+}
+.qitem:hover {
+  background: var(--shover);
+}
 .qrow {
   display: flex;
   align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 6px;
+  gap: 0.6667rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.4rem;
   border: none;
-  border-radius: 8px;
+  border-radius: 0.5333rem;
   background: transparent;
   color: var(--sfg);
   cursor: pointer;
   text-align: left;
   font: inherit;
 }
-.qrow:hover {
-  background: var(--shover);
-}
 .qthumb {
   position: relative;
   flex: 0 0 auto;
-  width: 38px;
-  height: 38px;
-  border-radius: 7px;
+  width: 2.5333rem;
+  height: 2.5333rem;
+  border-radius: 0.4667rem;
   overflow: hidden;
   background: var(--sbg2);
   display: grid;
@@ -198,7 +209,7 @@ function label(entry: Generation): string {
 }
 .qfail {
   color: var(--sdanger);
-  font-size: 13px;
+  font-size: 0.8667rem;
   font-weight: 700;
 }
 .qinfo {
@@ -209,7 +220,7 @@ function label(entry: Generation): string {
   gap: 1px;
 }
 .qlabel {
-  font-size: 12px;
+  font-size: 0.8rem;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -222,7 +233,7 @@ function label(entry: Generation): string {
   color: var(--saccent);
 }
 .qsub {
-  font-size: 11px;
+  font-size: 0.8rem;
   color: var(--smuted);
   white-space: nowrap;
   overflow: hidden;
@@ -230,14 +241,17 @@ function label(entry: Generation): string {
 }
 .qx {
   flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
+  width: 1.3333rem;
+  height: 1.3333rem;
   display: grid;
   place-items: center;
-  border-radius: 5px;
+  border-radius: 0.3333rem;
   color: var(--sfaint);
-  font-size: 16px;
+  font-size: 1.0667rem;
   line-height: 1;
+  border: none;
+  background: none;
+  cursor: pointer;
 }
 .qx:hover {
   background: var(--sborder);
@@ -245,34 +259,34 @@ function label(entry: Generation): string {
 }
 .qfoot {
   flex: 0 0 auto;
-  padding: 4px;
+  padding: 0.2667rem;
   border-top: 1px solid var(--sborder2);
 }
 .qclear {
   width: 100%;
-  padding: 6px;
+  padding: 0.4rem;
   border: 0;
   border-radius: var(--r);
   background: transparent;
   color: var(--smuted);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 0.8rem;
 }
 .qclear:hover {
   background: var(--shover);
   color: var(--sfg);
 }
 .qspin {
-  width: 13px;
-  height: 13px;
+  width: 0.8667rem;
+  height: 0.8667rem;
   border: 2px solid var(--sborder);
   border-top-color: var(--saccent);
   border-radius: 50%;
   animation: qspin 0.8s linear infinite;
 }
 .qspin.sm {
-  width: 18px;
-  height: 18px;
+  width: 1.2rem;
+  height: 1.2rem;
 }
 @keyframes qspin {
   to {

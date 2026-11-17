@@ -184,14 +184,14 @@ function onToggle(item: CharacterCard): void {
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 0.4rem;
 }
 
 .chip {
   display: inline-flex;
   align-items: center;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 66.6rem;
   background: var(--surface2);
   font-size: 0.8rem;
   overflow: hidden;
@@ -209,15 +209,15 @@ function onToggle(item: CharacterCard): void {
 .chip-src {
   flex-shrink: 0;
   padding: 0 0 0 2px;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   opacity: 0.75;
 }
 
 .chip-main {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 4px 3px 3px;
+  gap: 0.4rem;
+  padding: 0.2rem 0.2667rem 0.2rem 0.2rem;
   background: none;
   border: none;
   color: var(--text);
@@ -227,14 +227,14 @@ function onToggle(item: CharacterCard): void {
 
 .chip img,
 .avatar-blank {
-  width: 22px;
-  height: 22px;
+  width: 1.4667rem;
+  height: 1.4667rem;
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
   display: inline-grid;
   place-items: center;
-  font-size: 0.7rem;
+  font-size: 0.7333rem;
   background: var(--surface);
 }
 
@@ -243,8 +243,8 @@ function onToggle(item: CharacterCard): void {
   border: none;
   color: var(--text2);
   cursor: pointer;
-  padding: 0 8px 0 2px;
-  font-size: 0.7rem;
+  padding: 0 0.5333rem 0 2px;
+  font-size: 0.7333rem;
 }
 
 .chip-x:hover {
@@ -252,8 +252,8 @@ function onToggle(item: CharacterCard): void {
 }
 
 .add {
-  padding: 4px 10px;
-  border-radius: 999px;
+  padding: 0.2667rem 0.6667rem;
+  border-radius: 66.6rem;
   border: 1px dashed var(--border);
   background: none;
   color: var(--text2);

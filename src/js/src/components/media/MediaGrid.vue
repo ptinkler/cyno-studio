@@ -138,8 +138,8 @@ function onThumbError(item: LibraryEntry, event: Event): void {
 <style scoped>
 .media-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(var(--tile-xs), 1fr));
+  gap: 0.5333rem;
 }
 
 .tile {
@@ -150,7 +150,7 @@ function onThumbError(item: LibraryEntry, event: Event): void {
   aspect-ratio: 1;
   padding: 0;
   border: 2px solid transparent;
-  border-radius: 10px;
+  border-radius: 0.6667rem;
   overflow: hidden;
   background: var(--surface2);
   cursor: pointer;
@@ -187,29 +187,29 @@ function onThumbError(item: LibraryEntry, event: Event): void {
 
 .badge {
   position: absolute;
-  top: 5px;
-  font-size: 0.65rem;
-  padding: 1px 6px;
-  border-radius: 6px;
+  top: 0.3333rem;
+  font-size: 0.7333rem;
+  padding: 1px 0.4rem;
+  border-radius: 0.4rem;
   background: rgba(0, 0, 0, 0.65);
   color: #fff;
 }
 
 .badge.video {
-  left: 5px;
+  left: 0.3333rem;
 }
 
 .badge.source {
-  right: 5px;
+  right: 0.3333rem;
 }
 
 .duration {
   position: absolute;
-  right: 5px;
-  bottom: 5px;
-  font-size: 0.68rem;
-  padding: 1px 6px;
-  border-radius: 6px;
+  right: 0.3333rem;
+  bottom: 0.3333rem;
+  font-size: 0.7333rem;
+  padding: 1px 0.4rem;
+  border-radius: 0.4rem;
   background: rgba(0, 0, 0, 0.65);
   color: #fff;
   font-variant-numeric: tabular-nums;
@@ -217,17 +217,17 @@ function onThumbError(item: LibraryEntry, event: Event): void {
 
 .check {
   position: absolute;
-  top: 5px;
+  top: 0.3333rem;
   left: 50%;
   transform: translateX(-50%);
-  width: 22px;
-  height: 22px;
+  width: 1.4667rem;
+  height: 1.4667rem;
   border-radius: 50%;
   border: 2px solid #fff;
   background: rgba(0, 0, 0, 0.45);
   color: #fff;
-  font-size: 0.75rem;
-  line-height: 18px;
+  font-size: 0.8rem;
+  line-height: 1.2rem;
 }
 
 /* Until something is selected, the circle only shows on hover (or keyboard focus) */

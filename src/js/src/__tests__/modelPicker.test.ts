@@ -120,7 +120,7 @@ describe('ChatMessage user actions', () => {
     await w.find('button[title="Copy prompt"]').trigger('click')
     await flushPromises()
     expect(writeText).toHaveBeenCalledWith('hello')
-    expect(w.find('button[title="Copy prompt"]').text()).toBe('✓')
+    expect(w.find('button[title="Copy prompt"] use').attributes('href')).toBe('#s-check')
   })
 
   it('media caption copies the prompt sent to the image model', async () => {
@@ -144,11 +144,12 @@ describe('ChatMessage user actions', () => {
       ],
     })
     const w = mount(ChatMessage, { props: { message: reply, convId: 'c1' } })
-    const copy = () => w.find('.caption-btn[title^="Copy the prompt"]')
+    const copy = () => w.find('button[title^="Copy prompt"]')
     await copy().trigger('click')
     await flushPromises()
     expect(writeText).toHaveBeenCalledWith('a red fox, dusk')
-    expect(copy().text()).toBe('✓ Copied')
+    expect(copy().classes()).toContain('on')
+    expect(copy().find('use').attributes('href')).toBe('#s-check')
   })
 })
 
@@ -222,7 +223,7 @@ describe('Media note lines in replies', () => {
     })
     expect(w.find('.markdown').exists()).toBe(false)
     expect(w.find('.media-item img').exists()).toBe(true)
-    expect(w.find('.msg-meta button[title="Copy reply"]').exists()).toBe(false)
+    expect(w.find('.text-bar button[title="Copy reply"]').exists()).toBe(false)
   })
 
   it('keeps the story and drops only the note lines', async () => {
@@ -232,7 +233,7 @@ describe('Media note lines in replies', () => {
       props: { message: reply('She laughed.\n\n[generated image: a gym]\n\nThe end.', img), convId: 'c' },
     })
     expect(w.find('.markdown').text()).toBe('She laughed.\nThe end.')
-    await w.find('.msg-meta .meta-btn').trigger('click')
+    await w.find('.text-bar .iconbtn').trigger('click')
     await flushPromises()
     expect(writeText).toHaveBeenCalledWith('She laughed.\n\nThe end.')
   })

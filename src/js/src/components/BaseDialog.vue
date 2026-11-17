@@ -4,7 +4,8 @@ const openStack: ((event: KeyboardEvent) => void)[] = []
 </script>
 
 <script setup lang="ts">
-import { onBeforeUnmount, watch } from 'vue'
+import { onBeforeUnmount, ref, toRef, watch } from 'vue'
+import { useFocusTrap } from '../composables/useFocusTrap'
 
 // A modal's shell: the backdrop, the card with its title and ✕, Esc and
 // backdrop clicks to close. Slots: `head` (beside the title), the body, and
@@ -19,9 +20,11 @@ const props = withDefaults(
     width?: string | undefined
     form?: boolean | undefined
   }>(),
-  { open: false, title: '', label: '', width: '480px', form: false },
+  { open: false, title: '', label: '', width: '32rem', form: false },
 )
 const emit = defineEmits<{ close: []; submit: [] }>()
+const card = ref<HTMLElement | null>(null)
+useFocusTrap(card, toRef(props, 'open'))
 
 // Open dialogs, newest last: Esc closes only the top one (a picker opened
 // from inside another dialog mustn't close both)
@@ -51,6 +54,7 @@ onBeforeUnmount(release)
     <div v-if="open" class="backdrop" @click.self="emit('close')">
       <component
         :is="form ? 'form' : 'div'"
+        ref="card"
         class="dialog"
         role="dialog"
         aria-modal="true"
@@ -74,35 +78,35 @@ onBeforeUnmount(release)
 .backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: var(--z-modal);
   background: rgba(0, 0, 0, 0.6);
   display: grid;
   place-items: center;
-  padding: 16px;
+  padding: 1.0667rem;
 }
 
 .dialog {
-  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 2.1333rem);
   display: flex;
   flex-direction: column;
   background: var(--sbg);
   border: 1px solid var(--sborder);
   border-radius: var(--r-xl);
   box-shadow: var(--shadow-modal);
-  padding: 14px 18px 16px;
+  padding: 0.9333rem 1.2rem 1.0667rem;
 }
 
 .head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 0.5333rem;
+  margin-bottom: 0.8rem;
 }
 
 .head h3 {
   flex: 1;
   min-width: 0;
-  font-size: 15px;
+  font-size: 1rem;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -111,26 +115,26 @@ onBeforeUnmount(release)
 
 .x {
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
+  width: 1.8667rem;
+  height: 1.8667rem;
   margin-right: -6px;
-  font-size: 13px;
+  font-size: 0.8667rem;
 }
 
 .body {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0.6667rem;
   min-height: 0;
   overflow-y: auto;
-  font-size: 13.5px;
+  font-size: 0.9rem;
 }
 
 .actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding-top: 14px;
+  gap: 0.5333rem;
+  padding-top: 0.9333rem;
 }
 
 .actions :slotted(.spacer) {

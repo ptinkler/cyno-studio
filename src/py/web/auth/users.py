@@ -16,7 +16,7 @@ from __future__ import annotations
 from fastapi import Cookie, HTTPException
 
 from web.auth.session import resolve_user_session
-from web.core.env import bool_env, email_set
+from web.core.env import bool_env, email_set, id_set
 from web.core.metadata import User, get_db
 
 
@@ -35,36 +35,50 @@ def admin_emails() -> set[str]:
     return email_set("ADMIN_EMAILS")
 
 
+def allowed_ids() -> set[str]:
+    """Return the provider ids let in without an email, as `provider:id` (e.g. `x:12345`)."""
+    return id_set("ALLOWED_OAUTH_IDS")
+
+
 def is_admin_email(email: str | None) -> bool:
     """Check whether an email belongs to an administrator."""
     return bool(email) and email.lower() in admin_emails()
 
 
-def admit(email: str | None, *, is_first_user: bool) -> tuple[bool, bool]:
-    """Decide whether an authenticating email may sign in.
-
-    Return an ``(allowed, is_admin)`` pair.
-    """
-    email = (email or "").lower()
-    if not email:
-        return False, False
-    admin = is_admin_email(email) or (is_first_user and not admin_emails())
-    if open_signup():
-        return True, admin
+def _admit_by_email(email: str, *, is_first_user: bool, admin: bool) -> bool:
     allow = allowed_emails()
     if allow:
-        return (email in allow or admin), admin
+        return email in allow or admin
     if admin_emails():  # admins only, no open list
-        return admin, admin
-    return is_first_user, admin  # first-ever user bootstraps as admin
+        return admin
+    return is_first_user  # first-ever user bootstraps as admin
+
+
+def admit(email: str | None, *, is_first_user: bool, identity: str = "") -> tuple[bool, bool]:
+    """Decide whether an authenticating person may sign in.
+
+    `email` is the provider-verified address, if it gave one; `identity` is `provider:id`. Return an
+    ``(allowed, is_admin)`` pair.
+    """
+    email = (email or "").lower()
+    if not (email or identity):
+        return False, False
+    admin = (bool(email) and is_admin_email(email)) or (is_first_user and not admin_emails())
+    if open_signup() or (identity and identity in allowed_ids()):
+        return True, admin
+    if not email:  # no email to match a list on: only the very first user (no lists set up yet) gets in
+        return is_first_user and not (allowed_emails() or admin_emails()), admin
+    return _admit_by_email(email, is_first_user=is_first_user, admin=admin), admin
 
 
 def current_user(user_cookie: str | None) -> User | None:
     """The signed-in User for a user-session cookie (OAuth), or None."""
-    user_id = resolve_user_session(user_cookie)
-    if not user_id:
+    claim = resolve_user_session(user_cookie)
+    if not claim:
         return None
-    return get_db().get_user(user_id)
+    user = get_db().get_user(claim.user_id)
+    # A cookie from before the user signed out their other devices (or changed their password) is dead
+    return user if user and user.session_version == claim.version else None
 
 
 def resolve_current_user(user_cookie: str | None) -> User | None:

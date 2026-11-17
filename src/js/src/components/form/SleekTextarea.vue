@@ -41,22 +41,22 @@ function onInput(event: Event): void {
 <style scoped>
 /* A textarea is taller and softer than the one-line fields */
 .field-header {
-  margin-bottom: 8px;
+  margin-bottom: 0.5333rem;
 }
 
 .field-hint {
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   opacity: 0.6;
   font-weight: inherit; /* the shared base sets 400; this field never did */
 }
 
 .focus-ring {
-  border-radius: 13px;
+  border-radius: 0.8667rem;
   background: linear-gradient(135deg, rgba(108, 92, 231, 0.15), transparent 50%);
 }
 
 .sleek-textarea {
-  margin-bottom: 16px;
+  margin-bottom: 1.0667rem;
 }
 
 .sleek-textarea.focused .field-label {
@@ -71,14 +71,14 @@ textarea {
   width: 100%;
   background: linear-gradient(145deg, rgba(30, 30, 35, 0.9), rgba(25, 25, 30, 0.95));
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
-  padding: 14px 16px;
+  border-radius: 0.8rem;
+  padding: 0.9333rem 1.0667rem;
   font-size: 0.92rem;
   color: var(--text);
   outline: none;
   transition: all 0.25s ease;
   resize: vertical;
-  min-height: 110px;
+  min-height: 7.3333rem;
   font-family: inherit;
   line-height: 1.6;
   box-shadow:

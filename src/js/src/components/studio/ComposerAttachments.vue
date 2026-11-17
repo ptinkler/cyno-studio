@@ -94,25 +94,25 @@ const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, R
     <button class="clearall" @click="$emit('remove-unused')">Remove</button>
   </div>
   <div v-if="props.attachments.length" class="clearrow">
-    <button class="clearall" title="Remove every attached image and video" @click="$emit('clear')">Clear all</button>
+    <button class="clearall" title="Clear all" @click="$emit('clear')">Clear all</button>
   </div>
 </template>
 
 <style scoped>
 .clearrow {
   position: absolute;
-  top: 10px;
-  right: 12px;
+  top: 0.6667rem;
+  right: 0.8rem;
   z-index: 2;
 }
 .clearall {
   border: 1px solid var(--sborder);
-  border-radius: 999px;
+  border-radius: 66.6rem;
   background: var(--sbg);
   color: var(--smuted);
   font: inherit;
-  font-size: 11px;
-  padding: 2px 9px;
+  font-size: 0.8rem;
+  padding: 2px 0.6rem;
   cursor: pointer;
 }
 .clearall:hover {
@@ -122,21 +122,21 @@ const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, R
 .atts {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  padding-bottom: 8px;
+  gap: 0.5333rem;
+  padding-bottom: 0.5333rem;
 }
 .att {
   position: relative;
-  width: 52px;
-  height: 52px;
+  width: 3.4667rem;
+  height: 3.4667rem;
 }
 .att.unused {
   opacity: 0.4;
   filter: grayscale(1);
 }
 .unused-note {
-  padding: 2px 12px 6px;
-  font-size: 12px;
+  padding: 2px 0.8rem 0.4rem;
+  font-size: 0.8rem;
   color: var(--swarn);
 }
 .att.ins {
@@ -145,7 +145,7 @@ const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, R
 .att-media {
   width: 100%;
   height: 100%;
-  border-radius: 9px;
+  border-radius: 0.6rem;
   overflow: hidden;
   border: 1px solid var(--sborder);
 }
@@ -164,7 +164,7 @@ const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, R
   height: 100%;
   display: grid;
   place-items: center;
-  font-size: 22px;
+  font-size: 1.4667rem;
   background: var(--saccent-soft);
 }
 .att:hover .att-zoom {
@@ -173,28 +173,28 @@ const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, R
 .att-zoom img,
 .att-zoom video {
   display: block;
-  max-width: 200px;
-  max-height: 200px;
-  border-radius: 5px;
+  max-width: 13.3333rem;
+  max-height: 13.3333rem;
+  border-radius: 0.3333rem;
 }
 .zoom-audio {
   display: grid;
   place-items: center;
-  width: 120px;
-  height: 64px;
-  font-size: 30px;
+  width: 8rem;
+  height: 4.2667rem;
+  font-size: 2rem;
 }
 .plus {
   position: relative;
 }
 .addtile {
-  width: 52px;
-  height: 52px;
-  border-radius: 9px;
+  width: 3.4667rem;
+  height: 3.4667rem;
+  border-radius: 0.6rem;
   border: 1px dashed var(--sborder);
   background: var(--sbg2);
   color: var(--smuted);
-  font-size: 22px;
+  font-size: 1.4667rem;
   cursor: pointer;
 }
 .addtile:hover {
@@ -208,27 +208,27 @@ const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, R
   position: absolute;
   top: 2px;
   right: 2px;
-  width: 17px;
-  height: 17px;
+  width: 1.1333rem;
+  height: 1.1333rem;
   display: grid;
   place-items: center;
   border: none;
-  border-radius: 5px;
+  border-radius: 0.3333rem;
   background: rgba(0, 0, 0, 0.6);
   color: #fff;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 0.8667rem;
   line-height: 1;
 }
 /* Hover: a larger still preview floating above the thumbnail */
 .att-zoom {
   position: absolute;
-  bottom: calc(100% + 6px);
+  bottom: calc(100% + 0.4rem);
   left: 50%;
   transform: translateX(-50%);
   display: none;
-  z-index: 30;
-  padding: 3px;
+  z-index: var(--z-popover);
+  padding: 0.2rem;
   background: var(--spanel2);
   border: 1px solid var(--sborder);
   border-radius: var(--r);

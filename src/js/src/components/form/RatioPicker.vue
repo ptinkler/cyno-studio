@@ -41,15 +41,15 @@ function getIconSize(ratio: string): { width: string; height: string } {
 <style scoped>
 .ratio-picker {
   display: flex;
-  gap: 6px;
+  gap: 0.4rem;
   flex-wrap: wrap;
 }
 
 .ratio-btn {
-  width: 44px;
-  height: 44px;
+  width: 2.9333rem;
+  height: 2.9333rem;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 10px;
+  border-radius: 0.6667rem;
   background: linear-gradient(145deg, rgba(30, 30, 35, 0.9), rgba(25, 25, 30, 0.95));
   cursor: pointer;
   display: flex;
@@ -96,7 +96,7 @@ function getIconSize(ratio: string): { width: string; height: string } {
 .ratio-label {
   position: absolute;
   bottom: -18px;
-  font-size: 0.62rem;
+  font-size: 0.8rem;
   font-weight: 500;
   color: var(--text2);
   white-space: nowrap;

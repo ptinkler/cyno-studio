@@ -1,10 +1,10 @@
 .edit-send {
-  padding: 4px 12px;
+  padding: 0.2667rem 0.8rem;
   border-radius: var(--r);
   border: none;
-  background: var(--saccent);
+  background: var(--saccent-fill);
   color: white;
-  font-size: 12px;
+  font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
 }
@@ -15,16 +15,16 @@
 .meta-btn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 0.2667rem;
   background: none;
   border: none;
   color: var(--text2);
   font-size: 0.8rem;
   line-height: 1.2;
   white-space: nowrap;
-  min-width: 26px;
-  padding: 3px 6px;
-  border-radius: 6px;
+  min-width: 1.7333rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: 0.4rem;
   cursor: pointer;
 }
 .meta-btn:hover {

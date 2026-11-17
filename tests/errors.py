@@ -1,7 +1,6 @@
 """Exceptions that tests make fakes raise, each with the message the scenario needs."""
 
 import httpx
-import requests
 
 from web.providers.openrouter import OpenRouterError
 
@@ -35,7 +34,7 @@ def server_disconnected() -> httpx.RemoteProtocolError:
     return httpx.RemoteProtocolError("Server disconnected without sending a response.")
 
 
-class NoRouteError(requests.ConnectionError):
+class NoRouteError(httpx.ConnectError):
     """No network route to the host."""
 
     def __init__(self) -> None:

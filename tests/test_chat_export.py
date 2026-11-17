@@ -10,6 +10,7 @@ from typing import cast
 import pytest
 from fastapi.testclient import TestClient
 
+import web.characters as characters_mod
 import web.transfer.chatgpt as imp_mod
 from tests.chat_fixtures import ConversationOut, png_bytes
 from tests.jsonpath import dig, number, obj, rows, seq, text
@@ -146,6 +147,104 @@ class TestImport:
         assert number(reply, "cost") == 0.03
         assert (conversation_dir(copy_id) / "img_fox.png").read_bytes() == png_bytes()
         assert db.get_chat_spend(copy_id) == (0.04, 8)
+
+    def test_only_media_files_are_unpacked(self, imp: None, client: TestClient, db: MetadataDB, tmp_path: Path) -> None:
+        """A zip can carry other files in a chat's folder (a page, an .svg); they are left in the zip."""
+        conv = _chat_with_branches(client, db)
+        path = _export(client, [conv["id"]], tmp_path)
+        with zipfile.ZipFile(path, "a") as zf:
+            zf.writestr(f"chats/{conv['id']}/page.html", "<script>1</script>")
+            zf.writestr(f"chats/{conv['id']}/pic.svg", "<svg onload='1'/>")
+        client.delete(f"/api/chat/conversations/{conv['id']}")
+        imp_mod.run_import(path)
+        [copy] = _copies(client, "Foxes")
+        folder = conversation_dir(text(copy, "id"))
+        assert (folder / "img_fox.png").is_file()
+        assert not (folder / "page.html").exists()
+        assert not (folder / "pic.svg").exists()
+
+    def _chat_made_from_a_character(self, client: TestClient, db: MetadataDB) -> tuple[ConversationOut, int, str]:
+        """A chat whose card was made from a character's picture (and from one of the chat's own)."""
+        char = db.create_character("Gym Woman")
+        image = "img_char.png"
+        char_folder = characters_mod.char_dir(char.id)
+        char_folder.mkdir(parents=True)
+        (char_folder / image).write_bytes(png_bytes())
+        db.update_character(char.id, images=[image])
+        conv = _new_chat(client, "With a character", text_model="t/model")
+        (conversation_dir(conv["id"]) / "img_own.png").write_bytes(png_bytes())
+        user = db.add_chat_message(conv["id"], "user", "draw her")
+        db.add_chat_message(
+            conv["id"],
+            "assistant",
+            "Here.",
+            parent_id=user.id,
+            media=[
+                {
+                    "id": "m1",
+                    "kind": "image",
+                    "source": "generated",
+                    "status": "done",
+                    "file": "img_own.png",
+                    "params": {"refs": ["img_own.png", f"char:{char.id}/{image}", f"char:{char.id}/gone.png"]},
+                    "versions": [{"file": "img_v1.png", "params": {"refs": [f"char:{char.id}/{image}"]}}],
+                }
+            ],
+        )
+        return conv, char.id, image
+
+    def test_character_pictures_travel_as_chat_files(
+        self, imp: None, client: TestClient, db: MetadataDB, tmp_path: Path
+    ) -> None:
+        """The zip carries each character image the card used, and the card points at the copy by name."""
+        conv, char_id, image = self._chat_made_from_a_character(client, db)
+        path = _export(client, [conv["id"]], tmp_path)
+        copy = f"cref_{char_id}_{image}"
+        with zipfile.ZipFile(path) as zf:
+            assert f"chats/{conv['id']}/{copy}" in zf.namelist()
+            [chat] = rows(_manifest(zf), "conversations")
+        card = dig(rows(chat, "messages")[-1], "media", 0)
+        refs = seq(obj(card, "params"), "refs")
+        # an own picture and a character picture that is gone are left alone
+        assert refs == ["img_own.png", copy, f"char:{char_id}/gone.png"]
+        assert seq(obj(dig(card, "versions", 0), "params"), "refs") == [copy]
+
+    def test_the_other_server_shows_them(self, imp: None, client: TestClient, db: MetadataDB, tmp_path: Path) -> None:
+        """Import with the character gone: the picture is a chat file there, and the card resolves it."""
+        conv, char_id, image = self._chat_made_from_a_character(client, db)
+        path = _export(client, [conv["id"]], tmp_path)
+        client.delete(f"/api/chat/conversations/{conv['id']}")
+        db.delete_character(char_id)  # as on a server that never had it
+        imp_mod.run_import(path)
+        [chat] = _copies(client, "With a character")
+        reply = rows(client.get(f"/api/chat/conversations/{text(chat, 'id')}"), "messages")[-1]
+        assert f"cref_{char_id}_{image}" in seq(obj(dig(reply, "media", 0), "params"), "refs")
+        assert (conversation_dir(text(chat, "id")) / f"cref_{char_id}_{image}").read_bytes() == png_bytes()
+
+    def test_another_users_character_is_never_copied(
+        self, imp: None, client: TestClient, db: MetadataDB, tmp_path: Path
+    ) -> None:
+        """A ref to a character that isn't this user's, or an image it doesn't list, is left as it was."""
+        conv, char_id, _image = self._chat_made_from_a_character(client, db)
+        (characters_mod.char_dir(char_id) / "img_unlisted.png").write_bytes(png_bytes())
+        user = db.add_chat_message(conv["id"], "user", "again")
+        db.add_chat_message(
+            conv["id"],
+            "assistant",
+            "Again.",
+            parent_id=user.id,
+            media=[
+                {
+                    "id": "m2",
+                    "kind": "image",
+                    "status": "done",
+                    "params": {"refs": [f"char:{char_id}/img_unlisted.png", "char:999/x.png"]},
+                }
+            ],
+        )
+        with zipfile.ZipFile(_export(client, [conv["id"]], tmp_path)) as zf:
+            names = zf.namelist()
+        assert not any("unlisted" in n or "999" in n for n in names)
 
     def test_importing_again_changes_nothing(
         self, imp: None, client: TestClient, db: MetadataDB, tmp_path: Path

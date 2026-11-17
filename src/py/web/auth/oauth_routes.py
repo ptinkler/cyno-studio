@@ -1,20 +1,20 @@
 """OAuth sign-in routes: provider list, login redirect, callback, and `me`.
 
-Logout is handled by the existing /api/auth/logout in api.py (it clears both the
-API-key session and the user session).
+Logout is handled by /api/auth/logout in api.py, which clears the session cookie.
 """
 
 from __future__ import annotations
 
 import os
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import APIRouter, Cookie, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
 from web.auth import users
 from web.auth.dev_login import dev_login_enabled
-from web.auth.oauth import configured_providers, normalize_profile, oauth
+from web.auth.oauth import EMAIL_PROVIDERS, configured_providers, normalize_profile, oauth
 from web.auth.schemas import AuthMe, AuthProviders, account_user
 from web.auth.session import set_user_cookie
 from web.core.metadata import get_db
@@ -72,15 +72,23 @@ async def callback(provider: str, request: Request) -> RedirectResponse:
         profile = await normalize_profile(provider, client, token)
     except Exception as e:  # provider errors, denied consent, bad state
         raise HTTPException(status_code=400, detail=f"OAuth sign-in failed: {e}") from e
-    if not profile.get("sub") or not profile.get("email"):
-        raise HTTPException(status_code=400, detail="Provider did not return a usable profile (id/email)")
+    sub, email = profile.get("sub"), profile.get("email")
+    if not sub or (provider in EMAIL_PROVIDERS and not email):
+        raise HTTPException(
+            status_code=400,
+            detail="Provider did not return a usable profile: it needs an id and, for Google and Microsoft, "
+            "a verified email address",
+        )
 
     db = get_db()
-    allowed, is_admin = users.admit(profile["email"], is_first_user=db.count_users() == 0)
+    identity = f"{provider}:{sub}"
+    allowed, is_admin = users.admit(email, is_first_user=db.count_users() == 0, identity=identity)
     if not allowed:
-        return RedirectResponse(url="/?auth=denied", status_code=302)
+        # Without an email the person can't say who they are, so the id is what the admin needs to let them in
+        shown = "" if email else f"&id={quote(identity)}"
+        return RedirectResponse(url=f"/?auth=denied{shown}", status_code=302)
 
     user = db.upsert_oauth_user(profile, is_admin=is_admin)
     resp = RedirectResponse(url="/", status_code=302)
-    set_user_cookie(resp, request, user.id)  # samesite=lax survives the redirect back
+    set_user_cookie(resp, request, user.id, user.session_version)  # samesite=lax survives the redirect back
     return resp

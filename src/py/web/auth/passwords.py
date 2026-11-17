@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
+from functools import cache
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
@@ -50,6 +51,20 @@ def verify_password(stored_hash: str | None, password: str) -> bool:
         return _hasher.verify(stored_hash, _peppered(password))
     except (VerificationError, InvalidHashError):  # malformed/foreign hashes are simply a mismatch
         return False
+
+
+@cache
+def _stand_in_hash() -> str:
+    return hash_password("not any account's password")
+
+
+def spend_verification_time(password: str) -> None:
+    """Do the work of checking a password for an account that doesn't exist.
+
+    A missing account would otherwise answer as fast as a hash check is slow, and the difference
+    says which emails have accounts.
+    """
+    verify_password(_stand_in_hash(), password)
 
 
 def needs_rehash(stored_hash: str) -> bool:

@@ -28,3 +28,45 @@ const SECONDS_PER_MINUTE = 60
 // Seconds as m:ss ("0:05", "1:12")
 export const fmtDuration = (seconds: number): string =>
   `${String(Math.floor(seconds / SECONDS_PER_MINUTE))}:${String(Math.round(seconds % SECONDS_PER_MINUTE)).padStart(2, '0')}`
+
+/** Less than this left over (in dollars) is rounding, not a cost. */
+const COST_EPSILON = 0.00005
+
+interface PricedPicture {
+  model?: string | null | undefined
+  cost?: number | null | undefined
+  credits?: number | null | undefined
+  versions?: readonly { cost?: number | null | undefined }[] | null | undefined
+}
+
+export interface CostRow {
+  label: string
+  value: string
+}
+
+const costRow = (label: string, cost: number | null | undefined): CostRow[] =>
+  cost ? [{ label, value: fmtCost(cost) }] : []
+
+/** One picture's rows for the breakdown, and what of the total they account for. */
+function pictureRows(item: PricedPicture): { rows: CostRow[]; paid: number } {
+  const name = shortModel(item.model) || 'Picture'
+  const earlier = (item.versions ?? []).reduce((sum, v) => sum + (v.cost ?? 0), 0)
+  const credits = item.credits
+    ? [{ label: name, value: `${String(item.credits)} credit${item.credits === 1 ? '' : 's'}` }]
+    : []
+  return {
+    rows: [...costRow(name, item.cost), ...credits, ...costRow(`${name}, earlier versions`, earlier)],
+    paid: (item.cost ?? 0) + earlier,
+  }
+}
+
+/**
+ * What a reply's one total is made of: the text, then every picture or clip (and the earlier versions of it
+ * that were paid for). Whatever the pictures don't account for is the text, including the wordings it was
+ * rewritten from. Credits (Pollo) are listed but aren't part of the dollar total.
+ */
+export function costRows(total: number, media: readonly PricedPicture[]): CostRow[] {
+  const pictures = media.map(pictureRows)
+  const text = total - pictures.reduce((sum, p) => sum + p.paid, 0)
+  return [...(text > COST_EPSILON ? costRow('Text', text) : []), ...pictures.flatMap(p => p.rows)]
+}

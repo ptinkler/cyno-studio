@@ -41,13 +41,15 @@ const big = (item: MediaCard): GenerationItem => bigView(item, props.message, pr
       />
       <span v-if="item.kind !== 'audio'" class="use-btns">
         <button
-          title="Attach this picture and switch to Image mode"
+          title="Use in Image mode"
+          aria-label="Use in Image mode"
           @click="emit('use-image', { file: item.file, mode: 'image' })"
         >
           <svg class="ic sm"><use href="#s-image" /></svg>
         </button>
         <button
-          title="Attach this picture and switch to Video mode"
+          title="Use in Video mode"
+          aria-label="Use in Video mode"
           @click="emit('use-image', { file: item.file, mode: 'video' })"
         >
           <svg class="ic sm"><use href="#s-film" /></svg>
@@ -62,28 +64,28 @@ const big = (item: MediaCard): GenerationItem => bigView(item, props.message, pr
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 6px;
-  margin-bottom: 6px;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
 }
 .attachment {
   position: relative;
 }
 .use-btns {
   position: absolute;
-  top: 6px;
-  right: 6px;
+  top: 0.4rem;
+  right: 0.4rem;
   display: flex;
-  gap: 4px;
+  gap: 0.2667rem;
   opacity: 0;
   transition: opacity 0.15s;
 }
 .use-btns button {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 1.8667rem;
+  height: 1.8667rem;
   border: none;
-  border-radius: 8px;
+  border-radius: 0.5333rem;
   background: rgba(0, 0, 0, 0.65);
   color: rgba(255, 255, 255, 0.85);
   cursor: pointer;
@@ -101,17 +103,17 @@ const big = (item: MediaCard): GenerationItem => bigView(item, props.message, pr
   }
 }
 .attachment-thumb {
-  width: 120px;
-  height: 120px;
+  width: 8rem;
+  height: 8rem;
   object-fit: cover;
-  border-radius: 12px;
+  border-radius: 0.8rem;
   cursor: zoom-in;
   border: 1px solid var(--border);
 }
 /* Lip-sync audio track attached to a user message */
 .attachment-audio {
-  width: 240px;
-  height: 40px;
+  width: 16rem;
+  height: 2.6667rem;
   vertical-align: middle;
 }
 </style>

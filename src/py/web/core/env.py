@@ -29,3 +29,8 @@ def bool_env_or_none(name: str) -> bool | None:
 def email_set(name: str) -> set[str]:
     """A comma-separated list of email addresses, lower-cased, blanks dropped."""
     return {e.strip().lower() for e in os.getenv(name, "").split(",") if e.strip()}
+
+
+def id_set(name: str) -> set[str]:
+    """A comma-separated list of ids (case kept: a provider's user ids are case-sensitive), blanks dropped."""
+    return {e.strip() for e in os.getenv(name, "").split(",") if e.strip()}

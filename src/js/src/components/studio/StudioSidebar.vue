@@ -126,7 +126,13 @@ const bySpace = computed(() => {
       <svg class="ic lg"><use href="#s-chat" /></svg>
     </button>
     <div class="panel">
-      <button class="panelhead" type="button" title="Collapse sidebar" @click="emit('update:collapsed', true)">
+      <button
+        class="panelhead"
+        type="button"
+        title="Collapse sidebar"
+        aria-label="Collapse sidebar"
+        @click="emit('update:collapsed', true)"
+      >
         <span class="brand"
           ><span class="mk"
             ><svg class="ic"><use href="#s-spark" /></svg
@@ -170,7 +176,12 @@ const bySpace = computed(() => {
           >
             <svg class="ic"><use href="#s-star" /></svg>
           </a>
-          <button class="pillbtn ficon" title="More filters — coming soon" disabled>
+          <button
+            class="pillbtn ficon"
+            title="More filters — coming soon"
+            aria-label="More filters — coming soon"
+            disabled
+          >
             <svg class="ic"><use href="#s-filter" /></svg>
           </button>
         </div>
@@ -215,7 +226,7 @@ const bySpace = computed(() => {
             <svg class="ic sm"><use href="#s-chev" /></svg>
             <span>Spaces</span>
           </button>
-          <button class="addspace" title="New space" @click="emit('add-space')">
+          <button class="addspace" title="New space" aria-label="New space" @click="emit('add-space')">
             <svg class="ic sm"><use href="#s-plus" /></svg>
           </button>
         </div>
@@ -317,7 +328,7 @@ const bySpace = computed(() => {
 
 <style scoped>
 .side {
-  width: 268px;
+  width: clamp(15rem, 19vw, 20rem);
   background: var(--sbg);
   border-right: 1px solid var(--sborder);
 }
@@ -332,14 +343,14 @@ const bySpace = computed(() => {
 .brand {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 0.6rem;
   font-weight: 650;
   letter-spacing: -0.02em;
 }
 .brand .mk {
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 0.4667rem;
   background: var(--saccent-soft);
   color: var(--saccent);
   display: grid;
@@ -348,27 +359,27 @@ const bySpace = computed(() => {
 .pbody {
   flex: 1;
   overflow-y: auto;
-  padding: 10px;
+  padding: 0.6667rem;
 }
 .newrow {
   display: flex;
-  gap: 6px;
-  margin-bottom: 10px;
+  gap: 0.4rem;
+  margin-bottom: 0.6667rem;
 }
 .newbtn {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 0.4rem;
   flex: 1;
   min-width: 0;
-  padding: 7px 8px;
+  padding: 0.4667rem 0.5333rem;
   border: 1px solid var(--sborder);
   color: var(--sfg);
   border-radius: var(--r);
   background: none;
   cursor: pointer;
-  font-size: 12.5px;
+  font-size: 0.8333rem;
   font-weight: 500;
   white-space: nowrap;
 }
@@ -380,33 +391,33 @@ const bySpace = computed(() => {
   color: var(--saccent);
 }
 .nsearch {
-  margin-bottom: 8px;
+  margin-bottom: 0.5333rem;
 }
 .nfilter {
   display: flex;
-  gap: 4px;
-  padding-bottom: 6px;
+  gap: 0.2667rem;
+  padding-bottom: 0.4rem;
 }
 /* Favourites + the filter placeholder are icon-only (text overflowed the rail) */
 .nfilter .ficon {
-  padding: 4px 7px;
+  padding: 0.2667rem 0.4667rem;
   margin-left: auto;
 }
 .nfilter .ficon + .ficon {
   margin-left: 0;
 }
 .nlabel {
-  font-size: 10.5px;
+  font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.09em;
   color: var(--sfaint);
-  padding: 13px 10px 5px 0;
+  padding: 0.8667rem 0.6667rem 0.3333rem 0;
   font-weight: 650;
 }
 .section-toggle {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 0.2667rem;
   width: 100%;
   border: 0;
   background: none;
@@ -454,24 +465,37 @@ const bySpace = computed(() => {
   color: var(--saccent);
 }
 .nrow.sm :deep(.nitem) {
-  padding: 6px 10px;
-  font-size: 13px;
+  padding: 0.4rem 0.6667rem;
+  font-size: 0.8667rem;
 }
 .side :deep(.nactions) {
   display: flex;
   align-items: center;
   gap: 1px;
-  flex: 0 0 82px;
+  flex: 0 0 5.4667rem;
   justify-content: flex-end;
-  padding-right: 5px;
+  padding-right: 0.3333rem;
   visibility: hidden;
 }
+.nrow :deep(.nactions) {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  flex: none;
+  padding: 0 5px 0 24px;
+  border-radius: 0 var(--r) var(--r) 0;
+  background: linear-gradient(to right, transparent, var(--shover) 20px);
+}
+.nrow.active :deep(.nactions) {
+  background: linear-gradient(to right, transparent, color-mix(in srgb, var(--saccent) 16%, var(--sbg)) 20px);
+}
 .side :deep(.nact) {
-  width: 25px;
-  height: 25px;
+  width: 1.6667rem;
+  height: 1.6667rem;
   display: grid;
   place-items: center;
-  border-radius: 6px;
+  border-radius: 0.4rem;
   color: var(--sfaint);
   background: none;
   border: none;
@@ -496,14 +520,14 @@ const bySpace = computed(() => {
   visibility: visible;
 }
 .fkids {
-  padding-left: 8px;
-  margin-left: 20px;
+  padding-left: 0.5333rem;
+  margin-left: 1.3333rem;
   border-left: 1px solid var(--sborder2);
 }
 .fempty {
-  padding: 7px 10px;
+  padding: 0.4667rem 0.6667rem;
   color: var(--sfaint);
-  font-size: 12px;
+  font-size: 0.8rem;
   font-style: italic;
 }
 .nlabel.row {
@@ -512,11 +536,11 @@ const bySpace = computed(() => {
   justify-content: space-between;
 }
 .addspace {
-  width: 20px;
-  height: 20px;
+  width: 1.3333rem;
+  height: 1.3333rem;
   display: grid;
   place-items: center;
-  border-radius: 6px;
+  border-radius: 0.4rem;
   color: var(--sfaint);
   background: none;
   border: none;
@@ -529,20 +553,20 @@ const bySpace = computed(() => {
 .drop-target.drop {
   color: var(--saccent);
   box-shadow: inset 0 0 0 1px var(--saccent);
-  border-radius: 7px;
+  border-radius: 0.4667rem;
 }
 .pfoot {
-  padding: 8px 10px;
+  padding: 0.5333rem 0.6667rem;
   border-top: 1px solid var(--sborder2);
 }
 .footbtn {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 0.6rem;
   width: 100%;
-  padding: 7px 10px;
+  padding: 0.4667rem 0.6667rem;
   border-radius: var(--r);
-  font-size: 13.5px;
+  font-size: 0.9rem;
   color: var(--smuted);
   background: none;
   border: none;

@@ -4,13 +4,33 @@ A provider's API response can hand us a URL to download (e.g. an image the
 model generated). Before fetching, confirm it's a public http(s) address so a
 crafted response can't point the server at loopback, the cloud metadata
 endpoint, or the LAN.
+
+Three things make the check hold:
+
+* The address that was checked is the address connected to. The host is resolved once, every answer must be
+  public, and the request goes to that IP (with the real name as Host and for TLS), so a name that answers
+  differently the second time (DNS rebinding) can't slip past.
+* Every redirect hop goes through the same check; none is followed blindly.
+* What comes back is read with a size cap, so a link to something enormous can't fill memory or the disk.
 """
 
 import ipaddress
 import socket
-from urllib.parse import urlparse
+from collections.abc import Callable, Generator, Mapping
+from contextlib import contextmanager
+from pathlib import Path
+from urllib.parse import urljoin, urlparse
 
 import httpx
+
+MAX_IMAGE_BYTES = 64 * 1024**2
+MAX_VIDEO_BYTES = 2 * 1024**3
+MAX_PAGE_BYTES = 2 * 1024**2
+CHUNK = 1 << 16
+DEFAULT_REDIRECTS = 3
+
+# For fetches that have no client of their own: no credentials, no cookies, no redirect following
+public_http = httpx.Client(follow_redirects=False)
 
 
 class UnsafeURLError(ValueError):
@@ -49,6 +69,14 @@ class NonPublicAddressError(UnsafeURLError):
         super().__init__(f"Host {host!r} resolves to non-public address {ip}")
 
 
+class ResponseTooLargeError(UnsafeURLError):
+    """The answer is bigger than the most we will take for this kind of fetch."""
+
+    def __init__(self, limit: int) -> None:
+        """Give the cap."""
+        super().__init__(f"Response larger than {limit // 1024**2} MB")
+
+
 class TooManyRedirectsError(UnsafeURLError):
     """The redirect limit was reached before a final response."""
 
@@ -58,22 +86,23 @@ class TooManyRedirectsError(UnsafeURLError):
 
 
 def _is_public_ip(ip: str) -> bool:
+    """Whether `ip` is a globally routable address.
+
+    `is_global` rules out private and loopback ranges, link-local (including the cloud metadata address),
+    shared address space (100.64.0.0/10, which Tailscale and carrier NAT use), documentation and other
+    reserved ranges, and multicast. An IPv6 address that wraps an IPv4 one is judged as that IPv4 address.
+    """
     try:
         addr = ipaddress.ip_address(ip)
     except ValueError:
         return False
-    return not (
-        addr.is_private
-        or addr.is_loopback
-        or addr.is_link_local  # 169.254/16 incl. cloud metadata 169.254.169.254
-        or addr.is_reserved
-        or addr.is_multicast
-        or addr.is_unspecified
-    )
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
+        addr = addr.ipv4_mapped
+    return addr.is_global and not addr.is_multicast
 
 
-def assert_public_url(url: str) -> None:
-    """Require an HTTP(S) URL whose resolved addresses are all public.
+def public_address(url: str) -> str:
+    """The IP to connect to for `url`: it is http(s), has a host, and every address the host resolves to is public.
 
     Raises:
         UnsafeURLError: If the scheme, host, or any resolved address is unsafe.
@@ -88,10 +117,63 @@ def assert_public_url(url: str) -> None:
         infos = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80))
     except socket.gaierror as exc:
         raise UnresolvableHostError(host, exc) from exc
-    for info in infos:
-        ip = str(info[4][0])
+    addresses = [str(info[4][0]) for info in infos]
+    for ip in addresses:
         if not _is_public_ip(ip):
             raise NonPublicAddressError(host, ip)
+    return addresses[0]
+
+
+def assert_public_url(url: str) -> None:
+    """Require an HTTP(S) URL whose resolved addresses are all public.
+
+    Raises:
+        UnsafeURLError: If the scheme, host, or any resolved address is unsafe.
+    """
+    public_address(url)
+
+
+@contextmanager
+def open_public(
+    client: httpx.Client,
+    url: str,
+    *,
+    timeout: float | httpx.Timeout | None,
+    headers: Mapping[str, str] | None = None,
+    max_redirects: int = DEFAULT_REDIRECTS,
+) -> Generator[httpx.Response]:
+    """Stream a GET of a public URL, checking and pinning the address on every redirect hop."""
+    for _ in range(max_redirects + 1):
+        target = httpx.URL(url)
+        ip = public_address(url)
+        request_headers = {**(headers or {}), "Host": target.netloc.decode()}
+        with client.stream(
+            "GET",
+            target.copy_with(host=ip),
+            headers=request_headers,
+            timeout=timeout,
+            follow_redirects=False,
+            extensions={"sni_hostname": target.host},
+        ) as resp:
+            if resp.is_redirect and "location" in resp.headers:
+                url = urljoin(url, resp.headers["location"])
+                continue
+            yield resp
+            return
+    raise TooManyRedirectsError
+
+
+def _read_capped(resp: httpx.Response, max_bytes: int, sink: Callable[[bytes], object]) -> None:
+    """Feed the body to `sink` a chunk at a time, refusing one bigger than `max_bytes`."""
+    declared: str = resp.headers.get("content-length") or ""
+    if declared.isdigit() and int(declared) > max_bytes:
+        raise ResponseTooLargeError(max_bytes)
+    total = 0
+    for chunk in resp.iter_bytes(CHUNK):
+        total += len(chunk)
+        if total > max_bytes:
+            raise ResponseTooLargeError(max_bytes)
+        sink(chunk)
 
 
 def get_public(
@@ -99,27 +181,42 @@ def get_public(
     url: str,
     *,
     timeout: float | httpx.Timeout | None,
-    max_redirects: int = 3,
+    headers: Mapping[str, str] | None = None,
+    max_bytes: int = MAX_IMAGE_BYTES,
 ) -> httpx.Response:
-    """GET a public URL and validate each redirect target.
-
-    Args:
-        client: HTTPX client used to make the request.
-        url: Initial URL to fetch.
-        timeout: HTTPX timeout configuration.
-        max_redirects: Maximum number of redirects to follow.
-
-    Returns:
-        The final HTTP response.
+    """GET a public URL (each redirect target checked and pinned) and return the whole, size-capped answer.
 
     Raises:
-        UnsafeURLError: If a URL is unsafe or the redirect limit is exceeded.
+        UnsafeURLError: If a URL is unsafe, the redirect limit is exceeded, or the answer is over `max_bytes`.
     """
-    for _ in range(max_redirects + 1):
-        assert_public_url(url)
-        resp = client.get(url, timeout=timeout, follow_redirects=False)
-        if resp.is_redirect and "location" in resp.headers:
-            url = str(resp.next_request.url) if resp.next_request else resp.headers["location"]
-            continue
-        return resp
-    raise TooManyRedirectsError
+    with open_public(client, url, timeout=timeout, headers=headers) as resp:
+        chunks: list[bytes] = []
+        _read_capped(resp, max_bytes, chunks.append)
+        kept = {k: v for k, v in resp.headers.items() if k.lower() not in ("content-encoding", "content-length")}
+        return httpx.Response(resp.status_code, headers=kept, content=b"".join(chunks), request=resp.request)
+
+
+def download_public(
+    client: httpx.Client,
+    url: str,
+    dest: Path,
+    *,
+    timeout: float | httpx.Timeout | None,
+    max_bytes: int = MAX_VIDEO_BYTES,
+) -> None:
+    """Download a public URL to `dest` (through a .part file, so a failed download leaves nothing at `dest`).
+
+    Raises:
+        UnsafeURLError: If a URL is unsafe or the file is over `max_bytes`.
+        httpx.HTTPError: On an error status or a network failure.
+    """
+    tmp = dest.with_suffix(dest.suffix + ".part")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open_public(client, url, timeout=timeout) as resp, tmp.open("wb") as out:
+            resp.raise_for_status()
+            _read_capped(resp, max_bytes, out.write)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    tmp.replace(dest)

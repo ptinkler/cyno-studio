@@ -25,18 +25,18 @@ withDefaults(
 <style scoped>
 .item-badge {
   --b: var(--text2);
-  font-size: 0.65rem;
+  font-size: 0.7333rem;
   font-weight: 600;
   line-height: 1.5;
-  padding: 1px 7px;
-  border-radius: 6px;
+  padding: 1px 0.4667rem;
+  border-radius: 0.4rem;
   white-space: nowrap;
   color: var(--b);
   background: color-mix(in srgb, var(--b) 16%, transparent);
 }
 .dot {
-  width: 7px;
-  height: 7px;
+  width: 0.4667rem;
+  height: 0.4667rem;
   border-radius: 50%;
   background: var(--b, var(--text2));
 }
@@ -65,7 +65,7 @@ withDefaults(
   --b: #c9a227;
 }
 .item-badge.picked {
-  margin-left: 6px;
+  margin-left: 0.4rem;
   vertical-align: middle;
 }
 </style>

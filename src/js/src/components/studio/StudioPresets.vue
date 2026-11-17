@@ -35,7 +35,7 @@ async function onPick(event: Event): Promise<void> {
         <option value="__manage">Manage presets…</option>
       </select>
     </label>
-    <button class="add" title="Save the current models and options as a preset" @click="creating = true">+</button>
+    <button class="add" title="Save as preset" @click="creating = true">+</button>
     <PresetEditor :open="creating" @close="creating = false" />
   </div>
 </template>
@@ -43,21 +43,21 @@ async function onPick(event: Event): Promise<void> {
 <style scoped>
 .presets {
   display: flex;
-  gap: 6px;
-  margin-bottom: 8px;
+  gap: 0.4rem;
+  margin-bottom: 0.5333rem;
 }
 .presets .ifield {
   flex: 1;
   min-width: 0;
 }
 .add {
-  width: 30px;
+  width: 2rem;
   flex: 0 0 auto;
   border: 1px solid var(--sborder);
   border-radius: var(--r);
   background: var(--spanel2);
   color: var(--smuted);
-  font-size: 15px;
+  font-size: 1rem;
   line-height: 1;
   cursor: pointer;
 }

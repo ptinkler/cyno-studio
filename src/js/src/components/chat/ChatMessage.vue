@@ -4,11 +4,14 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import type { GenerationItem, ImagePick, RegenerateRequest, UiMessage } from '../../composables/studioTypes'
 import { useCopy } from '../../composables/useClipboard'
-import { shortModel, fmtCost } from '../../utils/format'
+import { shortModel } from '../../utils/format'
 import ChatAttachments from './ChatAttachments.vue'
 import ChatMediaCard from './ChatMediaCard.vue'
+import CostChip from './CostChip.vue'
 import ForkList from './ForkList.vue'
 import PromptBox from './PromptBox.vue'
+import ReplyControls from './ReplyControls.vue'
+import VersionStepper from './VersionStepper.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -44,6 +47,13 @@ const emit = defineEmits<{
 }>()
 
 marked.setOptions({ gfm: true, breaks: true })
+// A link in a reply opens in a new tab (the chat is not left behind), and that page gets no handle back to this one
+DOMPurify.addHook('afterSanitizeAttributes', node => {
+  if (node.tagName === 'A' && node.hasAttribute('href')) {
+    node.setAttribute('target', '_blank')
+    node.setAttribute('rel', 'noopener noreferrer')
+  }
+})
 
 const isUser = computed(() => props.message.role === 'user')
 const streaming = computed(() => props.message.status === 'streaming')
@@ -82,6 +92,23 @@ const textShown = computed(() => props.message.text_shown)
 const hasPendingMedia = computed(() => props.message.media.some(m => m.status === 'pending'))
 const canRewordNow = computed(() => props.canReword && !hasPendingMedia.value)
 const textBox = ref<{ text: string } | null>(null) // while the Edit text box is open
+const hasMedia = computed(() => props.message.media.length > 0)
+
+// The bar under the words: Copy, Edit text, Redo text, the wordings' ‹ ›, and
+// which model wrote them. A reply with no pictures also keeps its whole-reply
+// controls here (one row); otherwise those go under the pictures.
+const showCopy = computed(() => !streaming.value && !!displayText.value)
+const showEditText = computed(() => !streaming.value && canRewordNow.value && !!displayText.value)
+const canRedoText = computed(() => !streaming.value && canRewordNow.value && hasMedia.value)
+const showRedoText = computed(() => canRedoText.value && !!displayText.value)
+// A reply that is only pictures has no words to sit under, so Redo text goes under the pictures instead
+const showRedoFoot = computed(() => canRedoText.value && !displayText.value)
+const REDO_TEXT_TITLE = 'Redo text'
+const showWordings = computed(() => textVersions.value > 1 && !streaming.value)
+const showModel = computed(() => !!modelShort.value && showTextModel.value)
+const showTextBar = computed(
+  () => !hasMedia.value || showCopy.value || showRedoText.value || showWordings.value || showModel.value,
+)
 
 function submitTextEdit(): void {
   const text = textBox.value?.text.trim()
@@ -101,6 +128,18 @@ function goBranch(step: number): void {
   const id = siblings.value[branchIndex.value + step]
   if (id !== undefined) emit('branch', id)
 }
+
+// The row under the pictures only appears when it has something in it
+const hasReplyControls = computed(
+  () =>
+    showRedoFoot.value ||
+    props.canRetry ||
+    props.canBranch ||
+    siblings.value.length > 1 ||
+    !!props.message.forks?.length ||
+    !!props.message.cost,
+)
+const showFoot = computed(() => hasMedia.value && (streaming.value || hasReplyControls.value))
 
 const editing = ref(false)
 const editText = ref('')
@@ -183,52 +222,39 @@ const { copiedKey, copy } = useCopy()
           align="right"
           @open="id => emit('open-chat', id)"
         />
-        <span
-          v-if="modeTag"
-          class="mode-tag"
-          :title="`Last run in ${modeTag} mode — retrying or editing uses the mode selected now`"
-          >{{ modeTag }}</span
+        <span v-if="modeTag" class="mode-tag" :title="`Sent in ${modeTag} mode`">{{ modeTag }}</span>
+        <VersionStepper
+          v-if="siblings.length > 1"
+          class="branch-nav"
+          :shown="branchIndex"
+          :count="siblings.length"
+          :enabled="canSwitch"
+          prev-title="Previous version"
+          next-title="Next version"
+          @step="goBranch"
+        />
+        <button
+          v-if="message.content"
+          class="iconbtn boxed"
+          :class="{ on: copiedKey === 'prompt' }"
+          title="Copy prompt"
+          aria-label="Copy prompt"
+          @click="copy(message.content, 'prompt')"
         >
-        <span v-if="siblings.length > 1" class="branch-nav">
-          <button
-            class="meta-btn"
-            :disabled="!canSwitch || branchIndex <= 0"
-            title="Previous version"
-            @click="goBranch(-1)"
-          >
-            ‹
-          </button>
-          <span>{{ branchIndex + 1 }}/{{ siblings.length }}</span>
-          <button
-            class="meta-btn"
-            :disabled="!canSwitch || branchIndex >= siblings.length - 1"
-            title="Next version"
-            @click="goBranch(1)"
-          >
-            ›
-          </button>
-        </span>
-        <button v-if="message.content" class="meta-btn" title="Copy prompt" @click="copy(message.content, 'prompt')">
-          {{ copiedKey === 'prompt' ? '✓' : '⧉' }}
+          <svg class="ic"><use :href="copiedKey === 'prompt' ? '#s-check' : '#s-copy'" /></svg>
         </button>
         <template v-if="canEdit">
-          <button class="meta-btn" title="Edit and resend" @click="startEdit">✎</button>
-          <button class="meta-btn" title="Resend this prompt for a different response" @click="emit('resend')">
-            ↻
+          <button class="iconbtn boxed" title="Edit prompt" aria-label="Edit prompt" @click="startEdit">
+            <svg class="ic"><use href="#s-pencil" /></svg>
           </button>
-          <button
-            class="meta-btn"
-            title="Start a new chat from here: everything up to this prompt and its reply, nothing after"
-            @click="emit('fork')"
-          >
-            ⑂
+          <button class="iconbtn boxed" title="Resend" aria-label="Resend" @click="emit('resend')">
+            <svg class="ic"><use href="#s-repeat" /></svg>
           </button>
-          <button
-            class="meta-btn"
-            title="Delete this prompt and its reply from the chat (images and videos stay in Media)"
-            @click="emit('delete')"
-          >
-            🗑
+          <button class="iconbtn boxed" title="Branch from here" aria-label="Branch from here" @click="emit('fork')">
+            <svg class="ic"><use href="#s-branch" /></svg>
+          </button>
+          <button class="iconbtn boxed danger" title="Delete prompt" aria-label="Delete prompt" @click="emit('delete')">
+            <svg class="ic"><use href="#s-trash" /></svg>
           </button>
         </template>
       </div>
@@ -240,26 +266,65 @@ const { copiedKey, copy } = useCopy()
           <span></span><span></span><span></span>
         </div>
         <span v-if="streaming && html" class="cursor"></span>
-        <div v-if="textVersions > 1 && !streaming" class="text-ver">
+
+        <div v-if="message.status === 'error' && message.error && !errorShownOnMedia" class="msg-error">
+          ⚠ {{ message.error }}
+        </div>
+
+        <!-- Controls for the words sit under the words, not under the pictures -->
+        <div v-if="showTextBar" class="act-row text-bar">
           <button
-            class="meta-btn"
-            :disabled="!canSwitch || textShown <= 0"
-            title="Earlier wording (the pictures stay as they are)"
-            @click="stepText(-1)"
+            v-if="showCopy"
+            class="iconbtn boxed"
+            :class="{ on: copiedKey === 'reply' }"
+            title="Copy reply"
+            aria-label="Copy reply"
+            @click="copy(displayText, 'reply')"
           >
-            ‹
+            <svg class="ic"><use :href="copiedKey === 'reply' ? '#s-check' : '#s-copy'" /></svg>
           </button>
-          <span title="Wordings of this reply's text — the one shown is what the chat continues from"
-            >text {{ textShown + 1 }}/{{ textVersions }}</span
-          >
           <button
-            class="meta-btn"
-            :disabled="!canSwitch || textShown >= textVersions - 1"
-            title="Later wording (the pictures stay as they are)"
-            @click="stepText(1)"
+            v-if="showEditText"
+            class="iconbtn boxed"
+            title="Edit text"
+            aria-label="Edit text"
+            @click="textBox = { text: '' }"
           >
-            ›
+            <svg class="ic"><use href="#s-textedit" /></svg>
           </button>
+          <button v-if="showRedoText" class="iconbtn boxed" :title="REDO_TEXT_TITLE" @click="emit('reword', '')">
+            <svg class="ic"><use href="#s-textredo" /></svg>
+          </button>
+          <VersionStepper
+            v-if="showWordings"
+            class="text-ver"
+            label="text"
+            :shown="textShown"
+            :count="textVersions"
+            :enabled="canSwitch"
+            prev-title="Previous text"
+            next-title="Next text"
+            title="Text versions"
+            @step="stepText"
+          />
+          <ReplyControls
+            v-if="!hasMedia"
+            :message="message"
+            :streaming="streaming"
+            :can-retry="canRetry"
+            :can-switch="canSwitch"
+            :can-branch="canBranch"
+            @stop="emit('stop')"
+            @retry="emit('retry')"
+            @fork="emit('fork')"
+            @branch="id => emit('branch', id)"
+            @open-chat="id => emit('open-chat', id)"
+          />
+          <span class="meta-spacer"></span>
+          <span v-if="showModel" class="meta-info model" :title="message.model ?? undefined">
+            <svg class="ic sm"><use href="#s-chat" /></svg>{{ modelShort }}
+          </span>
+          <CostChip v-if="message.cost && !hasMedia" :total="message.cost" :media="message.media" />
         </div>
         <PromptBox
           v-if="textBox"
@@ -272,7 +337,7 @@ const { copiedKey, copy } = useCopy()
           @cancel="textBox = null"
         />
 
-        <div v-if="message.media?.length" class="media-grid" :class="{ single: message.media.length === 1 }">
+        <div v-if="hasMedia" class="media-grid" :class="{ single: message.media.length === 1 }">
           <ChatMediaCard
             v-for="item in message.media"
             :key="item.id"
@@ -288,78 +353,25 @@ const { copiedKey, copy } = useCopy()
           />
         </div>
 
-        <div v-if="message.status === 'error' && message.error && !errorShownOnMedia" class="msg-error">
-          ⚠ {{ message.error }}
-        </div>
-
-        <div class="msg-meta">
-          <span v-if="siblings.length > 1" class="branch-nav">
-            <button
-              class="meta-btn"
-              :disabled="!canSwitch || branchIndex <= 0"
-              title="Previous version"
-              @click="goBranch(-1)"
-            >
-              ‹
-            </button>
-            <span>{{ branchIndex + 1 }}/{{ siblings.length }}</span>
-            <button
-              class="meta-btn"
-              :disabled="!canSwitch || branchIndex >= siblings.length - 1"
-              title="Next version"
-              @click="goBranch(1)"
-            >
-              ›
-            </button>
-          </span>
-          <button v-if="streaming" class="meta-btn" @click="emit('stop')">■ Stop</button>
-          <template v-else>
-            <button v-if="displayText" class="meta-btn" title="Copy reply" @click="copy(displayText, 'reply')">
-              {{ copiedKey === 'reply' ? '✓' : '⧉' }}
-            </button>
-            <template v-if="canRewordNow">
-              <button
-                v-if="displayText"
-                class="meta-btn"
-                title="Edit text: say how to change these words and they are replaced here. The pictures stay; the old words are kept (‹ › on the text)."
-                @click="textBox = { text: '' }"
-              >
-                <svg class="ic sm"><use href="#s-pencil" /></svg> Edit text
-              </button>
-              <button
-                v-if="message.media?.length"
-                class="meta-btn"
-                title="Redo text: write these words again and replace them here. The pictures stay; the old words are kept (‹ › on the text)."
-                @click="emit('reword', '')"
-              >
-                <svg class="ic sm"><use href="#s-refresh" /></svg> Redo text
-              </button>
-            </template>
-            <button
-              v-if="canRetry"
-              class="meta-btn"
-              title="Retry: a fresh version of this whole reply, pictures included, kept beside this one — use ‹ › to compare."
-              @click="emit('retry')"
-            >
-              <svg class="ic sm"><use href="#s-refresh" /></svg> Retry
-            </button>
-            <button
-              v-if="canBranch"
-              class="meta-btn"
-              title="Start a new chat from here: everything up to this reply, nothing after"
-              @click="emit('fork')"
-            >
-              ⑂
-            </button>
-          </template>
-          <ForkList v-if="message.forks?.length" :forks="message.forks" @open="id => emit('open-chat', id)" />
+        <!-- Controls for the reply as a whole, under everything it made -->
+        <div v-if="showFoot" class="act-row msg-meta">
+          <button v-if="showRedoFoot" class="iconbtn boxed" :title="REDO_TEXT_TITLE" @click="emit('reword', '')">
+            <svg class="ic"><use href="#s-textredo" /></svg>
+          </button>
+          <ReplyControls
+            :message="message"
+            :streaming="streaming"
+            :can-retry="canRetry"
+            :can-switch="canSwitch"
+            :can-branch="canBranch"
+            @stop="emit('stop')"
+            @retry="emit('retry')"
+            @fork="emit('fork')"
+            @branch="id => emit('branch', id)"
+            @open-chat="id => emit('open-chat', id)"
+          />
           <span class="meta-spacer"></span>
-          <span v-if="modelShort && showTextModel" class="meta-info model" :title="message.model ?? undefined"
-            >💬 {{ modelShort }}</span
-          >
-          <span v-if="message.cost" class="meta-info" title="Total OpenRouter cost for this reply (text + media)"
-            >total {{ fmtCost(message.cost) }}</span
-          >
+          <CostChip v-if="message.cost" :total="message.cost" :media="message.media" />
         </div>
       </template>
     </div>

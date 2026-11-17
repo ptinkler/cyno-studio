@@ -52,14 +52,14 @@ function onSlide(event: Event): void {
 .length-picker-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0.4rem;
 }
 
 .field-label {
   display: flex;
   align-items: baseline;
-  gap: 6px;
-  font-size: 0.72rem;
+  gap: 0.4rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--text2);
   text-transform: uppercase;
@@ -76,23 +76,23 @@ function onSlide(event: Event): void {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 34px;
+  height: 2.2667rem;
   margin: 0;
   background: transparent;
   cursor: pointer;
 }
 
 .length-range::-webkit-slider-runnable-track {
-  height: 6px;
-  border-radius: 3px;
+  height: 0.4rem;
+  border-radius: 0.2rem;
   background: linear-gradient(145deg, rgba(25, 25, 30, 0.95), rgba(20, 20, 25, 0.98));
   border: 1px solid rgba(255, 255, 255, 0.04);
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .length-range::-moz-range-track {
-  height: 6px;
-  border-radius: 3px;
+  height: 0.4rem;
+  border-radius: 0.2rem;
   background: linear-gradient(145deg, rgba(25, 25, 30, 0.95), rgba(20, 20, 25, 0.98));
   border: 1px solid rgba(255, 255, 255, 0.04);
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
@@ -101,8 +101,8 @@ function onSlide(event: Event): void {
 .length-range::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 18px;
-  height: 18px;
+  width: 1.2rem;
+  height: 1.2rem;
   margin-top: -6px;
   border-radius: 50%;
   background: linear-gradient(145deg, var(--accent), #5a4bd1);
@@ -113,8 +113,8 @@ function onSlide(event: Event): void {
 }
 
 .length-range::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
+  width: 1.2rem;
+  height: 1.2rem;
   border-radius: 50%;
   background: linear-gradient(145deg, var(--accent), #5a4bd1);
   box-shadow:

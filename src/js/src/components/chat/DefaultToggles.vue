@@ -149,21 +149,21 @@ defineExpose({ commit, dirty })
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  margin-top: 6px;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
   min-width: 0;
 }
 
 .pill {
   display: inline-flex;
   align-items: center;
-  max-width: 220px;
+  max-width: 14.6667rem;
   gap: 2px;
-  padding: 2px 3px 2px 10px;
+  padding: 2px 0.2rem 2px 0.6667rem;
   border: 1px solid color-mix(in srgb, var(--saccent) 50%, transparent);
-  border-radius: 999px;
+  border-radius: 66.6rem;
   background: var(--saccent-soft);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
 }
 
 .pill-name {
@@ -178,9 +178,9 @@ defineExpose({ commit, dirty })
   border: none;
   color: var(--text2);
   cursor: pointer;
-  font-size: 0.68rem;
-  padding: 2px 5px;
-  border-radius: 999px;
+  font-size: 0.7333rem;
+  padding: 2px 0.3333rem;
+  border-radius: 66.6rem;
 }
 
 .pill-x:hover {
@@ -189,12 +189,12 @@ defineExpose({ commit, dirty })
 }
 
 .add {
-  padding: 3px 10px;
+  padding: 0.2rem 0.6667rem;
   border: 1px dashed var(--border);
-  border-radius: 999px;
+  border-radius: 66.6rem;
   background: none;
   color: var(--text2);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   cursor: pointer;
 }
 
@@ -205,7 +205,7 @@ defineExpose({ commit, dirty })
 
 .label {
   flex-shrink: 0;
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text2);
@@ -217,13 +217,13 @@ defineExpose({ commit, dirty })
 
 .menu {
   position: absolute;
-  z-index: 20;
-  bottom: calc(100% + 4px); /* opens upwards: it sits at the foot of the editors */
+  z-index: var(--z-menu);
+  bottom: calc(100% + 0.2667rem); /* opens upwards: it sits at the foot of the editors */
   left: 0;
-  width: min(280px, 100%);
-  max-height: 280px;
+  width: min(18.6667rem, 100%);
+  max-height: 18.6667rem;
   overflow-y: auto;
-  padding: 4px;
+  padding: 0.2667rem;
   background: var(--spanel2);
   border: 1px solid var(--sborder);
   border-radius: var(--r-lg);
@@ -233,19 +233,19 @@ defineExpose({ commit, dirty })
 }
 
 .search {
-  margin-bottom: 4px;
-  padding: 6px 9px;
-  border-radius: 7px;
+  margin-bottom: 0.2667rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.4667rem;
   font-size: 0.82rem;
 }
 
 .option {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
+  gap: 0.5333rem;
+  padding: 0.4rem 0.5333rem;
   border: none;
-  border-radius: 6px;
+  border-radius: 0.4rem;
   background: none;
   color: var(--text);
   text-align: left;
@@ -262,7 +262,7 @@ defineExpose({ commit, dirty })
 }
 
 .tick {
-  width: 12px;
+  width: 0.8rem;
   flex-shrink: 0;
   color: var(--accent2);
   font-weight: 700;
@@ -283,6 +283,6 @@ defineExpose({ commit, dirty })
 .empty {
   font-size: 0.8rem;
   color: var(--text2);
-  padding: 6px 8px;
+  padding: 0.4rem 0.5333rem;
 }
 </style>

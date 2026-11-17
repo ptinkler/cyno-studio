@@ -54,13 +54,13 @@ defineEmits<{
 
 <style scoped>
 .warn {
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--smuted);
   line-height: 1.5;
 }
 .attached {
-  margin-top: 8px;
-  font-size: 12px;
+  margin-top: 0.5333rem;
+  font-size: 0.8rem;
   color: var(--smuted);
   line-height: 1.5;
 }

@@ -6,6 +6,7 @@ Run:  make dev-api   (uvicorn web.api:app, from the repo root)
 before any web.* module, so everything here is a plain top-level import.
 """
 
+import ipaddress
 import logging
 import threading
 import time
@@ -16,7 +17,7 @@ from pathlib import Path
 from typing import Annotated, cast
 
 import uvicorn
-from fastapi import Cookie, FastAPI, HTTPException, Request
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -30,17 +31,18 @@ from web.auth.dev_login import router as dev_login_router
 from web.auth.dev_login import seed_dev_user
 from web.auth.oauth import configured_providers, register_providers
 from web.auth.oauth_routes import router as oauth_router
-from web.auth.passwords import hash_password, needs_rehash, verify_password
+from web.auth.passwords import hash_password, needs_rehash, spend_verification_time, verify_password
 from web.auth.schemas import AuthStatus, LoginResult, Ok, login_result, session_user
-from web.auth.session import USER_COOKIE, set_user_cookie, user_secret
+from web.auth.session import USER_COOKIE, check_secrets, set_user_cookie, user_secret
 from web.auth.user_keys import router as keys_router
-from web.auth.users import admin_emails, resolve_current_user
+from web.auth.users import admin_emails, require_user, resolve_current_user
 from web.chat import router as chat_router
 from web.chat import startup_resume_chat
 from web.core.env import bool_env
-from web.core.metadata import get_db, reset_tenant, set_tenant
+from web.core.metadata import User, get_db, reset_tenant, set_tenant
 from web.core.metadata.schema import ensure_schema
 from web.core.openapi import event_stream_only
+from web.core.security_headers import SecurityHeadersMiddleware
 from web.media.public import router as public_media_router
 from web.media.routes import router as media_router
 from web.transfer.chatgpt import router as chatgpt_import_router
@@ -57,6 +59,7 @@ ROOT_DIR = Path(__file__).resolve().parents[3]  # the repo root (src/py/web/api.
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     """Lifespan context manager for startup/shutdown events."""
+    check_secrets()  # a guessable session secret lets anyone forge a login
     # Startup: announce the auth posture so a misconfigured deploy is obvious
     admins = admin_emails()
     if admins:
@@ -102,15 +105,17 @@ def _openapi() -> dict[str, JsonValue]:
 
 app.openapi = _openapi
 
-# CORS - allow frontend dev server
+# CORS: only the Vite dev server (which proxies /api, so it rarely needs it) and only in dev. In production the
+# page and the API share an origin, so no other origin gets to make credentialed requests.
+_DEV_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://localhost:5173",
+    "https://127.0.0.1:5173",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "https://localhost:5173",
-        "https://127.0.0.1:5173",
-    ],
+    allow_origins=_DEV_ORIGINS if bool_env("DEV_LOGIN") else [],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -167,6 +172,7 @@ class UserContextMiddleware:
 
 
 app.add_middleware(UserContextMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 class LoginRequest(BaseModel):
@@ -189,19 +195,47 @@ def reset_login_attempts() -> None:
         _login_attempts.clear()
 
 
-def _client_ip(request: Request) -> str:
+# Where a reverse proxy in front of the app connects from: this machine, or a private / link-local network
+# (a docker network, a NAS). Not "anything non-global": documentation and other reserved ranges are not proxies.
+_PROXY_NETWORKS = tuple(
+    ipaddress.ip_network(n)
+    for n in (
+        "127.0.0.0/8",
+        "::1/128",
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "169.254.0.0/16",
+        "fc00::/7",
+        "fe80::/10",
+    )
+)
+
+
+def _is_proxy(host: str) -> bool:
+    """Whether a connection from `host` could be a reverse proxy on this machine or network."""
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return any(addr in network for network in _PROXY_NETWORKS if network.version == addr.version)
+
+
+def client_ip(request: Request) -> str:
     """The real client IP.
 
-    Behind the reverse proxy, ``request.client`` is the proxy itself, so this prefers nginx's X-Real-IP
-    header, then the first X-Forwarded-For hop, then the socket peer.
+    The forwarding headers (X-Real-IP, then the first X-Forwarded-For hop) are believed only when the
+    connection comes from a private or loopback address, as a reverse proxy's does. A connection from
+    anywhere else is the client itself, and any such header is its own claim.
     """
+    peer = request.client.host if request.client else "unknown"
+    if not _is_proxy(peer):
+        return peer
     real = request.headers.get("x-real-ip", "").strip()
     if real:
         return real
     forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-    if forwarded:
-        return forwarded
-    return request.client.host if request.client else "unknown"
+    return forwarded or peer
 
 
 def _record_attempt(key: str, now: float) -> bool:
@@ -220,7 +254,7 @@ def _login_rate_limited(request: Request, email: str) -> bool:
     """
     now = time.time()
     with _login_lock:
-        over_ip = _record_attempt(f"ip:{_client_ip(request)}", now)
+        over_ip = _record_attempt(f"ip:{client_ip(request)}", now)
         over_email = _record_attempt(f"email:{email}", now)
         # Opportunistically drop idle keys so the map can't grow unbounded.
         if len(_login_attempts) > _MAX_TRACKED_LOGIN_KEYS:
@@ -237,11 +271,14 @@ async def api_auth_login(data: LoginRequest, response: Response, request: Reques
         raise HTTPException(status_code=429, detail="Too many login attempts. Try again later.")
     db = get_db()
     user = db.get_user_by_email(email)
-    if not user or not user.password_hash or not verify_password(user.password_hash, data.password):
+    if not user or not user.password_hash:
+        spend_verification_time(data.password)  # an unknown email must not answer faster than a wrong password
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
+    if not verify_password(user.password_hash, data.password):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
     if needs_rehash(user.password_hash):  # transparently upgrade to stronger params
         db.set_user_password(user.id, hash_password(data.password))
-    set_user_cookie(response, request, user.id)
+    set_user_cookie(response, request, user.id, user.session_version)
     return login_result(user)
 
 
@@ -249,6 +286,15 @@ async def api_auth_login(data: LoginRequest, response: Response, request: Reques
 async def api_auth_logout(response: Response) -> Ok:
     """Clear the signed-in user cookie."""
     response.delete_cookie(key=USER_COOKIE, samesite="lax")
+    return Ok(ok=True)
+
+
+@app.post("/api/auth/logout-others")
+async def api_auth_logout_others(
+    response: Response, request: Request, user: Annotated[User, Depends(require_user)]
+) -> Ok:
+    """Sign out every other device: their login cookies stop working; this one stays signed in."""
+    set_user_cookie(response, request, user.id, get_db().bump_session_version(user.id))
     return Ok(ok=True)
 
 
@@ -260,14 +306,6 @@ async def api_auth_status(user_session: Annotated[str | None, Cookie()] = None) 
     """
     user = resolve_current_user(user_session)
     return AuthStatus(authenticated=user is not None, user=session_user(user) if user else None)
-
-
-# Track jobs currently being recovered to prevent concurrent recovery attempts
-_recovering_jobs: set[str] = set()
-_recovering_lock = threading.Lock()
-
-
-IMMUTABLE_CACHE = {"Cache-Control": "public, max-age=31536000, immutable"}
 
 
 # Must be registered before the SPA catch-all below.

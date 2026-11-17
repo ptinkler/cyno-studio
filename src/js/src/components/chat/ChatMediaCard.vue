@@ -5,10 +5,10 @@ import type { MediaCard } from '../../composables/chatConversationsApi'
 import { chatMediaPreviewUrl, chatMediaUrl } from '../../composables/useChat'
 import type { GenerationItem, ImagePick, RegenerateRequest, UiMessage } from '../../composables/studioTypes'
 import { useCopy } from '../../composables/useClipboard'
+import { videoImageLimit } from '../../composables/useStudioAttachments'
 import { bigView, canPinMedia } from '../../utils/chatMedia'
-import { cardParams, cardSpecs, refUrl, refsLabel, refsTitle } from '../../utils/cardSpecs'
-import type { CardParams } from '../../utils/cardSpecs'
-import { shortModel, fmtCost } from '../../utils/format'
+import { cardParams, cardRefFiles, cardSpecs } from '../../utils/cardSpecs'
+import MediaMadeWith from './MediaMadeWith.vue'
 import ModelPicker from './ModelPicker.vue'
 import PinButton from './PinButton.vue'
 import PromptBox from './PromptBox.vue'
@@ -36,7 +36,6 @@ const emit = defineEmits<{
 
 // Model catalogues, provided by ChatView, for "Try another model"
 const KIND_LABEL: Readonly<Record<string, string>> = { image: 'Image', video: 'Video', audio: 'Audio' }
-const KIND_ICON: Readonly<Record<string, string>> = { image: '🖼', video: '🎬', audio: '🔊' }
 const chatModels = inject(chatModelsKey, { text: [], image: [], video: [], audio: [] })
 
 // Ticking clock for "rendering 1:23" on pending videos
@@ -64,15 +63,6 @@ function elapsed(): string {
 const params = computed(() => cardParams(props.item.params))
 const specs = computed(() => cardSpecs(props.item.kind, params.value))
 
-// Hovering "🔗 4 refs" shows the reference images. Teleported and fixed so
-// the caption's overflow clipping doesn't cut it off.
-const refsPeek = ref<{ params: CardParams; x: number; y: number } | null>(null)
-function showRefs(event: MouseEvent, shown: CardParams): void {
-  if (!(event.currentTarget instanceof HTMLElement)) return
-  const rect = event.currentTarget.getBoundingClientRect()
-  refsPeek.value = { params: shown, x: rect.left, y: rect.top }
-}
-
 const mediaUrl = (item: MediaCard): string => chatMediaUrl(props.convId, item.file ?? '')
 // What's shown in the chat: a scaled-down copy (a big chat's full images add up)
 const mediaPreview = (item: MediaCard): string => chatMediaPreviewUrl(props.convId, item.file ?? '')
@@ -97,20 +87,42 @@ function stepVersion(item: MediaCard, by: number): void {
 
 // The box the pencil and Redo open: one prompt, applied to this picture alone.
 // `edit` sends the picture back as the reference; Redo just re-runs the words.
-const promptBox = ref<{ mediaId: string; edit: boolean; text: string } | null>(null)
-function openPrompt(item: MediaCard, edit: boolean): void {
-  promptBox.value = { mediaId: item.id, edit, text: edit ? '' : (item.prompt ?? '') }
+// Either can take reference pictures too: Redo starts with the ones the card
+// was made from (take any away or add more); an edit starts with none, since
+// the picture itself is the reference.
+interface PromptState {
+  mediaId: string
+  edit: boolean
+  text: string
+  /** Pictures it began with, to tell whether they were changed. */
+  start: string[]
+  refs: string[]
 }
+const promptBox = ref<PromptState | null>(null)
+function openPrompt(item: MediaCard, edit: boolean): void {
+  const start = edit ? [] : cardRefFiles(item.params)
+  promptBox.value = { mediaId: item.id, edit, text: edit ? '' : (item.prompt ?? ''), start, refs: [...start] }
+}
+// How many pictures the card's model takes (a video model's own limits; images take the usual most)
+function refLimit(item: MediaCard): number | undefined {
+  if (item.kind !== 'video') return undefined
+  return videoImageLimit(chatModels.video.find(m => m.id === item.model))
+}
+const sameFiles = (a: readonly string[], b: readonly string[]): boolean =>
+  a.length === b.length && a.every((file, i) => file === b[i])
 function submitPrompt(item: MediaCard): void {
   const box = promptBox.value
   if (!box?.text.trim()) return
   promptBox.value = null
+  // Pictures are sent only when they differ from what the card already had
+  const changed = box.edit ? box.refs.length > 0 : !sameFiles(box.refs, box.start)
   emit('regenerate', {
     mediaId: item.id,
     model: item.model ?? null,
     prompt: box.text.trim(),
     edit: box.edit,
     replace: true,
+    ...(changed ? { refs: box.refs } : {}),
   })
 }
 
@@ -133,11 +145,7 @@ const requestItem = ref<MediaCard | null>(null)
       <audio v-else-if="item.kind === 'audio'" :src="mediaUrl(item)" class="media-audio" controls></audio>
       <video v-else :src="mediaUrl(item)" controls loop playsinline preload="metadata"></video>
       <div v-if="versionsOf(item).length" class="ver-nav" @click.stop>
-        <button
-          :disabled="!canSwitch || versionAt(item) === 0"
-          title="Earlier version — it becomes the picture the chat uses"
-          @click="stepVersion(item, -1)"
-        >
+        <button :disabled="!canSwitch || versionAt(item) === 0" title="Previous version" @click="stepVersion(item, -1)">
           ‹
         </button>
         <span :title="`Version ${versionAt(item) + 1}: ${item.prompt || ''}`">
@@ -145,7 +153,7 @@ const requestItem = ref<MediaCard | null>(null)
         </span>
         <button
           :disabled="!canSwitch || versionAt(item) >= versionCount(item) - 1"
-          title="Later version — it becomes the picture the chat uses"
+          title="Next version"
           @click="stepVersion(item, 1)"
         >
           ›
@@ -160,14 +168,16 @@ const requestItem = ref<MediaCard | null>(null)
         <template v-if="item.kind === 'image'">
           <button
             class="media-btn"
-            title="Attach this picture and switch to Image mode"
+            title="Use in Image mode"
+            aria-label="Use in Image mode"
             @click.stop="emit('use-image', { file: item.file, mode: 'image' })"
           >
             <svg class="ic"><use href="#s-image" /></svg>
           </button>
           <button
             class="media-btn"
-            title="Attach this picture and switch to Video mode"
+            title="Use in Video mode"
+            aria-label="Use in Video mode"
             @click.stop="emit('use-image', { file: item.file, mode: 'video' })"
           >
             <svg class="ic"><use href="#s-film" /></svg>
@@ -202,19 +212,19 @@ const requestItem = ref<MediaCard | null>(null)
         <button
           v-if="versionsOf(item).length && canSwitch"
           class="retry-btn"
-          title="Keep the picture this card had before the attempt that failed"
+          title="Keep previous picture"
           @click="emit('media-version', { mediaId: item.id, index: versionsOf(item).length - 1 })"
         >
           ‹ Back to the previous picture
         </button>
         <button
           class="retry-btn primary"
-          title="Run the same prompt again, on the model selected now"
+          title="Retry on selected model"
           @click="emit('regenerate', { mediaId: item.id, model: null })"
         >
           Try again
         </button>
-        <button class="retry-btn" title="Edit the prompt, then run it again" @click="openPrompt(item, false)">
+        <button class="retry-btn" title="Retry with a new prompt" @click="openPrompt(item, false)">
           Try a new prompt…
         </button>
         <ModelPicker
@@ -229,65 +239,55 @@ const requestItem = ref<MediaCard | null>(null)
       </div>
     </div>
 
-    <!-- Which model made this — the footer only names the chat model -->
+    <!-- Which model made this and with what — the footer only names the chat model -->
     <div v-if="item.model || item.prompt" class="media-caption">
-      <span class="caption-text" :title="[item.model, ...specs].join(' · ')">
-        {{ KIND_ICON[item.kind] || '🎬' }} {{ shortModel(item.model)
-        }}<template v-if="specs.length">
-          · <span class="caption-specs">{{ specs.join(' · ') }}</span></template
-        ><template v-if="item.cost"> · {{ fmtCost(item.cost) }}</template
-        ><template v-if="item.credits">
-          ·
-          <span title="Billed to your Pollo account"
-            >{{ item.credits }} credit{{ item.credits === 1 ? '' : 's' }}</span
-          ></template
-        ><template v-if="params.context">
-          · <span title="The image model was given the conversation">💬 context</span></template
-        ><template v-if="params.refs.length">
-          ·
-          <span class="caption-refs" title="" @mouseenter="showRefs($event, params)" @mouseleave="refsPeek = null"
-            >🔗 {{ refsLabel(params) }}</span
-          ></template
-        ><template v-if="params.upload_notice">
-          · <span class="caption-warn" :title="params.upload_notice">⚠ backup upload host</span></template
+      <MediaMadeWith :item="item" :conv-id="convId" :params="params" :specs="specs" />
+      <div class="foot-actions">
+        <button
+          v-if="canRemake(item) && item.kind === 'image' && item.file"
+          class="iconbtn boxed"
+          title="Edit picture"
+          aria-label="Edit picture"
+          @click="openPrompt(item, true)"
         >
-      </span>
-      <button
-        v-if="canRemake(item) && item.kind === 'image' && item.file"
-        class="caption-btn"
-        title="Edit this picture: describe the change and it is replaced here"
-        @click="openPrompt(item, true)"
-      >
-        ✎ Edit
-      </button>
-      <button
-        v-if="canRemake(item)"
-        class="caption-btn"
-        title="Make it again: tweak the prompt and it is replaced here"
-        @click="openPrompt(item, false)"
-      >
-        ↻ Redo
-      </button>
-      <button
-        v-if="item.prompt"
-        class="caption-btn"
-        :title="`Copy the prompt sent to the ${item.kind} model:\n${item.prompt}`"
-        @click="copy(item.prompt, item.id)"
-      >
-        {{ copiedKey === item.id ? '✓ Copied' : '⧉ Prompt' }}
-      </button>
-      <button
-        v-if="item.request"
-        class="caption-btn"
-        title="Show exactly what was sent to the provider"
-        @click="requestItem = item"
-      >
-        { } Request
-      </button>
+          <svg class="ic"><use href="#s-pencil" /></svg>
+        </button>
+        <button
+          v-if="canRemake(item)"
+          class="iconbtn boxed"
+          title="Redo picture"
+          aria-label="Redo picture"
+          @click="openPrompt(item, false)"
+        >
+          <svg class="ic"><use href="#s-refresh" /></svg>
+        </button>
+        <button
+          v-if="item.prompt"
+          class="iconbtn boxed"
+          :class="{ on: copiedKey === item.id }"
+          :title="`Copy prompt`"
+          @click="copy(item.prompt, item.id)"
+        >
+          <svg class="ic"><use :href="copiedKey === item.id ? '#s-check' : '#s-copy'" /></svg>
+        </button>
+        <button
+          v-if="item.request"
+          class="iconbtn boxed"
+          title="View request"
+          aria-label="View request"
+          @click="requestItem = item"
+        >
+          <svg class="ic"><use href="#s-code" /></svg>
+        </button>
+      </div>
     </div>
     <PromptBox
       v-if="promptBox?.mediaId === item.id"
       v-model="promptBox.text"
+      v-model:refs="promptBox.refs"
+      :conv-id="convId"
+      :start-refs="promptBox.start"
+      :ref-limit="refLimit(item)"
       :placeholder="promptBox.edit ? 'Describe the change…' : 'Prompt for the new version…'"
       :hint="promptBox.edit ? 'Edits this picture' : 'Makes a new one from the prompt alone'"
       :submit-label="promptBox.edit ? 'Edit' : 'Redo'"
@@ -302,20 +302,6 @@ const requestItem = ref<MediaCard | null>(null)
     :error="requestItem.status === 'error' ? (requestItem.error ?? '') : ''"
     @close="requestItem = null"
   />
-  <Teleport to="body">
-    <div v-if="refsPeek" class="refs-peek" :style="{ left: `${refsPeek.x}px`, top: `${refsPeek.y}px` }">
-      <div class="refs-peek-title">{{ refsTitle(refsPeek.params) }}</div>
-      <div class="refs-peek-grid">
-        <img
-          v-for="(r, i) in refsPeek.params.refs"
-          :key="r"
-          :src="refUrl(convId, r)"
-          :alt="r"
-          :class="{ unused: refsPeek.params.refs_used != null && i >= refsPeek.params.refs_used }"
-        />
-      </div>
-    </div>
-  </Teleport>
 </template>
 
 <style scoped>
@@ -331,7 +317,7 @@ const requestItem = ref<MediaCard | null>(null)
   display: block;
   width: 100%;
   height: auto;
-  max-height: 560px;
+  max-height: 37.3333rem;
   object-fit: contain;
   background: #000;
 }
@@ -340,8 +326,8 @@ const requestItem = ref<MediaCard | null>(null)
 }
 .media-overlay {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 0.5333rem;
+  right: 0.5333rem;
   opacity: 0;
   transition: opacity 0.2s;
 }
@@ -350,89 +336,37 @@ const requestItem = ref<MediaCard | null>(null)
 }
 .media-overlay {
   display: flex;
-  gap: 6px;
+  gap: 0.4rem;
 }
 .media-btn {
   border: none;
   cursor: pointer;
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 2.1333rem;
+  height: 2.1333rem;
+  border-radius: 0.5333rem;
   background: rgba(0, 0, 0, 0.65);
   color: white;
   text-decoration: none;
   font-size: 1rem;
 }
+/* Under the picture: what made it (left), what you can do with it (right).
+   The two wrap onto separate lines on a narrow card. */
 .media-caption {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 6px 4px 10px;
-  font-size: 0.72rem;
-  color: var(--text2);
-  border-top: 1px solid var(--border);
-}
-.caption-text {
-  flex: 1;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.caption-warn {
-  color: var(--yellow);
-  cursor: help;
-}
-.caption-refs {
-  cursor: default;
-}
-.refs-peek {
-  position: fixed;
-  z-index: 1000;
-  transform: translateY(calc(-100% - 6px));
-  max-width: 340px;
-  padding: 8px;
-  background: var(--spanel2);
-  border: 1px solid var(--sborder);
-  border-radius: var(--r);
-  box-shadow: var(--shadow-pop);
-  font-size: 0.72rem;
-  color: var(--text2);
-  pointer-events: none;
-}
-.refs-peek-title {
-  margin-bottom: 6px;
-}
-.refs-peek-grid {
-  display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  align-items: flex-start;
+  gap: 0.4rem 0.6667rem;
+  padding: 0.5333rem 0.6667rem;
+  font-size: 0.8rem;
+  color: var(--smuted);
+  border-top: 1px solid var(--sborder);
 }
-.refs-peek-grid img {
-  width: 72px;
-  height: 72px;
-  object-fit: cover;
-  border-radius: 4px;
-  background: var(--surface2);
-}
-.refs-peek-grid img.unused {
-  opacity: 0.35;
-}
-.caption-btn {
-  flex-shrink: 0;
-  background: none;
-  border: none;
-  color: var(--text2);
-  font-size: 0.72rem;
-  padding: 3px 7px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.caption-btn:hover {
-  background: var(--surface2);
-  color: var(--text);
+.foot-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-left: auto;
 }
 .media-pending {
   position: relative;
@@ -441,8 +375,8 @@ const requestItem = ref<MediaCard | null>(null)
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 16px;
+  gap: 0.6667rem;
+  padding: 1.0667rem;
   overflow: hidden;
 }
 .media-item.image .media-pending {
@@ -467,20 +401,17 @@ const requestItem = ref<MediaCard | null>(null)
   position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5333rem;
   font-size: 0.85rem;
 }
 .pending-specs {
   position: relative;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: var(--accent2);
-}
-.caption-specs {
-  color: var(--text);
 }
 .pending-prompt {
   position: relative;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: var(--text2);
   text-align: center;
   max-width: 90%;
@@ -492,8 +423,8 @@ const requestItem = ref<MediaCard | null>(null)
 .media-error {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 12px 14px;
+  gap: 0.2667rem;
+  padding: 0.8rem 0.9333rem;
   font-size: 0.82rem;
   color: var(--sdanger);
   background: var(--sdanger-soft);
@@ -513,19 +444,19 @@ const requestItem = ref<MediaCard | null>(null)
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 0.4rem;
+  margin-top: 0.5333rem;
 }
 .retry-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 0.3333rem;
   background: none;
   border: 1px solid var(--border);
   border-radius: var(--r);
-  padding: 4px 10px;
+  padding: 0.2667rem 0.6667rem;
   color: var(--text);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   cursor: pointer;
 }
 .retry-btn:hover {
@@ -533,29 +464,29 @@ const requestItem = ref<MediaCard | null>(null)
 }
 /* The one action the card is suggesting */
 .retry-btn.primary {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--saccent-fill);
+  border-color: var(--saccent-fill);
   color: #fff;
   font-weight: 600;
 }
 .media-item .media-audio {
   display: block;
   width: 100%;
-  min-width: 260px;
+  min-width: 17.3333rem;
 }
 /* ‹ 1/2 › over a picture that has earlier versions */
 .ver-nav {
   position: absolute;
-  bottom: 6px;
-  left: 6px;
+  bottom: 0.4rem;
+  left: 0.4rem;
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 1px 4px;
-  border-radius: 999px;
+  padding: 1px 0.2667rem;
+  border-radius: 66.6rem;
   background: rgb(0 0 0 / 55%);
   color: #fff;
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   opacity: 0;
   transition: opacity 0.12s;
 }
@@ -564,7 +495,7 @@ const requestItem = ref<MediaCard | null>(null)
   opacity: 1;
 }
 .ver-nav button {
-  padding: 0 3px;
+  padding: 0 0.2rem;
   border: none;
   background: none;
   color: inherit;

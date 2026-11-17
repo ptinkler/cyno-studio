@@ -72,18 +72,24 @@ export function cardSpecs(kind: string | null | undefined, p: CardParams): strin
   ].filter(Boolean)
 }
 
-/** "4 refs", or "2 of 4 refs" when the model took fewer than were picked (Venice edit models cap the count; the first ones win). */
-export function refsLabel(p: CardParams): string {
-  const n = p.refs.length
+/**
+ * "4 refs", or "2 of 4 refs" when the model took fewer than were picked (Venice edit models cap the count; the
+ * first ones win). `missing` of them no longer exist (a character's images that didn't travel with an export)
+ * and aren't counted.
+ */
+export function refsLabel(p: CardParams, missing = 0): string {
+  const n = p.refs.length - missing
   const used = p.refs_used
+  if (n <= 0) return 'refs unavailable'
   return used !== null && used < n ? `${String(used)} of ${String(n)} refs` : `${String(n)} ref${n === 1 ? '' : 's'}`
 }
 
-export function refsTitle(p: CardParams): string {
+export function refsTitle(p: CardParams, missing = 0): string {
   const used = p.refs_used
-  return used !== null && used < p.refs.length
-    ? `The model takes ${String(used)} image${used === 1 ? '' : 's'}, so only the first ${String(used)} of these were sent:`
-    : 'Based on these images:'
+  const gone = missing ? ` (${String(missing)} no longer available)` : ''
+  return used !== null && used < p.refs.length - missing
+    ? `The model takes ${String(used)} image${used === 1 ? '' : 's'}, so only the first ${String(used)} of these were sent${gone}:`
+    : `Based on these images${gone}:`
 }
 
 /** Where a reference image is served from: a character's, or a file in the chat. */
@@ -91,4 +97,24 @@ export function refUrl(convId: string, ref: string): string {
   const match = /^char:(\d+)\/(.+)$/.exec(ref)
   const [, id, file] = match ?? []
   return id !== undefined && file !== undefined ? characterImageUrl(Number(id), file) : chatMediaUrl(convId, ref)
+}
+
+const refItemImages = (items: unknown): string[] =>
+  Array.isArray(items)
+    ? items.flatMap(item => {
+        const r = asRecord(item)
+        const file = r['file']
+        return r['type'] === 'image' && typeof file === 'string' ? [file] : []
+      })
+    : []
+
+/**
+ * The chat's pictures a card was made from, in the order they were given: the frames, the references, the named
+ * images. A character's images are left out (they follow the card; the picker only handles chat files).
+ */
+export function cardRefFiles(raw: Record<string, unknown> | null | undefined): string[] {
+  const p = cardParams(raw)
+  const named = refItemImages(asRecord(raw)['ref_items'])
+  const files = [p.first_frame, p.last_frame, ...p.refs, ...named].filter(f => f && !f.startsWith('char:'))
+  return [...new Set(files)]
 }

@@ -52,20 +52,20 @@ function edit(preset: StoredPreset | null): void {
 <style scoped>
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(var(--tile-s), 1fr));
+  gap: 0.6667rem;
 }
 .card {
-  padding: 10px 12px;
+  padding: 0.6667rem 0.8rem;
 }
 .card h3 {
-  font-size: 13.5px;
+  font-size: 0.9rem;
   font-weight: 600;
 }
 .desc {
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--smuted);
-  margin-top: 3px;
+  margin-top: 0.2rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -120,7 +120,7 @@ function onDuration(event: Event): void {
 
 <style scoped>
 .card {
-  margin-top: 6px;
+  margin-top: 0.4rem;
   border: 1px solid var(--sborder);
   border-radius: var(--r);
   background: var(--spanel2);
@@ -129,27 +129,27 @@ function onDuration(event: Event): void {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  min-height: 38px;
-  padding: 0 10px;
+  gap: 0.6667rem;
+  min-height: 2.5333rem;
+  padding: 0 0.6667rem;
 }
 .crow + .crow {
   margin-top: 0;
 }
 .clabel {
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--smuted);
 }
 
 /* Slider row: always present, dimmed on Auto, so nothing shifts */
 .slide {
-  min-height: 24px;
-  padding-bottom: 4px;
+  min-height: 1.6rem;
+  padding-bottom: 0.2667rem;
 }
 .dval {
   min-width: 0;
   text-align: right;
-  font-size: 12px;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--saccent);
   font-variant-numeric: tabular-nums;

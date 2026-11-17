@@ -247,12 +247,12 @@ function onKeydown(event: KeyboardEvent): void {
 .picker-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5333rem;
   width: 100%;
   background: var(--spanel2);
   border: 1px solid var(--sborder);
   border-radius: var(--r);
-  padding: 5px 10px;
+  padding: 0.3333rem 0.6667rem;
   color: var(--sfg);
   cursor: pointer;
   text-align: left;
@@ -262,10 +262,10 @@ function onKeydown(event: KeyboardEvent): void {
 .picker-trigger {
   background: none;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 4px 10px;
+  border-radius: 0.5333rem;
+  padding: 0.2667rem 0.6667rem;
   color: var(--text);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   cursor: pointer;
 }
 
@@ -291,7 +291,7 @@ function onKeydown(event: KeyboardEvent): void {
 }
 
 .picker-label {
-  font-size: 0.65rem;
+  font-size: 0.8rem;
   color: var(--text2);
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -306,13 +306,13 @@ function onKeydown(event: KeyboardEvent): void {
 
 .chev {
   color: var(--text2);
-  font-size: 0.75rem;
+  font-size: 0.8rem;
 }
 
 .picker-pop {
   position: fixed;
-  z-index: 100;
-  width: min(420px, 92vw);
+  z-index: var(--z-picker);
+  width: min(28rem, 92vw);
   display: flex;
   flex-direction: column;
   background: var(--spanel2);
@@ -331,8 +331,13 @@ function onKeydown(event: KeyboardEvent): void {
   border: none;
   border-bottom: 1px solid var(--sborder);
   border-radius: 0;
-  padding: 9px 12px;
+  padding: 0.6rem 0.8rem;
   background: transparent;
+  box-shadow: none;
+}
+
+/* Borderless field inside the pop-up: the global focus ring would box it in */
+.picker-pop .picker-search.picker-search:focus-visible {
   box-shadow: none;
 }
 
@@ -356,7 +361,7 @@ function onKeydown(event: KeyboardEvent): void {
 
 .tab-hint {
   display: block;
-  margin: 8px auto 0;
+  margin: 0.5333rem auto 0;
   background: none;
   border: none;
   color: var(--accent2);
@@ -381,12 +386,12 @@ function onKeydown(event: KeyboardEvent): void {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  margin: 6px 8px 6px 0;
-  padding: 0 10px;
+  gap: 0.2667rem;
+  margin: 0.4rem 0.5333rem 0.4rem 0;
+  padding: 0 0.6667rem;
   background: none;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 66.6rem;
   color: var(--text2);
   cursor: pointer;
 }
@@ -396,32 +401,32 @@ function onKeydown(event: KeyboardEvent): void {
   border-color: var(--accent);
 }
 .filters-n {
-  font-size: 0.72rem;
+  font-size: 0.7333rem;
   font-weight: 700;
   color: var(--accent);
 }
 /* Room for the menu even when only a few models are listed */
 .picker-pop.filters-open {
-  min-height: 330px;
+  min-height: 22rem;
 }
 /* The active picks, as removable chips */
 .picker-active {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  padding: 6px 10px;
+  gap: 0.4rem;
+  padding: 0.4rem 0.6667rem;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 .achip {
   --b: var(--accent);
-  padding: 2px 9px;
+  padding: 2px 0.6rem;
   border: 1px solid color-mix(in srgb, var(--b) 55%, transparent);
-  border-radius: 999px;
+  border-radius: 66.6rem;
   background: color-mix(in srgb, var(--b) 16%, transparent);
   color: var(--b);
   font-weight: 600;
-  font-size: 0.73rem;
+  font-size: 0.8rem;
   cursor: pointer;
 }
 .achip:hover {
@@ -429,29 +434,29 @@ function onKeydown(event: KeyboardEvent): void {
 }
 
 .picker-list {
-  max-height: 360px;
+  max-height: 24rem;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 4px;
+  padding: 0.2667rem;
 }
 
 .picker-section {
-  padding: 8px 10px 4px;
-  font-size: 0.65rem;
+  padding: 0.5333rem 0.6667rem 0.2667rem;
+  font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.6px;
   color: var(--text2);
 }
 
 .picker-section:not(:first-child) {
-  margin-top: 4px;
+  margin-top: 0.2667rem;
   border-top: 1px solid var(--border);
-  padding-top: 10px;
+  padding-top: 0.6667rem;
 }
 
 .picker-empty {
-  padding: 16px;
+  padding: 1.0667rem;
   text-align: center;
   color: var(--text2);
   font-size: 0.85rem;

@@ -43,9 +43,9 @@ function pick(id: string): void {
   background: none;
   border: none;
   color: var(--accent);
-  font-size: 0.75rem;
-  padding: 3px 7px;
-  border-radius: 6px;
+  font-size: 0.8rem;
+  padding: 0.2rem 0.4667rem;
+  border-radius: 0.4rem;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -58,15 +58,15 @@ function pick(id: string): void {
   position: absolute;
   top: 100%;
   left: 0;
-  z-index: 20;
+  z-index: var(--z-menu);
   display: flex;
   flex-direction: column;
-  min-width: 180px;
-  max-width: 280px;
-  padding: 4px;
+  min-width: 12rem;
+  max-width: 18.6667rem;
+  padding: 0.2667rem;
   background: var(--surface2);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 0.5333rem;
   box-shadow: var(--shadow-pop);
 }
 
@@ -81,8 +81,8 @@ function pick(id: string): void {
   color: var(--text);
   text-align: left;
   font-size: 0.8rem;
-  padding: 6px 8px;
-  border-radius: 6px;
+  padding: 0.4rem 0.5333rem;
+  border-radius: 0.4rem;
   cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;

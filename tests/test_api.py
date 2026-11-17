@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+from fastapi import Request
 from fastapi.testclient import TestClient
 
 import web.api as api_mod
@@ -24,8 +25,9 @@ pytest_plugins = ["tests.api_fixtures"]
 class TestLifespan:
     """Tests for lifespan."""
 
-    def test_lifespan_runs(self, client: TestClient, db: MetadataDB) -> None:
+    def test_lifespan_runs(self, client: TestClient, db: MetadataDB, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that lifespan runs."""
+        monkeypatch.setenv("SESSION_SECRET", "x" * 40)
 
         async def run_lifespan() -> None:
             async with api_mod.lifespan(api_mod.app):
@@ -86,6 +88,32 @@ class TestLoginThrottle:
                 headers={"X-Real-IP": f"10.0.0.{i}"},  # a different IP each attempt
             )
         assert must(last).status_code == 429
+
+
+class TestClientIp:
+    """The forwarding headers are a proxy's word, so they count only from a proxy's address."""
+
+    @staticmethod
+    def _request(peer: str, headers: dict[str, str]) -> Request:
+        scope: dict[str, object] = {
+            "type": "http",
+            "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()],
+            "client": (peer, 1234),
+        }
+        return Request(scope)
+
+    @pytest.mark.parametrize("peer", ["127.0.0.1", "10.1.2.3", "172.18.0.5", "192.168.1.9", "::1"])
+    def test_a_proxys_headers_are_believed(self, peer: str) -> None:
+        """From a loopback or private peer: X-Real-IP first, then the first X-Forwarded-For hop."""
+        assert api_mod.client_ip(self._request(peer, {"X-Real-IP": "203.0.113.7"})) == "203.0.113.7"
+        assert api_mod.client_ip(self._request(peer, {"X-Forwarded-For": "203.0.113.8, 10.0.0.1"})) == "203.0.113.8"
+        assert api_mod.client_ip(self._request(peer, {})) == peer
+
+    @pytest.mark.parametrize("peer", ["203.0.113.50", "8.8.8.8", "2606:4700::1111", "2001:db8::1", "testclient"])
+    def test_anyone_elses_headers_are_their_own_claim(self, peer: str) -> None:
+        """A connection from the open internet can't choose the address it is counted under."""
+        spoofed = {"X-Real-IP": "1.2.3.4", "X-Forwarded-For": "5.6.7.8"}
+        assert api_mod.client_ip(self._request(peer, spoofed)) == peer
 
 
 def test_pollo_balance_accepts_fractional_credits(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

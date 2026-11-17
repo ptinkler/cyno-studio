@@ -192,17 +192,17 @@ onMounted(load)
 .mhead {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 52px;
-  padding: 10px 18px;
+  gap: 0.6667rem;
+  min-height: 3.4667rem;
+  padding: 0.6667rem 1.2rem;
   border-bottom: 1px solid var(--sborder2);
 }
 h1 {
-  font-size: 15px;
+  font-size: 1rem;
   font-weight: 600;
 }
 .gcount {
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--smuted);
 }
 .spacer {
@@ -212,46 +212,46 @@ h1 {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px 14px;
-  padding: 10px 18px;
+  gap: 0.5333rem 0.9333rem;
+  padding: 0.6667rem 1.2rem;
 }
 .msearch {
   flex: 1;
-  min-width: 180px;
-  max-width: 320px;
+  min-width: 12rem;
+  max-width: 21.3333rem;
   margin-left: auto;
 }
 .mbody {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 18px 24px;
+  padding: 0.2667rem 1.2rem 1.6rem;
 }
 .bulkbar {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 18px;
+  gap: 0.4rem;
+  padding: 0.5333rem 1.2rem;
   border-top: 1px solid var(--sborder2);
   background: var(--spanel2);
 }
 .bulkbar span {
   flex: 1;
   color: var(--sfg);
-  font-size: 13px;
+  font-size: 0.8667rem;
 }
 .ovl {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: var(--z-modal);
   display: grid;
   place-items: center;
   background: rgba(0, 0, 0, 0.82);
-  padding: 32px;
+  padding: 2.1333rem;
   cursor: zoom-out;
 }
 .pv {
   max-width: 92vw;
-  max-height: 92vh;
+  max-height: 92dvh;
   border-radius: var(--r);
   cursor: default;
 }

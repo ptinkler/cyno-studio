@@ -171,6 +171,14 @@ class VideoDownloadFailedError(VeniceError):
         super().__init__(f"Couldn't download the Venice video (HTTP {status})")
 
 
+class VideoDownloadUnreachableError(VeniceError):
+    """The finished video's download link couldn't be fetched (a network failure, or an address we refuse)."""
+
+    def __init__(self, cause: Exception) -> None:
+        """Give the reason."""
+        super().__init__(f"Couldn't download the Venice video: {cause}")
+
+
 class VideoNotReadyError(VeniceError):
     """A video download was asked for before the job completed."""
 

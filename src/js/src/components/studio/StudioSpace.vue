@@ -67,16 +67,16 @@ watch(
 <style scoped>
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(var(--tile-s), 1fr));
+  gap: 0.6667rem;
 }
 .card {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0.5333rem;
   align-items: stretch;
-  padding: 8px;
+  padding: 0.5333rem;
 }
 .cthumb {
   aspect-ratio: 4 / 3;
@@ -99,15 +99,15 @@ watch(
   background: var(--saccent-soft);
 }
 .cph .ic {
-  width: 26px;
-  height: 26px;
+  width: 1.7333rem;
+  height: 1.7333rem;
   color: var(--saccent);
 }
 .ct {
-  font-size: 13px;
+  font-size: 0.8667rem;
   font-weight: 500;
   line-height: 1.4;
-  padding: 0 4px 2px;
+  padding: 0 0.2667rem 2px;
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -115,12 +115,12 @@ watch(
 }
 .cfav {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 0.8rem;
+  right: 0.8rem;
   color: var(--sstar);
   background: rgba(0, 0, 0, 0.45);
   border-radius: var(--r-sm);
-  padding: 3px;
+  padding: 0.2rem;
   display: grid;
 }
 </style>

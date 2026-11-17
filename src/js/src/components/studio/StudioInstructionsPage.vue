@@ -153,33 +153,33 @@ onMounted(() => {
 <style scoped>
 .search {
   width: 100%;
-  margin-bottom: 8px;
+  margin-bottom: 0.5333rem;
 }
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(var(--tile-m), 1fr));
+  gap: 0.6667rem;
 }
 .card {
-  padding: 10px 12px;
+  padding: 0.6667rem 0.8rem;
 }
 .card h3 {
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-size: 13.5px;
+  gap: 0.4667rem;
+  font-size: 0.9rem;
   font-weight: 600;
 }
 .dot {
-  width: 8px;
-  height: 8px;
+  width: 0.5333rem;
+  height: 0.5333rem;
   border-radius: 50%;
   display: inline-block;
   flex-shrink: 0;
 }
 .preview {
-  margin-top: 4px;
-  font-size: 12px;
+  margin-top: 0.2667rem;
+  font-size: 0.8rem;
   color: var(--smuted);
   line-height: 1.45;
   max-height: 3.2em;
@@ -188,26 +188,26 @@ onMounted(() => {
 .members {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
 }
 .member {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 12px;
+  gap: 0.3333rem;
+  font-size: 0.8rem;
   color: var(--smuted);
 }
 .badges {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 8px;
+  gap: 0.3333rem;
+  margin-top: 0.5333rem;
 }
 .badge {
   background: var(--saccent-soft);
   color: var(--saccent);
-  border-radius: 999px;
-  padding: 1px 7px;
+  border-radius: 66.6rem;
+  padding: 1px 0.4667rem;
 }
 </style>

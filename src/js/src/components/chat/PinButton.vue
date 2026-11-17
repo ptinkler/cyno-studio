@@ -22,15 +22,15 @@ defineEmits<{ toggle: [] }>()
 /* Pin as reference: top-left, shown on hover, always shown once pinned */
 .pin-btn {
   position: absolute;
-  top: 6px;
-  left: 6px;
+  top: 0.4rem;
+  left: 0.4rem;
   z-index: 1;
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 1.8667rem;
+  height: 1.8667rem;
   border: none;
-  border-radius: 8px;
+  border-radius: 0.5333rem;
   background: rgba(0, 0, 0, 0.65);
   color: rgba(255, 255, 255, 0.7);
   cursor: pointer;
@@ -46,7 +46,7 @@ defineEmits<{ toggle: [] }>()
   opacity: 1;
 }
 .pin-btn.on {
-  background: var(--saccent);
+  background: var(--saccent-fill);
   color: #fff;
 }
 @media (hover: none) {

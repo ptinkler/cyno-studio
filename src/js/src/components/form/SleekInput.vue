@@ -39,7 +39,7 @@ function onInput(event: Event): void {
 
 <style scoped>
 .sleek-input {
-  margin-bottom: 8px;
+  margin-bottom: 0.5333rem;
 }
 
 .sleek-input.focused .field-label {
@@ -54,8 +54,8 @@ input {
   width: 100%;
   background: linear-gradient(145deg, rgba(30, 30, 35, 0.9), rgba(25, 25, 30, 0.95));
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 10px;
-  padding: 11px 14px;
+  border-radius: 0.6667rem;
+  padding: 0.7333rem 0.9333rem;
   font-size: 0.9rem;
   color: var(--text);
   outline: none;

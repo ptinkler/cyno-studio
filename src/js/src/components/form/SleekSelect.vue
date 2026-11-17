@@ -88,7 +88,7 @@ const groupedOptions = computed(() => {
 
 <style scoped>
 .sleek-select {
-  margin-bottom: 8px;
+  margin-bottom: 0.5333rem;
 }
 
 .sleek-select.focused .field-label {
@@ -104,8 +104,8 @@ select {
   appearance: none;
   background: linear-gradient(145deg, rgba(30, 30, 35, 0.9), rgba(25, 25, 30, 0.95));
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 10px;
-  padding: 11px 38px 11px 14px;
+  border-radius: 0.6667rem;
+  padding: 0.7333rem 2.5333rem 0.7333rem 0.9333rem;
   font-size: 0.9rem;
   color: var(--text);
   outline: none;
@@ -119,7 +119,7 @@ select {
 select option {
   background: #1e1e23;
   color: var(--text);
-  padding: 8px 14px;
+  padding: 0.5333rem 0.9333rem;
 }
 
 select optgroup {
@@ -135,7 +135,7 @@ select:hover {
 
 .select-arrow {
   position: absolute;
-  right: 14px;
+  right: 0.9333rem;
   top: 50%;
   transform: translateY(-50%);
   color: var(--text2);

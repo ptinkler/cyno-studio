@@ -12,10 +12,12 @@
   --shover: #1e232c;
   --sfg: #e9ecf2;
   --smuted: #8a93a3;
-  --sfaint: #596273;
+  /* Quiet text and icons. 4.5:1 on every surface (WCAG AA); the fills below are for white text on a colour */
+  --sfaint: #808a9b;
   --sborder: #232832;
   --sborder2: #1b2028;
   --saccent: #6e8bff;
+  --saccent-fill: #4f6bed; /* behind white text: 4.5:1 (the text-weight accent above is for text on dark) */
   --saccent-soft: color-mix(in srgb, var(--saccent) 16%, transparent);
   --sbg2: #0d0f13;
   --spanel2: #1a1e26;
@@ -27,11 +29,37 @@
   --p-openrouter: #74cfc0;
 
   /* Semantic colours (status, destructive actions, favourites) */
-  --sdanger: #e5484d;
+  --sdanger: #f0595e;
+  --sdanger-fill: #cf353a; /* behind white text */
   --sdanger-soft: color-mix(in srgb, var(--sdanger) 12%, transparent);
   --ssuccess: #3ecf7a;
   --swarn: #e2a03f;
   --sstar: #ffd25a;
+
+  /* Layout measures: one source for widths that several screens must agree on. They are rem, so they
+     grow with Settings → Text size and keep the same number of characters to a line. */
+  --measure: 54.6667rem; /* the chat column: messages, composer, feed */
+  --page-narrow: 48rem; /* settings-style pages */
+  --page: 54.6667rem;
+  --page-wide: 66.6667rem; /* galleries */
+  --tile-xs: 8.5rem; /* thumbnail grids (picker, media) */
+  --tile-s: 12rem; /* cards in a page grid */
+  --tile-m: 14rem;
+  --tile-l: 16rem; /* a picture in a reply */
+
+  /* Stacking, lowest to highest: menus and popovers, then the queue dock, then dialogs (a dialog opened from
+     another goes above it), then confirmations, then toasts. Local overlap inside one component stays 1-5. */
+  --z-menu: 20;
+  --z-popover: 30;
+  --z-overlay: 40;
+  --z-overlay-top: 41;
+  --z-dock: 60;
+  --z-picker: 100;
+  --z-modal: 1000;
+  --z-modal-raised: 1200;
+  --z-modal-top: 1300;
+  --z-confirm: 1400;
+  --z-toast: 2000;
 
   /* Shape + elevation */
   --r-sm: 6px; /* tags, tiny chips */
@@ -64,21 +92,23 @@
   --shover: #eef1f6;
   --sfg: #1a1d23;
   --smuted: #5b6472;
-  --sfaint: #8b94a3;
+  --sfaint: #626b7b;
   --sborder: #e3e7ee;
   --sborder2: #edf0f5;
-  --saccent: #4f6bed;
+  --saccent: #4560e0;
+  --saccent-fill: #4560e0;
   --saccent-soft: color-mix(in srgb, var(--saccent) 12%, transparent);
   --sbg2: #f7f8fa;
   --spanel2: #f1f3f7;
 
-  --p-pollo: #5f79e8;
-  --p-venice: #c7781f;
-  --p-openrouter: #2e9d8c;
+  --p-pollo: #4560d0;
+  --p-venice: #9c560b;
+  --p-openrouter: #187266;
 
-  --sdanger: #d7373f;
-  --ssuccess: #1f9d57;
-  --swarn: #b7791f;
+  --sdanger: #c42f38;
+  --sdanger-fill: #c42f38;
+  --ssuccess: #137a3b;
+  --swarn: #8a5800;
   --sstar: #d9a400;
 
   --shadow-pop: 0 8px 24px rgba(20, 30, 50, 0.14);
@@ -92,18 +122,27 @@
 }
 
 html {
-  /* 15px base: every rem in the older components lands on the Studio scale */
-  font-size: 15px;
+  /* Every text size in the app is rem, off this base, so Settings → Text size (data-text on <html>) scales all
+     of it at once. Comfortable is the default; compact is the size the app was designed at. */
+  font-size: 16px;
   -webkit-text-size-adjust: 100%;
+}
+
+html[data-text='compact'] {
+  font-size: 15px;
+}
+
+html[data-text='large'] {
+  font-size: 18px;
 }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  font-size: 15px;
+  font-size: 1rem;
   line-height: 1.45;
   background: var(--sbg2);
   color: var(--sfg);
-  min-height: 100vh;
+  min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -114,7 +153,7 @@ input,
 select,
 textarea {
   font-family: inherit;
-  font-size: 13px;
+  font-size: 0.8667rem;
   line-height: 1.3;
   color: inherit;
 }
@@ -143,6 +182,19 @@ a {
   box-shadow: 0 0 0 3px var(--saccent-soft);
 }
 
+/* On a touch screen the small controls are a fingertip target: 40px, near the 44px that is comfortable */
+@media (pointer: coarse) {
+  .iconbtn,
+  .stepper {
+    min-width: 2.6667rem;
+    min-height: 2.6667rem;
+  }
+  .btn,
+  .pillbtn {
+    min-height: 2.6667rem;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -157,8 +209,8 @@ a {
    Chromium/Safari use the ::-webkit-scrollbar rules (setting scrollbar-color
    would switch those off), Firefox the standard properties. */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 0.6667rem;
+  height: 0.6667rem;
 }
 
 ::-webkit-scrollbar-track,
@@ -169,9 +221,9 @@ a {
 ::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--sfg) 10%, transparent);
   border: 3px solid transparent; /* inset from the edge */
-  border-radius: 999px;
+  border-radius: 66.6rem;
   background-clip: padding-box;
-  min-height: 40px;
+  min-height: 2.6667rem;
 }
 
 :hover::-webkit-scrollbar-thumb {
@@ -199,8 +251,8 @@ a {
 
 /* ---- Icons: one stroke-icon primitive, used with the sprite in StudioIconSprite */
 .ic {
-  width: 16px;
-  height: 16px;
+  width: 1.0667rem;
+  height: 1.0667rem;
   flex: 0 0 auto;
   stroke: currentColor;
   stroke-width: 1.7;
@@ -209,12 +261,12 @@ a {
   stroke-linejoin: round;
 }
 .ic.sm {
-  width: 13px;
-  height: 13px;
+  width: 0.8667rem;
+  height: 0.8667rem;
 }
 .ic.lg {
-  width: 22px;
-  height: 22px;
+  width: 1.4667rem;
+  height: 1.4667rem;
 }
 
 /* ---- Buttons. Flat and compact: an outlined default, a filled primary, a
@@ -223,14 +275,14 @@ a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-height: 30px;
-  padding: 5px 12px;
+  gap: 0.4rem;
+  min-height: 2rem;
+  padding: 0.3333rem 0.8rem;
   border: 1px solid var(--sborder);
   border-radius: var(--r);
   background: none;
   color: var(--sfg);
-  font-size: 13px;
+  font-size: 0.8667rem;
   font-weight: 500;
   line-height: 1.2;
   text-transform: none;
@@ -255,8 +307,8 @@ a {
 }
 
 .btn .ic {
-  width: 15px;
-  height: 15px;
+  width: 1rem;
+  height: 1rem;
 }
 
 .btn-secondary {
@@ -265,13 +317,13 @@ a {
 
 /* Icon-only button that still sits in a row of .btn (square, same height) */
 .btn-icon {
-  width: 30px;
+  width: 2rem;
   padding: 0;
 }
 
 .btn-primary {
-  background: var(--saccent);
-  border-color: var(--saccent);
+  background: var(--saccent-fill);
+  border-color: var(--saccent-fill);
   color: #fff;
   font-weight: 600;
 }
@@ -283,8 +335,8 @@ a {
 }
 
 .btn-danger {
-  background: var(--sdanger);
-  border-color: var(--sdanger);
+  background: var(--sdanger-fill);
+  border-color: var(--sdanger-fill);
   color: #fff;
   font-weight: 600;
 }
@@ -313,20 +365,20 @@ a {
 }
 
 .btn-sm {
-  min-height: 26px;
-  padding: 3px 9px;
-  font-size: 12px;
+  min-height: 1.7333rem;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.8rem;
 }
 
 .btn-sm .ic {
-  width: 13px;
-  height: 13px;
+  width: 0.8667rem;
+  height: 0.8667rem;
 }
 
 /* Square icon-only button (toolbars, dialog close, row actions) */
 .iconbtn {
-  width: 30px;
-  height: 30px;
+  width: 2rem;
+  height: 2rem;
   display: grid;
   place-items: center;
   border-radius: var(--r);
@@ -341,17 +393,44 @@ a {
   color: var(--sfg);
 }
 
+.iconbtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Boxed: the chat's message actions, so each icon reads as its own button */
+.iconbtn.boxed {
+  border: 1px solid var(--sborder);
+  background: var(--spanel2);
+}
+
+.iconbtn.boxed:hover:not(:disabled) {
+  background: var(--shover);
+  border-color: var(--sfaint);
+}
+
+.iconbtn.boxed.on {
+  color: var(--ssuccess);
+  border-color: color-mix(in srgb, var(--ssuccess) 45%, transparent);
+}
+
+.iconbtn.boxed.danger:hover:not(:disabled) {
+  color: var(--sdanger);
+  background: var(--sdanger-soft);
+  border-color: color-mix(in srgb, var(--sdanger) 45%, transparent);
+}
+
 /* Filter pill: a row of exclusive choices (All / Images / Videos…) */
 .pillbtn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
+  gap: 0.3333rem;
+  padding: 0.2667rem 0.6667rem;
   border: 1px solid var(--sborder);
   border-radius: var(--r);
   background: none;
   color: var(--smuted);
-  font-size: 12px;
+  font-size: 0.8rem;
   font-weight: 500;
   text-transform: none;
   letter-spacing: normal;
@@ -376,8 +455,8 @@ a {
 }
 
 .pillbtn .ic {
-  width: 13px;
-  height: 13px;
+  width: 0.8667rem;
+  height: 0.8667rem;
 }
 
 /* Segmented control: a joined group where one segment is on */
@@ -393,14 +472,14 @@ a {
 .seg > button {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  min-width: 26px;
-  padding: 3px 9px;
+  gap: 0.3333rem;
+  min-width: 1.7333rem;
+  padding: 0.2rem 0.6rem;
   border: 0;
-  border-radius: 5px;
+  border-radius: 0.3333rem;
   background: transparent;
   color: var(--smuted);
-  font-size: 12px;
+  font-size: 0.8rem;
   font-weight: 500;
   cursor: pointer;
 }
@@ -412,7 +491,7 @@ a {
 /* The pick is filled, not merely lighter: at this size a tinted background
    alone doesn't say which of two words is on. */
 .seg > button.on {
-  background: var(--saccent);
+  background: var(--saccent-fill);
   color: #fff;
   font-weight: 600;
 }
@@ -423,13 +502,13 @@ a {
 }
 
 .seg .ic {
-  width: 14px;
-  height: 14px;
+  width: 0.9333rem;
+  height: 0.9333rem;
 }
 
 .btn-spinner {
-  width: 14px;
-  height: 14px;
+  width: 0.9333rem;
+  height: 0.9333rem;
   border: 2px solid rgba(255, 255, 255, 0.3);
   border-top-color: white;
   border-radius: 50%;
@@ -443,7 +522,7 @@ textarea {
   background: var(--spanel2);
   border: 1px solid var(--sborder);
   color: var(--sfg);
-  padding: 7px 10px;
+  padding: 0.4667rem 0.6667rem;
   border-radius: var(--r);
   outline: none;
   transition:
@@ -485,7 +564,7 @@ input[type='range'] {
 
 textarea {
   resize: vertical;
-  min-height: 96px;
+  min-height: 6.4rem;
   line-height: 1.5;
 }
 
@@ -496,7 +575,7 @@ select {
 /* Field captions. A label wrapping a control (checkbox rows, upload buttons)
    opts out with .plain or its own class. */
 label {
-  font-size: 11px;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--sfaint);
   text-transform: uppercase;
@@ -515,9 +594,9 @@ label:has(> input[type='radio']) {
 
 .badge {
   display: inline-block;
-  font-size: 11px;
+  font-size: 0.7333rem;
   line-height: 1.5;
-  padding: 0 6px;
+  padding: 0 0.4rem;
   border-radius: var(--r-sm);
   background: var(--spanel2);
   color: var(--smuted);
@@ -528,8 +607,8 @@ label:has(> input[type='radio']) {
 }
 
 .spinner {
-  width: 20px;
-  height: 20px;
+  width: 1.3333rem;
+  height: 1.3333rem;
   border: 2px solid var(--sborder);
   border-top-color: var(--saccent);
   border-radius: 50%;

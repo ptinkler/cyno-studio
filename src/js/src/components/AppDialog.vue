@@ -1,9 +1,15 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { dialog, settleDialog } from '../composables/useDialog'
+import { useFocusTrap } from '../composables/useFocusTrap'
 
 const input = ref<HTMLInputElement | null>(null)
 const okBtn = ref<HTMLButtonElement | null>(null)
+const card = ref<HTMLElement | null>(null)
+useFocusTrap(
+  card,
+  computed(() => dialog.open),
+)
 
 const cancel = (): void => {
   settleDialog(null)
@@ -42,7 +48,7 @@ watch(
 <template>
   <Teleport to="body">
     <div v-if="dialog.open" class="ad-back" @click.self="cancel">
-      <div class="ad" role="dialog" aria-modal="true" :aria-label="dialog.title">
+      <div ref="card" class="ad" role="dialog" aria-modal="true" :aria-label="dialog.title">
         <h3 v-if="dialog.title">{{ dialog.title }}</h3>
         <p v-if="dialog.message" class="ad-msg">{{ dialog.message }}</p>
         <label v-if="dialog.kind === 'prompt'" class="ad-field">
@@ -68,15 +74,15 @@ watch(
 .ad-back {
   position: fixed;
   inset: 0;
-  z-index: 1400;
+  z-index: var(--z-confirm);
   display: grid;
   place-items: center;
-  padding: 16px;
+  padding: 1.0667rem;
   background: rgba(0, 0, 0, 0.6);
 }
 .ad {
-  width: min(400px, 100%);
-  padding: 14px 18px 16px;
+  width: min(26.6667rem, 100%);
+  padding: 0.9333rem 1.2rem 1.0667rem;
   border: 1px solid var(--sborder);
   border-radius: var(--r-xl);
   box-shadow: var(--shadow-modal);
@@ -84,34 +90,34 @@ watch(
   color: var(--sfg);
 }
 .ad h3 {
-  margin: 0 0 8px;
-  font-size: 15px;
+  margin: 0 0 0.5333rem;
+  font-size: 1rem;
   font-weight: 600;
 }
 .ad-msg {
-  margin: 0 0 14px;
-  font-size: 13px;
+  margin: 0 0 0.9333rem;
+  font-size: 0.8667rem;
   line-height: 1.5;
   color: var(--smuted);
   white-space: pre-line;
 }
 .ad-field {
   display: block;
-  margin-bottom: 14px;
+  margin-bottom: 0.9333rem;
 }
 .ad-field span {
   display: block;
 }
 .ad-field input {
   width: 100%;
-  margin-top: 6px;
+  margin-top: 0.4rem;
 }
 .ad-check {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 14px;
-  font-size: 13px;
+  gap: 0.5333rem;
+  margin-bottom: 0.9333rem;
+  font-size: 0.8667rem;
   font-weight: 400;
   color: var(--sfg);
   text-transform: none;
@@ -121,6 +127,6 @@ watch(
 .ad-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 0.5333rem;
 }
 </style>

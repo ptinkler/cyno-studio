@@ -4,8 +4,9 @@ Providers can fetch local uploads from this instance instead of a temp host.
 unauthenticated URL so a provider that only takes a URL (Pollo) can fetch it
 from *this* instance instead of a third-party temp host (catbox/tmpfiles).
 
-The token signs the file path with the session secret, so it can't be forged
-or widened; the route additionally confines reads to the media roots. Links
+The token signs the file's path (relative to the data folder, so the server's layout isn't shown to the
+provider) with a key made for this use, so it can't be forged, widened or swapped for a login cookie; the
+route additionally confines reads to the media roots. Links
 expire after the configured TTL — the same short-lived, unguessable exposure
 model as the public temp hosts, but on the instance's own domain.
 """
@@ -21,7 +22,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from web.auth.session import user_secret
+from web.auth.session import signing_key
 from web.core import config
 
 _TOKEN_PARTS = 3  # a signed token is <payload>.<expiry>.<signature>
@@ -51,11 +52,12 @@ def _under_media_root(path: Path) -> bool:
 
 
 def sign_media_token(filepath: Path, ttl_seconds: int) -> str:
-    """A signed, expiring token referencing an absolute local media path."""
-    b64path = _b64(str(Path(filepath).resolve()).encode())
+    """A signed, expiring token for a local media file (ValueError if it isn't under the data folder)."""
+    relative = Path(filepath).resolve().relative_to(config.ROOT_DIR.resolve())
+    b64path = _b64(relative.as_posix().encode())
     exp = int(time.time()) + int(ttl_seconds)
     payload = f"{b64path}.{exp}"
-    sig = hmac.new(user_secret(), payload.encode(), hashlib.sha256).digest()
+    sig = hmac.new(signing_key("public-media"), payload.encode(), hashlib.sha256).digest()
     return f"{payload}.{_b64(sig)}"
 
 
@@ -66,13 +68,13 @@ def _resolve_token(token: str) -> Path | None:
         return None
     b64path, exp_s, sig_b64 = parts
     payload = f"{b64path}.{exp_s}"
-    expected = hmac.new(user_secret(), payload.encode(), hashlib.sha256).digest()
+    expected = hmac.new(signing_key("public-media"), payload.encode(), hashlib.sha256).digest()
     try:
         if not hmac.compare_digest(expected, _unb64(sig_b64)):
             return None
         if time.time() > int(exp_s):
             return None
-        path = Path(_unb64(b64path).decode())
+        path = config.ROOT_DIR / _unb64(b64path).decode()
     except (ValueError, TypeError):
         return None
     if not _under_media_root(path) or not path.is_file():

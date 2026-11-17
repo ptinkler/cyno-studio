@@ -1,18 +1,34 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import { useAuth } from '../composables/useAuth'
+import { useFocusTrap } from '../composables/useFocusTrap'
 import { fetchAuthProviders, authLoginUrl } from '../composables/useAccount'
 import { messageOf } from '../utils/errors'
 
 const { showLogin, login, devLogin } = useAuth()
+const box = ref<HTMLElement | null>(null)
+useFocusTrap(box, showLogin)
 const email = ref('')
 const password = ref('')
 const error = ref('')
+// Why the provider's redirect back refused them (a sign-in is answered with `/?auth=denied`)
+const notice = ref('')
 const busy = ref(false)
 const providers = ref<string[]>([])
 const devAvailable = ref(false)
 
+function readDenied(): void {
+  const query = new URLSearchParams(location.search)
+  if (query.get('auth') !== 'denied') return
+  const id = query.get('id')
+  notice.value = id
+    ? `This sign-in isn't allowed in yet. Ask the admin to add ${id} (ALLOWED_OAUTH_IDS).`
+    : "That account isn't allowed in. Ask the admin to add your email."
+  history.replaceState(null, '', location.pathname)
+}
+
 onMounted(async () => {
+  readDenied()
   try {
     const info = await fetchAuthProviders()
     providers.value = info.providers
@@ -60,8 +76,9 @@ const providerLabels: Readonly<Record<string, string>> = { google: 'Google', mic
 <template>
   <Teleport to="body">
     <div v-if="showLogin" class="modal-backdrop">
-      <div class="modal-box">
+      <div ref="box" class="modal-box" role="dialog" aria-modal="true" aria-label="Sign in">
         <h3>Sign in</h3>
+        <p v-if="notice" class="error-hint">{{ notice }}</p>
         <input v-model="email" type="email" placeholder="Email" autocomplete="username" @keydown.enter="submit" />
         <input
           v-model="password"
@@ -95,7 +112,7 @@ const providerLabels: Readonly<Record<string, string>> = { google: 'Google', mic
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-modal);
 }
 
 .modal-box {
@@ -103,22 +120,22 @@ const providerLabels: Readonly<Record<string, string>> = { google: 'Google', mic
   border: 1px solid var(--sborder);
   border-radius: var(--r-xl);
   box-shadow: var(--shadow-modal);
-  padding: 18px 20px 20px;
-  width: 340px;
-  max-width: 90vw;
+  padding: 1.2rem 1.3333rem 1.3333rem;
+  width: 22.6667rem;
+  max-width: calc(100% - 2rem);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0.6667rem;
 }
 
 .modal-box h3 {
-  font-size: 15px;
+  font-size: 1rem;
   font-weight: 600;
   margin-bottom: 2px;
 }
 
 .error-hint {
-  font-size: 12.5px;
+  font-size: 0.8333rem;
   color: var(--sdanger);
 }
 
@@ -129,8 +146,8 @@ const providerLabels: Readonly<Record<string, string>> = { google: 'Google', mic
 .divider {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 11px;
+  gap: 0.6667rem;
+  font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--sfaint);

@@ -52,15 +52,15 @@ const imageFill = computed(() => pct(imageIndex.value, IMAGE_STEPS))
 
 <style scoped>
 .slider + .slider {
-  margin-top: 14px;
+  margin-top: 0.9333rem;
 }
 .srow {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 4px;
+  margin-bottom: 0.2667rem;
   color: var(--smuted);
-  font-size: 12.5px;
+  font-size: 0.8333rem;
 }
 .sval {
   color: var(--saccent);

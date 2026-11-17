@@ -72,8 +72,8 @@ onMounted(load)
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 0;
-  font-size: 13px;
+  padding: 0.2667rem 0;
+  font-size: 0.8667rem;
 }
 .k {
   color: var(--smuted);

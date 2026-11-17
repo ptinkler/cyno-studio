@@ -1,6 +1,7 @@
 import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import type { Ref } from 'vue'
 import type { RefItem } from '../utils/refItems'
+import { imagesIn } from '../utils/files'
 
 // ― contenteditable plumbing: [@name] text is the source of truth; a pill is
 // just how a known mention is shown. We edit the DOM imperatively (re-rendering
@@ -260,7 +261,7 @@ export function useMentionEditor({ draft, refItems, canMention, onUpdate, onFile
   // Pasted screenshots become attachments; everything else pastes as plain text
   // (so copied rich markup can't get into the contenteditable).
   function onPaste(event: ClipboardEvent): void {
-    const images = [...(event.clipboardData?.files ?? [])].filter(f => f.type.startsWith('image/'))
+    const images = imagesIn(event.clipboardData?.files)
     if (images.length) {
       event.preventDefault()
       onFiles(images)

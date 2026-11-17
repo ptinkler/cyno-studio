@@ -72,7 +72,7 @@ const onCount = computed(() => props.items.filter(i => i.on).length)
 </script>
 
 <template>
-  <BaseDialog :open="open" :title="title" width="720px" @close="emit('close')">
+  <BaseDialog :open="open" :title="title" width="48rem" @close="emit('close')">
     <template #head>
       <span class="count">{{ onCount }} on</span>
     </template>
@@ -129,15 +129,15 @@ const onCount = computed(() => props.items.filter(i => i.on).length)
 
 <style scoped>
 .count {
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--text2);
 }
 
 .search {
   width: 100%;
-  padding: 7px 10px;
+  padding: 0.4667rem 0.6667rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 0.5333rem;
   background: var(--surface);
   color: inherit;
   font: inherit;
@@ -145,12 +145,12 @@ const onCount = computed(() => props.items.filter(i => i.on).length)
 
 .note {
   color: var(--text2);
-  font-size: 13px;
+  font-size: 0.8667rem;
 }
 
 .section {
-  margin-top: 4px;
-  font-size: 11px;
+  margin-top: 0.2667rem;
+  font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text2);
@@ -158,18 +158,18 @@ const onCount = computed(() => props.items.filter(i => i.on).length)
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(var(--tile-xs), 1fr));
+  gap: 0.5333rem;
 }
 
 .card {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 0.2rem;
   min-width: 0;
-  padding: 6px;
+  padding: 0.4rem;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 0.6667rem;
   background: var(--surface2);
   color: inherit;
   font: inherit;
@@ -195,7 +195,7 @@ const onCount = computed(() => props.items.filter(i => i.on).length)
   display: grid;
   place-items: center;
   aspect-ratio: 1;
-  border-radius: 7px;
+  border-radius: 0.4667rem;
   background: var(--surface);
   overflow: hidden;
 }
@@ -207,27 +207,27 @@ const onCount = computed(() => props.items.filter(i => i.on).length)
 }
 
 .thumb .blank {
-  font-size: 28px;
+  font-size: 1.8667rem;
   opacity: 0.6;
 }
 
 .dot {
   flex-shrink: 0;
-  width: 9px;
-  height: 9px;
+  width: 0.6rem;
+  height: 0.6rem;
   border-radius: 50%;
 }
 
 .tick {
   position: absolute;
-  top: 5px;
-  right: 5px;
-  width: 20px;
-  height: 20px;
+  top: 0.3333rem;
+  right: 0.3333rem;
+  width: 1.3333rem;
+  height: 1.3333rem;
   display: grid;
   place-items: center;
   border-radius: 50%;
-  font-size: 12px;
+  font-size: 0.8rem;
   color: #fff;
   background: rgba(0, 0, 0, 0.35);
   border: 1px solid rgba(255, 255, 255, 0.5);
@@ -236,9 +236,9 @@ const onCount = computed(() => props.items.filter(i => i.on).length)
 .tick.inline {
   position: static;
   flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-  font-size: 10px;
+  width: 1.0667rem;
+  height: 1.0667rem;
+  font-size: 0.7333rem;
   border-color: var(--border);
   background: transparent;
 }
@@ -251,9 +251,9 @@ const onCount = computed(() => props.items.filter(i => i.on).length)
 .name {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 0.3333rem;
   min-width: 0;
-  font-size: 13px;
+  font-size: 0.8667rem;
   font-weight: 600;
 }
 
@@ -264,7 +264,7 @@ const onCount = computed(() => props.items.filter(i => i.on).length)
 }
 
 .sub {
-  font-size: 11.5px;
+  font-size: 0.8rem;
   color: var(--text2);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -276,9 +276,9 @@ const onCount = computed(() => props.items.filter(i => i.on).length)
 .badge {
   align-self: flex-start;
   max-width: 100%;
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-size: 10.5px;
+  padding: 1px 0.4rem;
+  border-radius: 66.6rem;
+  font-size: 0.7333rem;
   color: var(--text2);
   border: 1px solid var(--border);
   overflow: hidden;

@@ -1,9 +1,10 @@
-import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
 import ChatMessage from '../components/chat/ChatMessage.vue'
 import type { MediaCard } from '../composables/chatConversationsApi'
 import type { UiMessage } from '../composables/studioTypes'
 import { one } from './dom'
+import { fakeServer } from './fakeServer'
 import { mediaCard, uiMessage } from './models'
 
 const image = mediaCard({ id: 'm1', file: 'img_a.png', prompt: 'a fox' })
@@ -23,7 +24,7 @@ describe('ChatMessage "make a video from this image"', () => {
         }),
       },
     })
-    const buttons = w.findAll('button[title="Attach this picture and switch to Video mode"]')
+    const buttons = w.findAll('button[title="Use in Video mode"]')
     expect(buttons).toHaveLength(1)
     await buttons[0]?.trigger('click')
     expect(w.emitted('use-image')).toEqual([[{ file: 'img_a.png', mode: 'video' }]])
@@ -42,7 +43,7 @@ describe('ChatMessage "make a video from this image"', () => {
         }),
       },
     })
-    await w.find('button[title="Attach this picture and switch to Video mode"]').trigger('click')
+    await w.find('button[title="Use in Video mode"]').trigger('click')
     expect(w.emitted('use-image')).toEqual([[{ file: 'up_b.png', mode: 'video' }]])
   })
 
@@ -97,7 +98,7 @@ describe('ChatMessage media settings', () => {
         media: [{ ...pending, status: 'done', file: 'vid.mp4' }],
       }),
     })
-    expect(w.find('.caption-specs').text()).toBe('from image · 5s · 480p · audio')
+    expect(w.find('.foot-specs').text()).toBe('from image · 5s · 480p · audio')
   })
 
   it('shows ratio and resolution for images', () => {
@@ -113,7 +114,7 @@ describe('ChatMessage media settings', () => {
         }),
       },
     })
-    expect(w.find('.caption-specs').text()).toBe('2K · 16:9')
+    expect(w.find('.foot-specs').text()).toBe('2K · 16:9')
   })
 })
 
@@ -152,7 +153,7 @@ describe('ChatMessage "make a picture" and text-to-media', () => {
         }),
       },
     })
-    await w.find('button[title="Attach this picture and switch to Image mode"]').trigger('click')
+    await w.find('button[title="Use in Image mode"]').trigger('click')
     expect(w.emitted('use-image')).toEqual([[{ file: 'img_a.png', mode: 'image' }]])
   })
 
@@ -246,7 +247,7 @@ describe('ChatMessage delete', () => {
         }),
       },
     })
-    await user.find('button[title^="Delete this prompt"]').trigger('click')
+    await user.find('button[title^="Delete prompt"]').trigger('click')
     expect(user.emitted('delete')).toHaveLength(1)
     const reply = mount(ChatMessage, {
       props: {
@@ -261,7 +262,7 @@ describe('ChatMessage delete', () => {
         }),
       },
     })
-    expect(reply.find('button[title^="Delete this prompt"]').exists()).toBe(false)
+    expect(reply.find('button[title^="Delete prompt"]').exists()).toBe(false)
   })
 })
 
@@ -280,7 +281,7 @@ describe('ChatMessage branch to a new chat', () => {
         }),
       },
     })
-    await user.find('button[title^="Start a new chat from here"]').trigger('click')
+    await user.find('button[title^="Branch from here"]').trigger('click')
     expect(user.emitted('fork')).toHaveLength(1)
     const reply = mount(ChatMessage, {
       props: {
@@ -294,7 +295,7 @@ describe('ChatMessage branch to a new chat', () => {
         }),
       },
     })
-    expect(reply.find('button[title^="Start a new chat from here"]').exists()).toBe(false)
+    expect(reply.find('button[title^="Branch from here"]').exists()).toBe(false)
   })
 })
 
@@ -313,7 +314,7 @@ describe('ChatMessage branches', () => {
         }),
       },
     })
-    await w.find('button[title^="Start a new chat from here: everything up to this reply"]').trigger('click')
+    await w.find('button[title^="Branch from here"]').trigger('click')
     expect(w.emitted('fork')).toHaveLength(1)
   })
 
@@ -360,7 +361,7 @@ describe('ChatMessage refs sent', () => {
         }),
       },
     })
-    expect(w.find('.media-caption').text()).toContain('🔗 1 of 3 refs')
+    expect(w.find('.media-caption').text()).toContain('1 of 3 refs')
     const all = mount(ChatMessage, {
       props: {
         convId: 'c1',
@@ -373,7 +374,59 @@ describe('ChatMessage refs sent', () => {
         }),
       },
     })
-    expect(all.find('.media-caption').text()).toContain('🔗 2 refs')
+    expect(all.find('.media-caption').text()).toContain('2 refs')
+  })
+
+  describe('when a character image is not on this server', () => {
+    // Character images stay behind when a chat is exported, so the card points at one that isn't here
+    const withGone = { ...image, params: { refs: ['a.png', 'char:7/gone.png', 'char:7/here.png'] } }
+    const asks: string[] = []
+
+    beforeEach(() => {
+      asks.length = 0
+      vi.stubGlobal(
+        'Image',
+        class {
+          onload: (() => void) | null = null
+          onerror: (() => void) | null = null
+          set src(url: string) {
+            asks.push(url)
+            queueMicrotask(() => (url.includes('gone') ? this.onerror : this.onload)?.())
+          }
+        },
+      )
+    })
+
+    const mountIt = () =>
+      mount(ChatMessage, {
+        attachTo: document.body,
+        props: {
+          convId: 'c1',
+          message: uiMessage({ id: 12, role: 'assistant', content: '', status: 'done', media: [withGone] }),
+        },
+      })
+
+    it("asks about only the character's images, and leaves the missing one out of the count", async () => {
+      const w = mountIt()
+      await flushPromises()
+      expect(asks).toEqual(['/api/characters/7/images/gone.png', '/api/characters/7/images/here.png'])
+      expect(w.find('.media-caption').text()).toContain('2 refs')
+      expect(w.find('.media-caption').text()).not.toContain('3 refs')
+      w.unmount()
+    })
+
+    it('shows a gap, not a broken picture, in the hover preview', async () => {
+      const w = mountIt()
+      await flushPromises()
+      await w.find('.caption-refs').trigger('mouseenter')
+      expect(document.querySelectorAll('.refs-peek .ref-gone')).toHaveLength(1)
+      expect([...document.querySelectorAll('.refs-peek img')].map(i => i.getAttribute('src'))).toEqual([
+        '/api/chat/media/c1/a.png',
+        '/api/characters/7/images/here.png',
+      ])
+      expect(document.querySelector('.refs-peek-title')?.textContent).toContain('1 no longer available')
+      w.unmount()
+    })
   })
 
   it('shows thumbnails of the refs on hover, dimming the ones not sent', async () => {
@@ -427,7 +480,7 @@ describe('ChatMessage request view', () => {
         }),
       },
     })
-    await w.find('button[title="Show exactly what was sent to the provider"]').trigger('click')
+    await w.find('button[title="View request"]').trigger('click')
     const dialog = one('.req-dialog')
     expect(dialog.textContent).toContain('"model": "seedream-v5-pro-edit"')
     expect(dialog.textContent).toContain('Venice: blocked')
@@ -450,7 +503,7 @@ describe('ChatMessage request view', () => {
         }),
       },
     })
-    expect(w.find('button[title="Show exactly what was sent to the provider"]').exists()).toBe(false)
+    expect(w.find('button[title="View request"]').exists()).toBe(false)
   })
 })
 
@@ -464,16 +517,16 @@ const reply = (media: MediaCard[], extra: Partial<UiMessage> = {}) => ({
 describe('ChatMessage edit and redo a picture in place', () => {
   it('offers Edit only on a picture, Redo on anything it can make again', () => {
     const img = mount(ChatMessage, reply([image]))
-    expect(img.find('button[title^="Edit this picture"]').exists()).toBe(true)
-    expect(img.find('button[title^="Make it again"]').exists()).toBe(true)
+    expect(img.find('button[title^="Edit picture"]').exists()).toBe(true)
+    expect(img.find('button[title^="Redo picture"]').exists()).toBe(true)
     const vid = mount(ChatMessage, reply([{ ...video, prompt: 'waves' }]))
-    expect(vid.find('button[title^="Edit this picture"]').exists()).toBe(false)
-    expect(vid.find('button[title^="Make it again"]').exists()).toBe(true)
+    expect(vid.find('button[title^="Edit picture"]').exists()).toBe(false)
+    expect(vid.find('button[title^="Redo picture"]').exists()).toBe(true)
   })
 
   it('Edit opens an empty box and asks to edit this picture', async () => {
     const w = mount(ChatMessage, reply([image]))
-    await w.find('button[title^="Edit this picture"]').trigger('click')
+    await w.find('button[title^="Edit picture"]').trigger('click')
     const box = w.find<HTMLTextAreaElement>('.prompt-box textarea')
     expect(box.element.value).toBe('')
     expect(box.attributes('placeholder')).toBe('Describe the change…')
@@ -490,7 +543,7 @@ describe('ChatMessage edit and redo a picture in place', () => {
 
   it('Redo pre-fills the prompt it was made with and does not edit', async () => {
     const w = mount(ChatMessage, reply([image]))
-    await w.find('button[title^="Make it again"]').trigger('click')
+    await w.find('button[title^="Redo picture"]').trigger('click')
     expect(w.find<HTMLTextAreaElement>('.prompt-box textarea').element.value).toBe('a fox')
     await w.find('.prompt-box .edit-send').trigger('click')
     expect(w.emitted('regenerate')?.[0]?.[0]).toMatchObject({ prompt: 'a fox', edit: false, replace: true })
@@ -498,7 +551,7 @@ describe('ChatMessage edit and redo a picture in place', () => {
 
   it('will not send an empty prompt', async () => {
     const w = mount(ChatMessage, reply([image]))
-    await w.find('button[title^="Edit this picture"]').trigger('click')
+    await w.find('button[title^="Edit picture"]').trigger('click')
     expect(w.find('.prompt-box .edit-send').attributes('disabled')).toBeDefined()
     await w.find('.prompt-box .edit-send').trigger('click')
     expect(w.emitted('regenerate')).toBeUndefined()
@@ -506,7 +559,7 @@ describe('ChatMessage edit and redo a picture in place', () => {
 
   it('Cancel closes the box without regenerating', async () => {
     const w = mount(ChatMessage, reply([image]))
-    await w.find('button[title^="Make it again"]').trigger('click')
+    await w.find('button[title^="Redo picture"]').trigger('click')
     await w.find('.prompt-box .meta-btn').trigger('click')
     expect(w.find('.prompt-box').exists()).toBe(false)
     expect(w.emitted('regenerate')).toBeUndefined()
@@ -514,8 +567,152 @@ describe('ChatMessage edit and redo a picture in place', () => {
 
   it('neither is offered while the reply is still streaming', () => {
     const w = mount(ChatMessage, reply([image], { status: 'streaming' }))
-    expect(w.find('button[title^="Edit this picture"]').exists()).toBe(false)
-    expect(w.find('button[title^="Make it again"]').exists()).toBe(false)
+    expect(w.find('button[title^="Edit picture"]').exists()).toBe(false)
+    expect(w.find('button[title^="Redo picture"]').exists()).toBe(false)
+  })
+})
+
+describe('ChatMessage links', () => {
+  const link = (content: string) => mount(ChatMessage, reply([], { content })).find('.markdown a')
+
+  it('open in a new tab with no handle back to the chat', () => {
+    const a = link('See [the docs](https://example.com/x).')
+    expect(a.attributes('href')).toBe('https://example.com/x')
+    expect(a.attributes('target')).toBe('_blank')
+    expect(a.attributes('rel')).toBe('noopener noreferrer')
+  })
+
+  it('still strip a script address', () => {
+    const a = link('[click](javascript:alert(1))')
+    expect(a.attributes('href') ?? '').not.toContain('javascript')
+  })
+})
+
+describe('ChatMessage cost', () => {
+  const priced = { ...image, model: 'venice/seedream-v5-pro', cost: 0.06 }
+  interface Hoverable {
+    find: (selector: string) => { trigger: (event: string) => Promise<void> }
+    findAll: (selector: string) => { element: Element }[]
+  }
+  const hover = async (w: Hoverable) => {
+    await w.find('.msg-meta .cost').trigger('mouseenter')
+    return w.findAll('.pop-row').map(r => [...r.element.children].map(c => c.textContent).join(' '))
+  }
+
+  it('shows one cost, the total, and nothing of the breakdown until asked', () => {
+    const w = mount(ChatMessage, reply([priced], { cost: 0.07 }))
+    expect(w.find('.msg-meta .cost').text()).toBe('$0.07')
+    expect(w.find('.pop').exists()).toBe(false)
+  })
+
+  it('opens what the cost is made of on hover, and closes it again', async () => {
+    const w = mount(ChatMessage, reply([priced], { cost: 0.07 }))
+    expect(await hover(w)).toEqual(['Text $0.01', 'seedream-v5-pro $0.06', 'Total $0.07'])
+    await w.find('.msg-meta .cost').trigger('mouseleave')
+    expect(w.find('.pop').exists()).toBe(false)
+  })
+
+  it('opens on a tap or keyboard focus too', async () => {
+    const w = mount(ChatMessage, reply([priced], { cost: 0.07 }))
+    await w.find('.msg-meta .chip-btn').trigger('click')
+    expect(w.find('.pop').exists()).toBe(true)
+  })
+
+  it("doesn't repeat the picture's cost on its own card", () => {
+    const w = mount(ChatMessage, reply([priced], { cost: 0.07 }))
+    expect(w.find('.media-caption').text()).not.toContain('$0.06')
+  })
+
+  it('has no cost when the reply cost nothing', () => {
+    expect(
+      mount(ChatMessage, reply([image]))
+        .find('.cost')
+        .exists(),
+    ).toBe(false)
+  })
+
+  it('sits in the text bar when there are no pictures', () => {
+    const w = mount(ChatMessage, reply([], { cost: 0.002 }))
+    expect(w.find('.text-bar .cost').text()).toBe('$0.0020')
+  })
+})
+
+describe('ChatMessage references on an Edit or Redo', () => {
+  const withRefs: MediaCard = { ...image, params: { refs: ['up_1.png', 'char:3/c.png', 'up_2.png'] } }
+  beforeEach(() => {
+    // jsdom has no object URLs: a pasted picture's thumbnail needs one
+    URL.createObjectURL = vi.fn(() => 'blob:preview')
+    URL.revokeObjectURL = vi.fn()
+  })
+  const thumbs = (w: { findAll: (selector: string) => { attributes: (name: string) => string | undefined }[] }) =>
+    w.findAll('.prompt-box .att-media img').map(i => i.attributes('src'))
+
+  it('Redo starts with the pictures the card was made from, without the characters', async () => {
+    const w = mount(ChatMessage, reply([withRefs]))
+    await w.find('button[title^="Redo picture"]').trigger('click')
+    expect(thumbs(w)).toEqual(['/api/chat/media/c1/up_1.png', '/api/chat/media/c1/up_2.png'])
+  })
+
+  it('Edit starts with none: the picture itself is the reference', async () => {
+    const w = mount(ChatMessage, reply([withRefs]))
+    await w.find('button[title^="Edit picture"]').trigger('click')
+    expect(thumbs(w)).toEqual([])
+    expect(w.find('.prompt-box .addtile').exists()).toBe(true)
+  })
+
+  it('sends no references when they are left as they were', async () => {
+    const w = mount(ChatMessage, reply([withRefs]))
+    await w.find('button[title^="Redo picture"]').trigger('click')
+    await w.find('.prompt-box .edit-send').trigger('click')
+    expect(w.emitted('regenerate')?.[0]?.[0]).not.toHaveProperty('refs')
+  })
+
+  it('sends the pictures that are left once one is taken away', async () => {
+    fakeServer(() => ({ deleted: false }))
+    const w = mount(ChatMessage, reply([withRefs]))
+    await w.find('button[title^="Redo picture"]').trigger('click')
+    await w.find('.prompt-box .attx').trigger('click')
+    await w.find('.prompt-box .edit-send').trigger('click')
+    expect(w.emitted('regenerate')?.[0]?.[0]).toMatchObject({ refs: ['up_2.png'], edit: false })
+  })
+
+  it('an edit sends what was added', async () => {
+    const w = mount(ChatMessage, reply([image]))
+    await w.find('button[title^="Edit picture"]').trigger('click')
+    // Pasting a picture uploads it to the chat first, then it is a reference
+    fakeServer(() => ({ file: 'up_new.png' }))
+    const png = new File(['x'], 'p.png', { type: 'image/png' })
+    await w.find('.prompt-box textarea').trigger('paste', { clipboardData: { files: [png] } })
+    await flushPromises()
+    await w.find('.prompt-box textarea').setValue('as a cat')
+    await w.find('.prompt-box .edit-send').trigger('click')
+    expect(w.emitted('regenerate')?.[0]?.[0]).toMatchObject({ edit: true, prompt: 'as a cat', refs: ['up_new.png'] })
+  })
+
+  it('waits for an upload to finish before sending', async () => {
+    const w = mount(ChatMessage, reply([image]))
+    await w.find('button[title^="Edit picture"]').trigger('click')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise(() => undefined)),
+    )
+    const png = new File(['x'], 'p.png', { type: 'image/png' })
+    await w.find('.prompt-box textarea').trigger('paste', { clipboardData: { files: [png] } })
+    await flushPromises()
+    await w.find('.prompt-box textarea').setValue('as a cat')
+    expect(w.find('.prompt-box .edit-send').attributes('disabled')).toBeDefined()
+  })
+
+  it('cancelling throws away what was uploaded for it', async () => {
+    const calls = fakeServer(() => ({ file: 'up_new.png', deleted: true }))
+    const w = mount(ChatMessage, reply([image]))
+    await w.find('button[title^="Edit picture"]').trigger('click')
+    const png = new File(['x'], 'p.png', { type: 'image/png' })
+    await w.find('.prompt-box textarea').trigger('paste', { clipboardData: { files: [png] } })
+    await flushPromises()
+    await w.find('.prompt-box .meta-btn').trigger('click')
+    await flushPromises()
+    expect(calls.some(c => c.method === 'DELETE' && c.url.endsWith('/attachments/up_new.png'))).toBe(true)
   })
 })
 
@@ -552,7 +749,7 @@ describe('ChatMessage earlier versions of a picture', () => {
     const chosen: MediaCard = { ...versioned, file: 'img_a.png', versions: [{ file: 'img_new.png' }], version_shown: 0 }
     const w = mount(ChatMessage, { props: { ...reply([chosen]).props, canSwitch: true } })
     expect(w.find('.ver-nav span').text()).toBe('1/2')
-    expect(w.find('img').attributes('src')).toContain('img_a.png')
+    expect(w.find('.media-item img').attributes('src')).toContain('img_a.png')
     const [back, forward] = w.findAll('.ver-nav button')
     expect(back?.attributes('disabled')).toBeDefined()
     expect(forward?.attributes('disabled')).toBeUndefined()
@@ -566,7 +763,7 @@ describe('ChatMessage earlier versions of a picture', () => {
   it('offers the previous picture back after a failed redo', async () => {
     const failed: MediaCard = { ...versioned, status: 'error', file: null, error: 'nope' }
     const w = mount(ChatMessage, { props: { ...reply([failed]).props, canSwitch: true } })
-    await w.find('button[title^="Keep the picture this card had"]').trigger('click')
+    await w.find('button[title^="Keep previous picture"]').trigger('click')
     expect(w.emitted('media-version')).toEqual([[{ mediaId: failed.id, index: 0 }]])
   })
 })
@@ -581,6 +778,13 @@ describe('ChatMessage edit and redo the text in place', () => {
   it('Redo text is offered on a reply that made media, and emits reword with no instruction', async () => {
     const w = mount(ChatMessage, rewordable([image]))
     await w.find('button[title^="Redo text"]').trigger('click')
+    expect(w.emitted('reword')).toEqual([['']])
+  })
+
+  it('a picture-only reply keeps Redo text under the picture, not in a bar above it', async () => {
+    const w = mount(ChatMessage, rewordable([image], { content: '' }))
+    expect(w.find('.text-bar').exists()).toBe(false)
+    await w.find('.msg-meta button[title^="Redo text"]').trigger('click')
     expect(w.emitted('reword')).toEqual([['']])
   })
 
@@ -661,7 +865,7 @@ describe('ChatMessage renders one element per media kind', () => {
 
   it('an image is an <img> and nothing else', () => {
     const w = mount(ChatMessage, media({ kind: 'image', file: 'a.png' }))
-    expect(w.findAll('img')).toHaveLength(1)
+    expect(w.findAll('.media-item img')).toHaveLength(1)
     expect(w.find('video').exists()).toBe(false)
     expect(w.find('audio').exists()).toBe(false)
   })
@@ -675,7 +879,7 @@ describe('ChatMessage renders one element per media kind', () => {
   it('a video is a <video> and not an <img>', () => {
     const w = mount(ChatMessage, media({ kind: 'video', file: 'a.mp4' }))
     expect(w.findAll('video')).toHaveLength(1)
-    expect(w.find('img').exists()).toBe(false)
+    expect(w.find('.media-item img').exists()).toBe(false)
   })
 
   it('audio is an <audio> and not a <video>', () => {
@@ -711,8 +915,8 @@ describe('ChatMessage a failed picture can be changed and retried', () => {
 
   it('offers Change prompt beside Retry', async () => {
     const w = mount(ChatMessage, failed)
-    expect(w.find('button[title^="Run the same prompt again"]').exists()).toBe(true)
-    await w.find('button[title="Edit the prompt, then run it again"]').trigger('click')
+    expect(w.find('button[title^="Retry on selected model"]').exists()).toBe(true)
+    await w.find('button[title="Retry with a new prompt"]').trigger('click')
     const box = w.find<HTMLTextAreaElement>('.prompt-box textarea')
     expect(box.element.value).toBe('a fox') // pre-filled with what failed
     await box.setValue('a fox, softer lighting')

@@ -63,7 +63,7 @@ const threadIcon = (thread: ConversationSummary): string => (thread.kind === 'ga
       </button>
     </template>
     <template v-else>
-      <button class="nact" title="Rename" @click.stop="emit('start-rename')">
+      <button class="nact" title="Rename" aria-label="Rename" @click.stop="emit('start-rename')">
         <svg class="ic sm"><use href="#s-pencil" /></svg>
       </button>
       <button
@@ -87,10 +87,10 @@ const threadIcon = (thread: ConversationSummary): string => (thread.kind === 'ga
 .nitem {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 0.6667rem;
   flex: 1;
   min-width: 0;
-  padding: 7px 10px;
+  padding: 0.4667rem 0.6667rem;
   color: var(--smuted);
   background: none;
   border: none;
@@ -110,10 +110,10 @@ const threadIcon = (thread: ConversationSummary): string => (thread.kind === 'ga
 .nrename {
   flex: 1;
   min-width: 0;
-  margin: 3px 6px;
-  padding: 6px 8px;
+  margin: 0.2rem 0.4rem;
+  padding: 0.4rem 0.5333rem;
   border: 1px solid var(--saccent);
-  border-radius: 7px;
+  border-radius: 0.4667rem;
   background: var(--spanel2, var(--sbg2));
   color: var(--sfg);
   outline: none;

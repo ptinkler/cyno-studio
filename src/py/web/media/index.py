@@ -95,7 +95,8 @@ def referenced_files(item: MediaItem) -> list[str]:
     files: list[JsonValue] = [item.get("file")]
     for source in (item, *as_objects(item.get("versions"))):
         params = as_object(source.get("params"))
-        files += [source.get("file"), *as_list(params.get("refs")), *(params.get(k) for k in PARAM_FILES)]
+        named = (as_object(i).get("file") for i in as_list(params.get("ref_items")))
+        files += [source.get("file"), *as_list(params.get("refs")), *(params.get(k) for k in PARAM_FILES), *named]
     return [f for f in files if isinstance(f, str) and f]
 
 

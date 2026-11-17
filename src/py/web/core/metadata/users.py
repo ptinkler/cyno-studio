@@ -31,22 +31,26 @@ class UserMixin(DBBase):
     def upsert_oauth_user(self, profile: Mapping[str, str | None], *, is_admin: bool = False) -> User:
         """Create or refresh a user from an OAuth profile.
 
-        The profile contains ``provider``, ``sub``, ``email``, ``name``, and
-        ``avatar``. Users match on ``(provider, sub)`` first, then email.
+        The profile contains ``provider``, ``sub``, ``name``, ``avatar`` and, when the provider has vouched for
+        one, ``email``. A person is their ``(provider, sub)``. A second sign-in method is joined to the same
+        account only through a verified email; a provider without one (X) never matches by anything but its id,
+        so a handle that changes hands can't land in the previous owner's account.
         """
-        provider, sub, email = (profile.get(key) for key in ("provider", "sub", "email"))
-        if not isinstance(provider, str) or not isinstance(sub, str) or not isinstance(email, str):
+        provider, sub = (profile.get(key) for key in ("provider", "sub"))
+        email = profile.get("email") or None
+        if not isinstance(provider, str) or not isinstance(sub, str):
             raise TypeError(profile)
 
         with self._session() as session:
             user = session.query(User).filter(User.provider == provider, User.provider_sub == sub).first()
-            if not user:
+            if not user and email:
                 user = session.query(User).filter(User.email == email).first()
             if user:
                 user.name = profile.get("name") or user.name
                 user.avatar_url = profile.get("avatar") or user.avatar_url
                 user.provider = provider
                 user.provider_sub = sub
+                user.email = user.email or email
                 user.last_login_at = datetime.now().astimezone().replace(tzinfo=None)
                 if is_admin:
                     user.is_admin = True
@@ -154,11 +158,23 @@ class UserMixin(DBBase):
                 )
                 session.add(user)
             user.is_admin = True
+            if user.password_hash:  # a new password ends the sessions the old one made
+                user.session_version += 1
             user.password_hash = password_hash
             session.commit()
             session.refresh(user)
             session.expunge(user)
             return user
+
+    def bump_session_version(self, user_id: str) -> int:
+        """Invalidate every login cookie made so far for this user; return the version new ones carry."""
+        with self._session() as session:
+            user = session.get(User, user_id)
+            if not user:
+                return 0
+            user.session_version += 1
+            session.commit()
+            return user.session_version
 
     def set_user_password(self, user_id: str, password_hash: str) -> None:
         """Replace a user's stored password hash (e.g. after a transparent rehash)."""

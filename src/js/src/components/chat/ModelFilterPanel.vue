@@ -54,16 +54,12 @@ const showHidden = defineModel<boolean>('showHidden', { default: false })
 
     <template v-if="uncensoredCount || hiddenCount">
       <div class="fsep"></div>
-      <label v-if="uncensoredCount" class="frow uncensored-only" title="Only list models marked uncensored">
+      <label v-if="uncensoredCount" class="frow uncensored-only" title="Uncensored only">
         <input v-model="uncensoredOnly" type="checkbox" />
         <span class="flabel">Uncensored only</span>
         <span class="fn">{{ uncensoredCount }}</span>
       </label>
-      <label
-        v-if="hiddenCount"
-        class="frow show-hidden"
-        title="Models left out of the list: not enabled for this API key, or retired"
-      >
+      <label v-if="hiddenCount" class="frow show-hidden" title="Not enabled for this key, or retired">
         <input v-model="showHidden" type="checkbox" />
         <span class="flabel">Show hidden models</span>
         <span class="fn">{{ hiddenCount }}</span>
@@ -77,35 +73,35 @@ const showHidden = defineModel<boolean>('showHidden', { default: false })
 <style scoped>
 .fpanel {
   position: absolute;
-  top: 46px;
-  right: 8px;
+  top: 3.0667rem;
+  right: 0.5333rem;
   z-index: 2;
-  width: min(260px, calc(100% - 16px));
-  max-height: calc(100% - 54px);
+  width: min(17.3333rem, calc(100% - 1.0667rem));
+  max-height: calc(100% - 3.6rem);
   overflow-y: auto;
-  padding: 8px;
+  padding: 0.5333rem;
   background: var(--surface2);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 0.8rem;
   box-shadow: var(--shadow-pop);
 }
 .fhead {
-  padding: 4px 8px;
-  font-size: 0.75rem;
+  padding: 0.2667rem 0.5333rem;
+  font-size: 0.8rem;
   color: var(--text2);
 }
 .fsep {
   height: 1px;
-  margin: 6px 4px;
+  margin: 0.4rem 0.2667rem;
   background: var(--border);
 }
 .frow {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 8px;
+  gap: 0.6667rem;
+  padding: 0.4rem 0.5333rem;
   border-radius: var(--r);
-  font-size: 13px;
+  font-size: 0.8667rem;
   font-weight: 400;
   text-transform: none;
   letter-spacing: normal;
@@ -127,23 +123,23 @@ const showHidden = defineModel<boolean>('showHidden', { default: false })
 .fpill {
   --b: var(--text2);
   display: inline-block;
-  padding: 1px 7px;
-  border-radius: 6px;
-  font-size: 0.7rem;
+  padding: 1px 0.4667rem;
+  border-radius: 0.4rem;
+  font-size: 0.8rem;
   font-weight: 600;
   line-height: 1.5;
   color: var(--b);
   background: color-mix(in srgb, var(--b) 16%, transparent);
 }
 .fn {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: var(--text2);
 }
 .fclear {
   display: block;
   width: 100%;
-  margin-top: 6px;
-  padding: 7px 8px;
+  margin-top: 0.4rem;
+  padding: 0.4667rem 0.5333rem;
   background: none;
   border: none;
   border-top: 1px solid var(--border);

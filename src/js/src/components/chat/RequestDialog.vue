@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import { useFocusTrap } from '../../composables/useFocusTrap'
 import { RouterLink } from 'vue-router'
 import { useCopy } from '../../composables/useClipboard'
 
@@ -9,6 +10,8 @@ const props = withDefaults(defineProps<{ request: unknown; response: unknown; er
   error: '',
 })
 const emit = defineEmits<{ close: [] }>()
+const card = ref<HTMLElement | null>(null)
+useFocusTrap(card, ref(true)) // this component exists only while the dialog is open
 const { copiedKey, copy } = useCopy()
 
 const fmt = (value: unknown): string => (typeof value === 'string' ? value : JSON.stringify(value, null, 2))
@@ -30,7 +33,7 @@ onBeforeUnmount(() => {
 <template>
   <Teleport to="body">
     <div class="req-backdrop" @click.self="emit('close')">
-      <div class="req-dialog" role="dialog" aria-label="Request and response">
+      <div ref="card" class="req-dialog" role="dialog" aria-modal="true" aria-label="Request and response">
         <div class="req-head">
           <h3>Request and response</h3>
           <button class="btn btn-sm" @click="copy(both, 'req')">
@@ -60,42 +63,42 @@ onBeforeUnmount(() => {
 .req-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1300;
+  z-index: var(--z-modal-top);
   display: grid;
   place-items: center;
-  padding: 16px;
+  padding: 1.0667rem;
   background: rgba(0, 0, 0, 0.6);
 }
 
 .req-dialog {
-  width: min(760px, 100%);
-  max-height: 85vh;
+  width: min(50.6667rem, 100%);
+  max-height: 85dvh;
   display: flex;
   flex-direction: column;
   background: var(--sbg);
   border: 1px solid var(--sborder);
   border-radius: var(--r-xl);
   box-shadow: var(--shadow-modal);
-  padding: 14px 18px 16px;
+  padding: 0.9333rem 1.2rem 1.0667rem;
 }
 
 .req-head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 0.4rem;
 }
 
 .req-head h3 {
   flex: 1;
-  font-size: 15px;
+  font-size: 1rem;
   font-weight: 600;
 }
 
 .x {
-  width: 28px;
-  height: 28px;
+  width: 1.8667rem;
+  height: 1.8667rem;
   margin-right: -6px;
-  font-size: 13px;
+  font-size: 0.8667rem;
 }
 
 .req-body {
@@ -104,8 +107,8 @@ onBeforeUnmount(() => {
 }
 
 .req-body h4 {
-  margin-top: 12px;
-  font-size: 11px;
+  margin-top: 0.8rem;
+  font-size: 0.8rem;
   font-weight: 650;
   color: var(--sfaint);
   text-transform: uppercase;
@@ -113,23 +116,23 @@ onBeforeUnmount(() => {
 }
 
 .req-none {
-  margin-top: 6px;
-  font-size: 12.5px;
+  margin-top: 0.4rem;
+  font-size: 0.8333rem;
   color: var(--smuted);
 }
 
 .req-error {
-  margin-top: 10px;
-  font-size: 12.5px;
+  margin-top: 0.6667rem;
+  font-size: 0.8333rem;
   color: var(--sdanger);
 }
 
 .req-json {
-  margin-top: 6px;
-  padding: 10px 12px;
+  margin-top: 0.4rem;
+  padding: 0.6667rem 0.8rem;
   border-radius: var(--r);
   background: var(--sbg2);
-  font-size: 11.5px;
+  font-size: 0.8rem;
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;

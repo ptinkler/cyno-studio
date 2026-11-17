@@ -64,9 +64,11 @@ class TestPolloImageModels:
         def next_statuses(*_args: object, **_kwargs: object) -> list[TaskResult]:
             return next(calls.statuses)
 
-        def download(url: str, timeout: float | None = None, stream: bool = False) -> FakeResponse:
-            _ = (timeout, stream)
+        def get_public(_client: object, url: str, **_kwargs: object) -> FakeResponse:
             return FakeResponse(None, b"mp4-bytes" if url.endswith(".mp4") else png_bytes(), "image/jpeg")
+
+        def download_public(_client: object, url: str, dest: Path, **_kwargs: object) -> None:
+            dest.write_bytes(b"mp4-bytes" if url.endswith(".mp4") else png_bytes())
 
         def upload(path: Path, *_args: object, **_kwargs: object) -> str:
             calls.uploads.append(path.name)
@@ -75,7 +77,8 @@ class TestPolloImageModels:
         monkeypatch.setattr(pollo_submit, "get_image_generator", make_generator)
         monkeypatch.setattr(pollo_submit, "get_video_generator", make_generator)
         monkeypatch.setattr(pollo_tasks, "get_task_status", next_statuses)
-        monkeypatch.setattr(pollo_tasks.requests, "get", download)
+        monkeypatch.setattr(pollo_tasks.net_guard, "get_public", get_public)
+        monkeypatch.setattr(pollo_tasks.net_guard, "download_public", download_public)
         monkeypatch.setattr(pollo_uploads.image_hosts, "upload_file", upload)
         return calls
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cardParams, cardSpecs, refUrl, refsLabel, refsTitle } from '../utils/cardSpecs'
+import { cardParams, cardRefFiles, cardSpecs, refUrl, refsLabel, refsTitle } from '../utils/cardSpecs'
 
 describe('cardParams', () => {
   it('reads each field for the type it should have and drops the rest', () => {
@@ -62,5 +62,48 @@ describe('references', () => {
   it('serves a character image or a chat file', () => {
     expect(refUrl('c1', 'char:7/img 1.png')).toBe('/api/characters/7/images/img%201.png')
     expect(refUrl('c1', 'up_a.png')).toBe('/api/chat/media/c1/up_a.png')
+  })
+})
+
+describe('cardRefFiles', () => {
+  it('lists the frames, references and named images once each, leaving characters out', () => {
+    expect(
+      cardRefFiles({
+        first_frame: 'a.png',
+        last_frame: 'b.png',
+        refs: ['a.png', 'char:3/c.png', 'd.png'],
+        ref_items: [
+          { file: 'e.png', type: 'image' },
+          { file: 'v.mp4', type: 'video' },
+        ],
+      }),
+    ).toEqual(['a.png', 'b.png', 'd.png', 'e.png'])
+  })
+
+  it('is empty for a card made from words alone', () => {
+    expect(cardRefFiles(null)).toEqual([])
+    expect(cardRefFiles({ first_frame: null, refs: [] })).toEqual([])
+  })
+})
+
+describe('refsLabel with images that no longer exist', () => {
+  const p = cardParams({ refs: ['a.png', 'char:7/b.png', 'char:7/c.png'] })
+
+  it("doesn't count them", () => {
+    expect(refsLabel(p, 2)).toBe('1 ref')
+    expect(refsLabel(p, 1)).toBe('2 refs')
+  })
+
+  it('says so when none are left', () => {
+    expect(refsLabel(p, 3)).toBe('refs unavailable')
+  })
+
+  it('names how many are gone in the hover title', () => {
+    expect(refsTitle(p, 2)).toBe('Based on these images (2 no longer available):')
+    expect(refsTitle(p)).toBe('Based on these images:')
+  })
+
+  it('still reports the model taking fewer than there are', () => {
+    expect(refsLabel(cardParams({ refs: ['a', 'b', 'c', 'd'], refs_used: 2 }), 1)).toBe('2 of 3 refs')
   })
 })

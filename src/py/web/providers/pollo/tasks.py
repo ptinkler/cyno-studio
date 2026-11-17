@@ -6,10 +6,11 @@ from http import HTTPStatus
 from pathlib import Path
 from urllib.parse import urlsplit
 
+import httpx
 import requests
 
 from web.auth import keyctx
-from web.core import request_log
+from web.core import net_guard, request_log
 from web.core.get_task import TaskResult, get_task_status
 from web.jsonutil import as_object, as_objects, body_of
 from web.providers.pollo import catalogue, uploads
@@ -78,15 +79,10 @@ def download_video(job_id: str, dest: Path, index: int = 0) -> None:
     task = get_video(job_id)
     if task["status"] != "completed":
         raise VideoNotReadyError(task["status"])
-    tmp = dest.with_suffix(dest.suffix + ".part")
     try:
-        with requests.get(task_urls(task)[index], stream=True, timeout=DOWNLOAD_TIMEOUT) as resp:
-            resp.raise_for_status()
-            with tmp.open("wb") as f:
-                f.writelines(resp.iter_content(chunk_size=1 << 16))
-    except requests.RequestException as e:
+        net_guard.download_public(net_guard.public_http, task_urls(task)[index], dest, timeout=DOWNLOAD_TIMEOUT)
+    except (httpx.HTTPError, net_guard.UnsafeURLError) as e:
         raise DownloadFailedError("video", e) from e
-    tmp.replace(dest)
 
 
 def submit_task(generator: PolloGenerator) -> str:
@@ -207,9 +203,9 @@ def wait(task_id: str) -> dict[str, JsonValue]:
 def download_image(url: str) -> tuple[bytes, str]:
     """Fetch a finished image: its bytes and media type."""
     try:
-        resp = requests.get(url, timeout=DOWNLOAD_TIMEOUT)
+        resp = net_guard.get_public(net_guard.public_http, url, timeout=DOWNLOAD_TIMEOUT)
         resp.raise_for_status()
-    except requests.RequestException as e:
+    except (httpx.HTTPError, net_guard.UnsafeURLError) as e:
         raise DownloadFailedError("image", e) from e
     media_type = (resp.headers.get("Content-Type") or "image/png").split(";")[0].strip()
     return resp.content, media_type

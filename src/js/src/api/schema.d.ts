@@ -106,6 +106,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/logout-others": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Api Auth Logout Others
+         * @description Sign out every other device: their login cookies stop working; this one stays signed in.
+         */
+        post: operations["api_auth_logout_others_api_auth_logout_others_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/me": {
         parameters: {
             query?: never;
@@ -1827,7 +1847,7 @@ export interface components {
             /** Avatar Url */
             avatar_url: string | null;
             /** Email */
-            email: string;
+            email: string | null;
             /** Id */
             id: string;
             /** Is Admin */
@@ -3166,7 +3186,7 @@ export interface components {
          */
         LoginResult: {
             /** Email */
-            email: string;
+            email: string | null;
             /** Is Admin */
             is_admin: boolean;
             /** Name */
@@ -3480,6 +3500,8 @@ export interface components {
             model?: string | null;
             /** Prompt */
             prompt?: string | null;
+            /** Refs */
+            refs?: string[] | null;
             /**
              * Replace
              * @default false
@@ -3701,7 +3723,7 @@ export interface components {
          */
         SessionUser: {
             /** Email */
-            email: string;
+            email: string | null;
             /** Is Admin */
             is_admin: boolean;
             /** Name */
@@ -4361,6 +4383,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Ok"];
+                };
+            };
+        };
+    };
+    api_auth_logout_others_api_auth_logout_others_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                user_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ok"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

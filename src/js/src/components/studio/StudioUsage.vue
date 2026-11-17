@@ -183,9 +183,9 @@ const share = (usd: number): string =>
 <style scoped>
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
-  margin-bottom: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(var(--tile-s), 1fr));
+  gap: 0.6667rem;
+  margin-bottom: 1.2rem;
 }
 /* Each card wears its provider's pastel (--tint, set inline from --p-<id>):
    a soft wash, a tinted top edge and a tinted number, so the three read apart
@@ -196,13 +196,13 @@ const share = (usd: number): string =>
   border: 1px solid color-mix(in srgb, var(--tint) 26%, var(--sborder));
   background: linear-gradient(160deg, color-mix(in srgb, var(--tint) 11%, transparent), transparent 62%), var(--sbg);
   border-radius: var(--r-lg);
-  padding: 14px 16px;
+  padding: 0.9333rem 1.0667rem;
 }
 .pcard::before {
   content: '';
   position: absolute;
   inset: 0 0 auto;
-  height: 3px;
+  height: 0.2rem;
   background: var(--tint);
 }
 .pcard.nokey {
@@ -212,16 +212,16 @@ const share = (usd: number): string =>
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 0.5333rem;
 }
 .pname {
   font-weight: 600;
-  font-size: 13.5px;
+  font-size: 0.9rem;
 }
 .pkey {
-  font-size: 11px;
-  padding: 1px 7px;
-  border-radius: 999px;
+  font-size: 0.8rem;
+  padding: 1px 0.4667rem;
+  border-radius: 66.6rem;
   color: var(--smuted);
   background: var(--sbg2);
 }
@@ -230,58 +230,58 @@ const share = (usd: number): string =>
   background: color-mix(in srgb, var(--tint) 16%, transparent);
 }
 .pval {
-  font-size: 26px;
+  font-size: 1.7333rem;
   font-weight: 700;
   line-height: 1.1;
   color: var(--tint);
   font-variant-numeric: tabular-nums;
 }
 .punit {
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--sfaint);
 }
 .pnote {
-  margin-top: 6px;
-  font-size: 12px;
+  margin-top: 0.4rem;
+  font-size: 0.8rem;
   color: var(--smuted);
 }
 .plink {
-  margin-top: 10px;
+  margin-top: 0.6667rem;
   color: var(--tint);
   border-color: color-mix(in srgb, var(--tint) 55%, transparent);
 }
 .bd {
-  margin-bottom: 18px;
+  margin-bottom: 1.2rem;
 }
 .bd-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 0.5333rem;
 }
 .bd-head h2 {
-  font-size: 14px;
+  font-size: 0.9333rem;
   font-weight: 650;
 }
 .bd-none {
   color: var(--smuted);
-  font-size: 13px;
+  font-size: 0.8667rem;
 }
 .bd-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 0.8667rem;
 }
 .bd-table th,
 .bd-table td {
-  padding: 6px 8px;
+  padding: 0.4rem 0.5333rem;
   text-align: left;
   border-bottom: 1px solid var(--sborder2);
 }
 .bd-table th {
   color: var(--smuted);
   font-weight: 500;
-  font-size: 12px;
+  font-size: 0.8rem;
 }
 .bd-table .num {
   text-align: right;
@@ -300,9 +300,9 @@ const share = (usd: number): string =>
 .bd-model .bar {
   position: absolute;
   left: 0;
-  top: 4px;
-  bottom: 4px;
-  border-radius: 3px;
+  top: 0.2667rem;
+  bottom: 0.2667rem;
+  border-radius: 0.2rem;
   background: color-mix(in srgb, var(--p-pollo) 15%, transparent);
 }
 .bd-name {
@@ -311,9 +311,9 @@ const share = (usd: number): string =>
 /* One pastel per kind of thing bought, from the provider palette */
 .kpill {
   display: inline-block;
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: 11px;
+  padding: 1px 0.5333rem;
+  border-radius: 66.6rem;
+  font-size: 0.8rem;
   text-transform: capitalize;
   color: var(--k);
   background: color-mix(in srgb, var(--k) 15%, transparent);

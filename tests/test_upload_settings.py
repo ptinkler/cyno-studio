@@ -415,10 +415,10 @@ class TestServedCheck:
         monkeypatch.setattr(image_hosts, "_upload_to_tmpfiles", stub(lambda: "https://tmp/x.mp4"))
         monkeypatch.setattr(image_hosts, "_upload_to_litterbox", stub(lambda: "https://litter/x.mp4"))
 
-        def get(url: str, **kw: object) -> _Reply:
+        def get(_client: object, url: str, **kw: object) -> _Reply:
             return _served(content_type="text/html" if "tmp/" in url else "video/mp4")
 
-        monkeypatch.setattr(image_hosts.requests, "get", get)
+        monkeypatch.setattr(image_hosts.net_guard, "get_public", get)
         prefs = _prefs("tmpfiles", "litterbox")
         assert image_hosts.upload_file(f, prefs) == "https://litter/x.mp4"
 
@@ -429,10 +429,10 @@ class TestServedCheck:
         f.write_bytes(b"v")
         monkeypatch.setattr(image_hosts, "_upload_to_tmpfiles", stub(lambda: "https://tmp/x.mp4"))
 
-        def boom(url: str, **kw: object) -> NoReturn:
+        def boom(_client: object, url: str, **kw: object) -> NoReturn:
             raise NoRouteError
 
-        monkeypatch.setattr(image_hosts.requests, "get", boom)
+        monkeypatch.setattr(image_hosts.net_guard, "get_public", boom)
         prefs = _prefs("tmpfiles", None)
         with pytest.raises(ValueError, match="All upload hosts failed"):
             image_hosts.upload_file(f, prefs)
@@ -443,7 +443,7 @@ class TestServedCheck:
         f = tmp_path / "clip.mp4"
         f.write_bytes(b"v")
         monkeypatch.setattr(image_hosts, "_upload_to_tmpfiles", stub(lambda: "https://tmp/x.mp4"))
-        monkeypatch.setattr(image_hosts.requests, "get", stub(lambda: _served(206, "application/octet-stream")))
+        monkeypatch.setattr(image_hosts.net_guard, "get_public", stub(lambda: _served(206, "application/octet-stream")))
         prefs = _prefs("tmpfiles", None)
         assert image_hosts.upload_file(f, prefs) == "https://tmp/x.mp4"
 
@@ -454,11 +454,11 @@ class TestServedCheck:
         f.write_bytes(b"v")
         calls: list[str] = []
 
-        def get(url: str, **kw: object) -> _Reply:
+        def get(_client: object, url: str, **kw: object) -> _Reply:
             calls.append(url)
             return _served()
 
-        monkeypatch.setattr(image_hosts.requests, "get", get)
+        monkeypatch.setattr(image_hosts.net_guard, "get_public", get)
         # patch where image_hosts looks the name up, not where it is defined
         monkeypatch.setattr(image_hosts, "selfhost_url", stub(lambda: "https://my.box/t"))
         prefs = _prefs("selfhost", None, selfhost_base="https://my.box")
