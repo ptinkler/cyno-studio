@@ -242,7 +242,7 @@ class TestCacheLifetimeAndRecheck:
         (good_until,) = image_hosts.cached_url_expiries()
         assert good_until <= time.time() + 60 * 60
 
-    def test_tmpfiles_retry_reuses_upload_with_a_fresh_download_link(
+    def test_tmpfiles_retry_reuses_upload_with_a_freshdownload_link(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """The dl/ link is signed for ~5 min: each hand-out derives a new one, without re-uploading."""
@@ -548,3 +548,30 @@ class TestApi:
 def _app() -> FastAPI:
     """The application under test."""
     return api_mod.app
+
+
+class TestTmpfilesPage:
+    """Reading the direct link off tmpfiles.org's file page."""
+
+    def test_the_download_button_is_the_link(self) -> None:
+        """An anchor with the `download` class, among others."""
+        html = '<a href="/x">home</a><a class="btn download" href="https://tmpfiles.org/dl/1/a.png">Download</a>'
+        assert image_hosts.download_link(html) == "https://tmpfiles.org/dl/1/a.png"
+
+    def test_the_preview_image_is_the_fallback(self) -> None:
+        """No download button: the picture's own source."""
+        html = '<div><img id="img_preview" src="https://tmpfiles.org/dl/1/a.png"></div>'
+        assert image_hosts.download_link(html) == "https://tmpfiles.org/dl/1/a.png"
+
+    def test_the_button_wins_over_the_image(self) -> None:
+        """Both present: the button, as before."""
+        html = '<img id="img_preview" src="/img"><a class="download" href="/btn">x</a>'
+        assert image_hosts.download_link(html) == "/btn"
+
+    def test_a_similar_class_is_not_the_button(self) -> None:
+        """`downloads` is a different class."""
+        assert image_hosts.download_link('<a class="downloads" href="/no">x</a>') is None
+
+    def test_a_page_with_neither_has_no_link(self) -> None:
+        """Nothing to find."""
+        assert image_hosts.download_link("<html><body>Not found</body></html>") is None
