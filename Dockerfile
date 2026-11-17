@@ -14,11 +14,9 @@ FROM mirror.gcr.io/library/python:3.15-slim
 # Links the GHCR package to this repo (so it inherits the repo's visibility and access)
 LABEL org.opencontainers.image.source="https://github.com/ptinkler/cyno-studio"
 
-# System deps for opencv (cv2)
+# Security updates for the base image's own packages (opencv-python-headless needs no system libraries)
 RUN apt-get update && \
     apt-get upgrade -y && \
-    apt-get install -y --no-install-recommends \
-        libgl1 libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1 && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

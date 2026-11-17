@@ -8,22 +8,18 @@ dependencies = [
     "anyio",
     "argon2-cffi",
     "Authlib",
-    "beautifulsoup4",
     "cryptography",
     "fastapi",
-    "httpx",  # Authlib's Starlette client needs it; our own code uses httpx2
     "httpx2",
-    "itsdangerous",
-    "openai",
-    "opencv-python",
+    "itsdangerous",  # starlette's SessionMiddleware imports it
+    "opencv-python-headless",  # no GUI libraries: only video length and first frame are needed
     "Pillow",
-    "pip-system-certs",
     "pydantic",
     "python-dotenv",
-    "python-multipart",
+    "python-multipart",  # FastAPI needs it for UploadFile / Form
     "SQLAlchemy",
     "starlette",
-    "uvicorn[standard]",
+    "uvicorn",
 ]
 
 [dependency-groups]
