@@ -139,7 +139,7 @@ jobs:
       # nothing with a fixable HIGH/CRITICAL vulnerability is published. Unfixed findings are ignored
       # (nothing to upgrade to), so a base-image advisory without a patch doesn't block a release.
       - name: Build app image
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           load: true
@@ -156,7 +156,7 @@ jobs:
           exit-code: "1"
 
       - name: Build nginx image
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: nginx/Dockerfile
@@ -225,7 +225,7 @@ jobs:
 
       # The images were built and scanned by the docker job on this same commit; this rebuilds them from its cache
       - name: Push app image
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           push: true
@@ -235,7 +235,7 @@ jobs:
             ${{ env.IMAGE_APP }}:${{ steps.tag.outputs.version }}
 
       - name: Push nginx image
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: nginx/Dockerfile
