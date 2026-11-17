@@ -305,8 +305,7 @@ async function start(): Promise<void> {
         Import of {{ job.file }} failed: {{ job.error }}
       </div>
       <div v-else-if="job && finished" class="result">
-        <strong>{{ job.file }}</strong
-        >: {{ job.new }} new, {{ job.updated }} updated, {{ job.unchanged }} unchanged
+        <strong>{{ job.file }}</strong>: {{ job.new }} new, {{ job.updated }} updated, {{ job.unchanged }} unchanged
         <template v-if="job.deleted">, {{ job.deleted }} deleted here (skipped)</template>. {{ job.images }} images
         copied<template v-if="job.missing_images">, {{ job.missing_images }} not in the export</template>.
         <ul v-if="job.failed?.length" class="failed">
