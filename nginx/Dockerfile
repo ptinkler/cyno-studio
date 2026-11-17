@@ -1,4 +1,4 @@
-FROM mirror.gcr.io/library/node:24-alpine AS frontend-builder
+FROM mirror.gcr.io/library/node:26-alpine AS frontend-builder
 WORKDIR /build/src/js
 COPY src/js/package.json src/js/package-lock.json ./
 RUN npm ci
