@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { ref, reactive, onMounted } from 'vue'
 import { fetchUserKeys, saveUserKeys, KEY_PROVIDERS } from '../../composables/useAccount'
 
@@ -60,7 +61,7 @@ onMounted(load)
           :placeholder="keys[p.id]?.set ? 'Enter a new key to replace' : 'Paste key'"
           @input="onType(p.id, $event)"
         />
-        <button v-if="keys[p.id]?.set" class="btn btn-sm" title="Clear this key" @click="drafts[p.id] = ''">
+        <button v-if="keys[p.id]?.set" v-tip="'Clear this key'" class="btn btn-sm" @click="drafts[p.id] = ''">
           Clear
         </button>
       </div>

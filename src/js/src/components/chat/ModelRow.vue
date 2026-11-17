@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { computed } from 'vue'
 import ModelBadge from './ModelBadge.vue'
 import type { Model, ModelKind } from '../../composables/chatModelsApi'
@@ -34,13 +35,9 @@ const provider = computed(() => providerOf(props.model?.id))
   >
     <span class="item-row">
       <span class="item-name">{{ none ? 'None' : model?.name }}</span>
-      <span
-        v-if="showProvider && !none"
-        class="row-provider"
-        :class="provider"
-        :title="ALL_PROVIDERS[provider].title"
-        >{{ ALL_PROVIDERS[provider].label }}</span
-      >
+      <span v-if="showProvider && !none" v-tip="ALL_PROVIDERS[provider].title" class="row-provider" :class="provider">{{
+        ALL_PROVIDERS[provider].label
+      }}</span>
       <span v-if="!none" class="item-badges" :class="{ collapsed: badges.length > MAX_INLINE_BADGES }">
         <!-- Long lists fold into coloured dots; hovering unfolds the labels -->
         <span v-if="badges.length > MAX_INLINE_BADGES" class="badge-dots" aria-hidden="true">
@@ -53,10 +50,10 @@ const provider = computed(() => providerOf(props.model?.id))
       </span>
       <button
         v-if="!none"
+        v-tip="favourite ? 'Remove from favourites' : 'Add to favourites'"
         type="button"
         class="star"
         :class="{ on: favourite }"
-        :title="favourite ? 'Remove from favourites' : 'Add to favourites'"
         :aria-pressed="favourite"
         @click.stop="emit('toggle-favourite')"
         @keydown.enter.stop

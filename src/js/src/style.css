@@ -653,3 +653,21 @@ label:has(> input[type='radio']) {
   transform: translateY(-10px);
   opacity: 0;
 }
+
+/* The shared bubble behind `v-tip` (see directives/tip.ts) */
+.tip-bubble {
+  position: fixed;
+  z-index: var(--z-popover);
+  max-width: 18rem;
+  padding: 0.4rem 0.6667rem;
+  background: var(--spanel2);
+  border: 1px solid var(--sborder);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-pop);
+  color: var(--sfg);
+  font-size: 0.8rem;
+  pointer-events: none;
+}
+.tip-bubble[hidden] {
+  display: none;
+}

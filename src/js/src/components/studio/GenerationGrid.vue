@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { computed, ref } from 'vue'
 import type { GenerationItem } from '../../composables/studioTypes'
 import { reloadImageLater } from '../../utils/imageRetry'
@@ -67,9 +68,9 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
         </div>
         <button
           v-if="favFilter"
+          v-tip="'Favourites only'"
           class="gfav"
           :class="{ on: favOnly }"
-          title="Favourites only"
           aria-label="Favourites only"
           @click="favOnly = !favOnly"
         >
@@ -90,9 +91,9 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
       <div
         v-for="(item, i) in shown"
         :key="item.id + '-' + i"
+        v-tip="item.prompt || item.file || undefined"
         class="cell"
         :class="item.status"
-        :title="item.prompt || item.file || undefined"
       >
         <div v-if="item.status === 'pending'" class="thumb state pending">
           <div class="spinner"></div>
@@ -101,9 +102,9 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
         </div>
         <button
           v-else-if="item.status === 'error'"
+          v-tip="'Failed: open for details'"
           type="button"
           class="thumb state errored"
-          title="Failed: open for details"
           @click="emit('open', item)"
         >
           <div class="slabel">{{ item.moderated ? 'Blocked' : 'Failed' }}</div>
@@ -123,9 +124,10 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
             <span v-if="item.kind === 'video'" class="vtag">▶</span>
           </a>
           <button
+            v-tip="item.favourite ? 'Unfavourite' : 'Favourite'"
             class="fav"
             :class="{ on: item.favourite }"
-            :title="item.favourite ? 'Unfavourite' : 'Favourite'"
+            :aria-label="item.favourite ? 'Unfavourite' : 'Favourite'"
             @click.stop="emit('favourite', item)"
           >
             <svg class="ic"><use href="#s-star" /></svg>

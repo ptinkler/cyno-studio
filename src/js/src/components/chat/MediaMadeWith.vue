@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { computed, ref, watch } from 'vue'
 import type { MediaCard } from '../../composables/chatConversationsApi'
 import { refUrl, refsLabel, refsTitle } from '../../utils/cardSpecs'
@@ -39,7 +40,7 @@ function showRefs(event: Event, shown: CardParams): void {
 </script>
 
 <template>
-  <div class="foot-info" :title="[item.model, ...specs].join(' · ')">
+  <div v-tip="[item.model, ...specs].join(' · ')" class="foot-info">
     <span class="foot-model">
       <svg class="ic sm"><use :href="KIND_ICON[item.kind] || '#s-film'" /></svg>{{ shortModel(item.model) }}
     </span>
@@ -78,7 +79,7 @@ function showRefs(event: Event, shown: CardParams): void {
       </div>
       <div class="refs-peek-grid">
         <template v-for="(r, i) in refsPeek.params.refs" :key="r">
-          <div v-if="refMissing(r)" class="ref-gone" title="Image unavailable">
+          <div v-if="refMissing(r)" v-tip="'Image unavailable'" class="ref-gone">
             <svg class="ic"><use href="#s-image" /></svg>
           </div>
           <img

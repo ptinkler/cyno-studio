@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { ref, computed, onMounted } from 'vue'
 import { fetchUserKeys } from '../../composables/useAccount'
 import { fetchSpendBreakdown } from '../../composables/useChat'
@@ -98,7 +99,12 @@ const share = (usd: number): string =>
       <div class="phead">
         <h1>Credit usage</h1>
         <div class="hactions">
-          <button class="btn btn-icon" title="Refresh balances" aria-label="Refresh balances" @click="emit('refresh')">
+          <button
+            v-tip="'Refresh balances'"
+            class="btn btn-icon"
+            aria-label="Refresh balances"
+            @click="emit('refresh')"
+          >
             <svg class="ic"><use href="#s-refresh" /></svg>
           </button>
           <button class="btn" @click="emit('close')">

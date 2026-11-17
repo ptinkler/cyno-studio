@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useFocusTrap } from '../../composables/useFocusTrap'
 import type { GenerationItem, ImagePick } from '../../composables/studioTypes'
@@ -66,7 +67,7 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <div v-if="item" class="gm-back studio" :data-theme="theme || undefined" @click="emit('close')">
       <div ref="card" class="gm-card" role="dialog" aria-modal="true" aria-label="Generation" @click.stop>
-        <button class="gm-x" title="Close" aria-label="Close" @click="emit('close')">×</button>
+        <button v-tip="'Close'" class="gm-x" aria-label="Close" @click="emit('close')">×</button>
 
         <div class="gm-layout">
           <div class="gm-media" :class="{ 'is-error': isError }">
@@ -115,26 +116,40 @@ onBeforeUnmount(() => {
               <div class="gm-icons">
                 <button
                   v-if="!isError"
+                  v-tip="item.favourite ? 'Unfavourite' : 'Favourite'"
                   class="gm-btn icon"
                   :class="{ on: item.favourite }"
-                  :title="item.favourite ? 'Unfavourite' : 'Favourite'"
+                  :aria-label="item.favourite ? 'Unfavourite' : 'Favourite'"
                   @click="emit('favourite', item)"
                 >
                   <svg class="ic"><use href="#s-star" /></svg>
                 </button>
-                <a v-if="!isError" class="gm-btn icon" title="Download" :href="item.url" :download="item.file">
+                <a
+                  v-if="!isError"
+                  v-tip="'Download'"
+                  class="gm-btn icon"
+                  :href="item.url"
+                  :download="item.file"
+                  aria-label="Download"
+                >
                   <svg class="ic"><use href="#s-download" /></svg>
                 </a>
                 <button
                   v-if="canManage"
+                  v-tip="'Delete'"
                   class="gm-btn icon danger"
-                  title="Delete"
                   aria-label="Delete"
                   @click="emit('delete', item)"
                 >
                   <svg class="ic"><use href="#s-trash" /></svg>
                 </button>
-                <button v-if="item.request" class="gm-btn icon req" title="View request" @click="requestOpen = true">
+                <button
+                  v-if="item.request"
+                  v-tip="'View request'"
+                  class="gm-btn icon req"
+                  aria-label="View request"
+                  @click="requestOpen = true"
+                >
                   { }
                 </button>
               </div>
@@ -142,8 +157,8 @@ onBeforeUnmount(() => {
                 <!-- Only a picture can start another picture, a video or a character -->
                 <template v-if="!isError && item.kind === 'image'">
                   <button
+                    v-tip="'Use in Image mode'"
                     class="gm-btn"
-                    title="Use in Image mode"
                     @click="
                       emit('use-image', { file: item.file, mode: 'image', conversation_id: item.conversation_id })
                     "
@@ -151,19 +166,19 @@ onBeforeUnmount(() => {
                     <svg class="ic"><use href="#s-image" /></svg>Edit
                   </button>
                   <button
+                    v-tip="'Use in Video mode'"
                     class="gm-btn"
-                    title="Use in Video mode"
                     @click="
                       emit('use-image', { file: item.file, mode: 'video', conversation_id: item.conversation_id })
                     "
                   >
                     <svg class="ic"><use href="#s-film" /></svg>Animate
                   </button>
-                  <button class="gm-btn" title="Make character" @click="emit('make-character', item)">
+                  <button v-tip="'Make character'" class="gm-btn" @click="emit('make-character', item)">
                     <svg class="ic"><use href="#s-user" /></svg>Character
                   </button>
                 </template>
-                <button v-if="canManage" class="gm-btn" title="Reuse settings" @click="emit('use-settings', item)">
+                <button v-if="canManage" v-tip="'Reuse settings'" class="gm-btn" @click="emit('use-settings', item)">
                   <svg class="ic"><use href="#s-cog" /></svg>Settings
                 </button>
                 <button v-if="canManage" class="gm-btn" :class="{ primary: isError }" @click="emit('regenerate', item)">

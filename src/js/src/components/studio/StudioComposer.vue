@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { ref, computed } from 'vue'
 import type { CreditEstimate } from '../../composables/useStudioPrompt'
 import type { Attachment } from '../../composables/useChatAttachments'
@@ -156,7 +157,15 @@ defineExpose({ focusPrompt })
           </button>
         </div>
         <div v-if="refsActive && refItems.length" class="atwrap">
-          <button class="clip at" title="Mention a reference" @mousedown.prevent @click="toggleMentionMenu">@</button>
+          <button
+            v-tip="'Mention a reference'"
+            class="clip at"
+            aria-label="Mention a reference"
+            @mousedown.prevent
+            @click="toggleMentionMenu"
+          >
+            @
+          </button>
           <div v-if="atMenu" class="atmenu" @mouseleave="atMenu = false">
             <button v-for="r in refItems" :key="r.key" @click="insertMention(r)">
               <img v-if="r.type === 'image'" :src="r.preview ?? undefined" alt="" />
@@ -166,8 +175,8 @@ defineExpose({ focusPrompt })
         </div>
         <button
           v-if="!mediaMode && mode !== 'audio'"
+          v-tip="'Add images'"
           class="clip"
-          title="Add images"
           aria-label="Add images"
           @click="emit('library')"
         >
@@ -186,12 +195,12 @@ defineExpose({ focusPrompt })
         <span class="note">{{ uploading ? 'Uploading…' : '' }}</span>
         <span
           v-if="estimate && (mediaMode || mode === 'audio')"
-          class="est"
-          :title="
+          v-tip="
             estimate.full_credits > estimate.credits
               ? `Pollo's estimate: ${estimate.credits} credits (${estimate.full_credits} before discount)`
               : `Pollo's estimate: ${estimate.credits} credits`
           "
+          class="est"
           >≈ {{ fmtCost(creditsToUsd(estimate.credits)) }}</span
         >
         <button class="sendbtn" :disabled="!canSend" @click="emit('send')">{{ sending ? 'Sending…' : 'Send' }}</button>

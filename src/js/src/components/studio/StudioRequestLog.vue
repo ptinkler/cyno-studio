@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { ref, computed, onMounted, inject } from 'vue'
 import { showToastKey, noToast } from '../../injection'
 import { fetchRequestLog } from '../../composables/chatFilesApi'
@@ -77,7 +78,7 @@ onMounted(load)
           <span class="provider">{{ e.provider }}</span>
           <span class="path">{{ e.path }}</span>
           <span class="model">{{ e.model }}</span>
-          <span v-if="flagged(e)" class="flag" :title="JSON.stringify(e.flags)">⚑ flagged</span>
+          <span v-if="flagged(e)" v-tip="JSON.stringify(e.flags)" class="flag">⚑ flagged</span>
           <span class="secs">{{ e.seconds != null ? `${e.seconds}s` : '' }}</span>
         </button>
         <p v-if="e.error" class="err">{{ e.error }}</p>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { ref, computed, watch, nextTick, inject } from 'vue'
 import { showToastKey, noToast } from '../../injection'
 import MediaPicker from '../media/MediaPicker.vue'
@@ -220,7 +221,7 @@ async function remove(): Promise<void> {
     @close="emit('close')"
   >
     <template #head>
-      <span v-if="character?.adhoc || (isNew && conversationId)" class="tag" title="Only in this chat until saved"
+      <span v-if="character?.adhoc || (isNew && conversationId)" v-tip="'Only in this chat until saved'" class="tag"
         >this chat only</span
       >
     </template>
@@ -247,10 +248,10 @@ async function remove(): Promise<void> {
       <div
         v-for="(img, i) in images"
         :key="img.key"
+        v-tip="'Drag to reorder'"
         class="img"
         :class="{ main: i === 0, pending: img.kind !== 'saved', dragging: dragFrom === i }"
         draggable="true"
-        title="Drag to reorder"
         @dragstart="onDragStart($event, i)"
         @dragend="dragFrom = null"
         @dragover.prevent
@@ -259,11 +260,19 @@ async function remove(): Promise<void> {
         <img :src="imageUrl(img)" alt="" draggable="false" />
         <span v-if="i === 0" class="main-tag">main</span>
         <span v-else class="pos-tag">{{ i + 1 }}</span>
-        <button v-if="i > 0" class="img-btn star" title="Make this the main image" @click="moveImage(i, 0)">★</button>
-        <button class="img-btn x-btn" title="Remove" @click="removeImage(img)">✕</button>
+        <button
+          v-if="i > 0"
+          v-tip="'Make this the main image'"
+          class="img-btn star"
+          aria-label="Make this the main image"
+          @click="moveImage(i, 0)"
+        >
+          ★
+        </button>
+        <button v-tip="'Remove'" class="img-btn x-btn" aria-label="Remove" @click="removeImage(img)">✕</button>
       </div>
       <template v-if="total < MAX_IMAGES">
-        <label class="img add" title="Upload images">
+        <label v-tip="'Upload images'" class="img add">
           ＋
           <span class="add-label">Upload</span>
           <input
@@ -274,7 +283,7 @@ async function remove(): Promise<void> {
             @change="addFiles(takeFiles($event))"
           />
         </label>
-        <button type="button" class="img add" title="Choose from Media" @click="pickerOpen = true">
+        <button v-tip="'Choose from Media'" type="button" class="img add" @click="pickerOpen = true">
           🗂
           <span class="add-label">Library</span>
         </button>
@@ -293,7 +302,7 @@ async function remove(): Promise<void> {
 
     <template #actions>
       <button v-if="character" class="btn btn-danger" @click="remove">Delete</button>
-      <button v-if="character?.adhoc" class="btn btn-secondary" title="Save for every chat" @click="promote">
+      <button v-if="character?.adhoc" v-tip="'Save for every chat'" class="btn btn-secondary" @click="promote">
         ⭐ Save to characters
       </button>
       <span class="spacer"></span>

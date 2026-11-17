@@ -197,7 +197,7 @@ describe('InstructionPicker', () => {
     })
     const inherited = w.findAll('.chip.inherited')
     expect(inherited.map(c => c.find('.chip-name').text())).toEqual(['📦 House style', 'Terse tone'])
-    expect(inherited[1]?.attributes('title')).toContain('From the Novel defaults')
+    expect(inherited[1]?.attributes('data-tip')).toContain('From the Novel defaults')
     await inherited[1]?.find('.chip-x').trigger('click')
     expect(w.emitted('hide')).toEqual([[{ kind: 'snippet', id: 1 }]])
     // The hidden one is offered to switch back on, not to attach as the chat's own

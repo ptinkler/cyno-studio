@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useFocusTrap } from '../../composables/useFocusTrap'
 import { RouterLink } from 'vue-router'
@@ -42,7 +43,7 @@ onBeforeUnmount(() => {
           <RouterLink class="btn btn-sm" :to="{ name: 'studio-requests' }" @click="emit('close')"
             >All requests</RouterLink
           >
-          <button class="iconbtn x" title="Close" @click="emit('close')">✕</button>
+          <button v-tip="'Close'" class="iconbtn x" aria-label="Close" @click="emit('close')">✕</button>
         </div>
         <p v-if="error" class="req-error">{{ error }}</p>
         <div class="req-body">

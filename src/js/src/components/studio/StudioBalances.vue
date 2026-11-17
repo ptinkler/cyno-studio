@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { computed, ref } from 'vue'
 import type { Balances, Spend, UiMessage } from '../../composables/studioTypes'
 import { shortModel, fmtCost, creditsToUsd } from '../../utils/format'
@@ -55,7 +56,7 @@ const byModel = computed(() => {
 
 <template>
   <div class="bals">
-    <button v-if="label" class="bseg spent" title="Thread spend" @click="open = !open">
+    <button v-if="label" v-tip="'Thread spend'" class="bseg spent" @click="open = !open">
       Spent <b>{{ label }}</b>
     </button>
     <InfoTip v-for="p in pills" :key="p.id" :text="`${p.tip} — click for usage`" :focusable="false" :toggle="false">

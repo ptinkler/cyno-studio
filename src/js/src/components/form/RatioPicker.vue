@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 withDefaults(defineProps<{ modelValue?: string; ratios: readonly string[] }>(), { modelValue: '' })
 
 const emit = defineEmits<{ 'update:modelValue': [ratio: string] }>()
@@ -27,9 +28,9 @@ function getIconSize(ratio: string): { width: string; height: string } {
     <button
       v-for="ratio in ratios"
       :key="ratio"
+      v-tip="ratio"
       type="button"
       :class="['ratio-btn', { active: modelValue === ratio }]"
-      :title="ratio"
       @click="selectRatio(ratio)"
     >
       <div class="ratio-icon" :style="getIconSize(ratio)"></div>

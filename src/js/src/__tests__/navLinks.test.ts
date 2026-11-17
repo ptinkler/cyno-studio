@@ -29,7 +29,7 @@ const sidebar = (threads: ConversationSummary[] = [thread({ id: 't1', title: 'A 
 const hrefOf = (w: Pick<VueWrapper, 'findAll'>, text: string) =>
   w
     .findAll('a')
-    .find(a => a.text().trim() === text || a.attributes('title') === text)
+    .find(a => a.text().trim() === text || a.attributes('data-tip') === text)
     ?.attributes('href')
 
 describe('sidebar navigation is linkable', () => {
@@ -62,7 +62,7 @@ describe('sidebar navigation is linkable', () => {
   it('a space row links to that space', () => {
     const w = sidebar()
     expect(w.find('a.fmain').attributes('href')).toBe('/space/3')
-    expect(w.findAll('.folder .nact').map(button => button.attributes('title'))).toEqual([
+    expect(w.findAll('.folder .nact').map(button => button.attributes('data-tip'))).toEqual([
       'Rename',
       'Space defaults',
       'Delete',
@@ -77,7 +77,7 @@ describe('sidebar navigation is linkable', () => {
     const row = thread({ id: 't1', title: 'A thread' })
     const w = sidebar([row])
 
-    expect(w.findAll('.nrow .nact').map(button => button.attributes('title'))).toEqual(['Rename', 'Pin', 'Delete'])
+    expect(w.findAll('.nrow .nact').map(button => button.attributes('data-tip'))).toEqual(['Rename', 'Pin', 'Delete'])
     expect(w.find('button[aria-label="Pin chat"]').exists()).toBe(true)
     expect(w.find('button[aria-label="Delete chat"]').exists()).toBe(true)
     await w.find('button[aria-label="Pin chat"]').trigger('click')
@@ -92,7 +92,7 @@ describe('sidebar navigation is linkable', () => {
 
   it('shows explicit confirm and cancel actions while renaming a chat', async () => {
     const w = sidebar()
-    await w.find('.nrow button[title="Rename"]').trigger('click')
+    await w.find('.nrow button[data-tip="Rename"]').trigger('click')
 
     await w.find('input.nrename').setValue('Renamed')
     await w.find('button[aria-label="Confirm rename"]').trigger('click')
@@ -218,6 +218,6 @@ describe('a failed card suggests one action, not three', () => {
     const primary = w.findAll('.retry-btn.primary')
     expect(primary).toHaveLength(1)
     expect(primary[0]?.text()).toBe('Try again')
-    expect(w.find('button[title="Retry with a new prompt"]').classes()).not.toContain('primary')
+    expect(w.find('button[data-tip="Retry with a new prompt"]').classes()).not.toContain('primary')
   })
 })

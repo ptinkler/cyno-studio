@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import type { Character } from '../../composables/charactersApi'
 import type { Catalogues } from '../../composables/useComposerSettings'
 import type {
@@ -47,9 +48,9 @@ defineEmits<{
   <aside class="side" :class="{ collapsed }">
     <!-- The collapsed rail expands on click. -->
     <button
+      v-tip="'Expand inspector'"
       class="rail"
       type="button"
-      title="Expand inspector"
       aria-label="Expand inspector"
       @click="$emit('update:collapsed', false)"
     >
@@ -57,7 +58,7 @@ defineEmits<{
       <span class="rail-label">Inspector</span>
     </button>
     <div class="panel">
-      <button class="panelhead" type="button" title="Collapse inspector" @click="$emit('update:collapsed', true)">
+      <button v-tip="'Collapse inspector'" class="panelhead" type="button" @click="$emit('update:collapsed', true)">
         <span class="brand">Inspector</span>
         <svg class="ic"><use href="#s-chev" /></svg>
       </button>

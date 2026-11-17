@@ -119,7 +119,7 @@ describe('RatioPicker', () => {
       props: { modelValue: '16:9', ratios: ['16:9', '9:16', '1:1'] },
     })
     const active = wrapper.find('.ratio-btn.active')
-    expect(active.attributes('title')).toBe('16:9')
+    expect(active.attributes('data-tip')).toBe('16:9')
   })
 
   it('emits on click', async () => {

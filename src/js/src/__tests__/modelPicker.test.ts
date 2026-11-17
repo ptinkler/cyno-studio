@@ -102,14 +102,14 @@ describe('ChatMessage user actions', () => {
 
   it('Retry emits resend without opening the editor', async () => {
     const w = mount(ChatMessage, { props: { message: msg, convId: 'c1', canEdit: true } })
-    await w.find('button[title^="Resend"]').trigger('click')
+    await w.find('button[data-tip^="Resend"]').trigger('click')
     expect(w.emitted('resend')).toHaveLength(1)
     expect(w.find('.edit-box').exists()).toBe(false)
   })
 
   it('hides Edit and Retry while a reply is streaming, but keeps Copy', () => {
     const w = mount(ChatMessage, { props: { message: msg, convId: 'c1', canEdit: false } })
-    const labels = w.findAll('.user-actions button').map(b => b.attributes('title'))
+    const labels = w.findAll('.user-actions button').map(b => b.attributes('data-tip'))
     expect(labels).toEqual(['Copy prompt'])
   })
 
@@ -117,10 +117,10 @@ describe('ChatMessage user actions', () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
     const w = mount(ChatMessage, { props: { message: msg, convId: 'c1', canEdit: true } })
-    await w.find('button[title="Copy prompt"]').trigger('click')
+    await w.find('button[data-tip="Copy prompt"]').trigger('click')
     await flushPromises()
     expect(writeText).toHaveBeenCalledWith('hello')
-    expect(w.find('button[title="Copy prompt"] use').attributes('href')).toBe('#s-check')
+    expect(w.find('button[data-tip="Copy prompt"] use').attributes('href')).toBe('#s-check')
   })
 
   it('media caption copies the prompt sent to the image model', async () => {
@@ -144,7 +144,7 @@ describe('ChatMessage user actions', () => {
       ],
     })
     const w = mount(ChatMessage, { props: { message: reply, convId: 'c1' } })
-    const copy = () => w.find('button[title^="Copy prompt"]')
+    const copy = () => w.find('button[data-tip^="Copy prompt"]')
     await copy().trigger('click')
     await flushPromises()
     expect(writeText).toHaveBeenCalledWith('a red fox, dusk')
@@ -223,7 +223,7 @@ describe('Media note lines in replies', () => {
     })
     expect(w.find('.markdown').exists()).toBe(false)
     expect(w.find('.media-item img').exists()).toBe(true)
-    expect(w.find('.text-bar button[title="Copy reply"]').exists()).toBe(false)
+    expect(w.find('.text-bar button[data-tip="Copy reply"]').exists()).toBe(false)
   })
 
   it('keeps the story and drops only the note lines', async () => {
@@ -498,7 +498,7 @@ describe('ModelPicker prices', () => {
     })
     await vid.find('.picker-btn').trigger('click')
     const badge = vid.findAll('.item-badge').find(b => b.text() === '$0.65')
-    expect(badge?.attributes('title')).toContain('5s · 720p')
+    expect(badge?.attributes('data-tip')).toContain('5s · 720p')
     vid.unmount()
   })
 })
@@ -556,7 +556,7 @@ describe('ModelPicker hidden models', () => {
     await w.find('.show-hidden input').setValue(true)
     expect(modelNames(w)).toEqual(['Pollo: Seedream 5.0 Lite', 'Pollo: Seedream 5.0 Pro'])
     const badge = w.findAll('.item-badge').find(b => b.text() === 'hidden')
-    expect(badge?.attributes('title')).toContain('403')
+    expect(badge?.attributes('data-tip')).toContain('403')
     w.unmount()
   })
 

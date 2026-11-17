@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import SidebarSpaceFolder from './SidebarSpaceFolder.vue'
 import SidebarThreadRow from './SidebarThreadRow.vue'
 import { ref, computed } from 'vue'
@@ -114,9 +115,9 @@ const bySpace = computed(() => {
 <template>
   <aside class="side" :class="{ collapsed }">
     <button
+      v-tip="'Expand sidebar'"
       class="rail"
       type="button"
-      title="Expand sidebar"
       aria-label="Expand sidebar"
       @click="emit('update:collapsed', false)"
     >
@@ -127,9 +128,9 @@ const bySpace = computed(() => {
     </button>
     <div class="panel">
       <button
+        v-tip="'Collapse sidebar'"
         class="panelhead"
         type="button"
-        title="Collapse sidebar"
         aria-label="Collapse sidebar"
         @click="emit('update:collapsed', true)"
       >
@@ -168,10 +169,11 @@ const bySpace = computed(() => {
             Gallery
           </button>
           <a
+            v-tip="'Favourites'"
             class="pillbtn ficon"
             :class="{ on: filter === 'favourites' }"
-            title="Favourites"
             href="/favourites"
+            aria-label="Favourites"
             @click.prevent="emit('update:filter', 'favourites')"
           >
             <svg class="ic"><use href="#s-star" /></svg>
@@ -226,7 +228,7 @@ const bySpace = computed(() => {
             <svg class="ic sm"><use href="#s-chev" /></svg>
             <span>Spaces</span>
           </button>
-          <button class="addspace" title="New space" aria-label="New space" @click="emit('add-space')">
+          <button v-tip="'New space'" class="addspace" aria-label="New space" @click="emit('add-space')">
             <svg class="ic sm"><use href="#s-plus" /></svg>
           </button>
         </div>

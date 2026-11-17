@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import type { ProviderFacet, TagFacet } from '../../composables/useModelList'
 import type { Provider } from '../../composables/modelTags'
 
@@ -31,7 +32,7 @@ const showHidden = defineModel<boolean>('showHidden', { default: false })
   <div class="fpanel" role="group" aria-label="Filters" @mousedown.stop>
     <template v-if="props.providers.length">
       <div class="fhead">Provider</div>
-      <label v-for="p in props.providers" :key="p.id" class="frow provider" :title="p.title">
+      <label v-for="p in props.providers" :key="p.id" v-tip="p.title" class="frow provider">
         <input type="checkbox" :checked="props.selProviders.includes(p.id)" @change="$emit('toggle-provider', p.id)" />
         <span class="flabel"
           ><span class="fpill" :style="{ '--b': p.color }">{{ p.label }}</span></span
@@ -54,12 +55,12 @@ const showHidden = defineModel<boolean>('showHidden', { default: false })
 
     <template v-if="uncensoredCount || hiddenCount">
       <div class="fsep"></div>
-      <label v-if="uncensoredCount" class="frow uncensored-only" title="Uncensored only">
+      <label v-if="uncensoredCount" v-tip="'Uncensored only'" class="frow uncensored-only">
         <input v-model="uncensoredOnly" type="checkbox" />
         <span class="flabel">Uncensored only</span>
         <span class="fn">{{ uncensoredCount }}</span>
       </label>
-      <label v-if="hiddenCount" class="frow show-hidden" title="Not enabled for this key, or retired">
+      <label v-if="hiddenCount" v-tip="'Not enabled for this key, or retired'" class="frow show-hidden">
         <input v-model="showHidden" type="checkbox" />
         <span class="flabel">Show hidden models</span>
         <span class="fn">{{ hiddenCount }}</span>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import type { Generation } from '../../composables/chatFilesApi'
 import { chatMediaUrl, chatMediaPreviewUrl } from '../../composables/useChat'
@@ -54,7 +55,7 @@ function label(entry: Generation): string {
         {{ pending ? `${pending} generating` : 'Generations' }}
       </span>
       <span class="qcount">{{ props.entries.length }}</span>
-      <button class="qbtn" :title="collapsed ? 'Expand' : 'Collapse'" @click.stop="toggle">
+      <button v-tip="collapsed ? 'Expand' : 'Collapse'" class="qbtn" @click.stop="toggle">
         {{ collapsed ? '▴' : '▾' }}
       </button>
     </div>
@@ -79,9 +80,9 @@ function label(entry: Generation): string {
             </span>
           </button>
           <button
+            v-tip="'Remove from queue'"
             type="button"
             class="qx"
-            title="Remove from queue"
             aria-label="Remove from queue"
             @click="emit('clear-one', e.media_id)"
           >

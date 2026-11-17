@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import type { Space } from '../../composables/studioTypes'
 import { typedValue, vFocusSelect } from '../../utils/focusSelect'
 
@@ -56,8 +57,8 @@ const renameText = defineModel<string>('renameText', { default: '' })
     <div class="nactions">
       <template v-if="renaming">
         <button
+          v-tip="'Confirm rename'"
           class="nact"
-          title="Confirm rename"
           aria-label="Confirm rename"
           @mousedown.prevent
           @click="$emit('commit-rename')"
@@ -65,8 +66,8 @@ const renameText = defineModel<string>('renameText', { default: '' })
           <svg class="ic sm"><use href="#s-check" /></svg>
         </button>
         <button
+          v-tip="'Cancel rename'"
           class="nact"
-          title="Cancel rename"
           aria-label="Cancel rename"
           @mousedown.prevent
           @click="$emit('cancel-rename')"
@@ -75,13 +76,13 @@ const renameText = defineModel<string>('renameText', { default: '' })
         </button>
       </template>
       <template v-else>
-        <button class="nact" title="Rename" aria-label="Rename" @click.stop="$emit('start-rename')">
+        <button v-tip="'Rename'" class="nact" aria-label="Rename" @click.stop="$emit('start-rename')">
           <svg class="ic sm"><use href="#s-pencil" /></svg>
         </button>
-        <button class="nact" title="Space defaults" aria-label="Space defaults" @click.stop="$emit('settings')">
+        <button v-tip="'Space defaults'" class="nact" aria-label="Space defaults" @click.stop="$emit('settings')">
           <svg class="ic sm"><use href="#s-cog" /></svg>
         </button>
-        <button class="nact danger" title="Delete" aria-label="Delete" @click.stop="$emit('delete')">
+        <button v-tip="'Delete'" class="nact danger" aria-label="Delete" @click.stop="$emit('delete')">
           <svg class="ic sm"><use href="#s-trash" /></svg>
         </button>
       </template>

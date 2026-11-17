@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import type { MediaCard } from '../../composables/chatConversationsApi'
 import { chatMediaPreviewUrl, chatMediaUrl } from '../../composables/chatFilesApi'
 import type { GenerationItem, UiMessage } from '../../composables/studioTypes'
@@ -41,14 +42,14 @@ const big = (item: MediaCard): GenerationItem => bigView(item, props.message, pr
       />
       <span v-if="item.kind !== 'audio'" class="use-btns">
         <button
-          title="Use in Image mode"
+          v-tip="'Use in Image mode'"
           aria-label="Use in Image mode"
           @click="emit('use-image', { file: item.file, mode: 'image' })"
         >
           <svg class="ic sm"><use href="#s-image" /></svg>
         </button>
         <button
-          title="Use in Video mode"
+          v-tip="'Use in Video mode'"
           aria-label="Use in Video mode"
           @click="emit('use-image', { file: item.file, mode: 'video' })"
         >

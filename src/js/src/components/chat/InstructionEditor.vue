@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { ref, computed, watch, nextTick, inject } from 'vue'
 import { showToastKey, noToast } from '../../injection'
 import BaseDialog from '../BaseDialog.vue'
@@ -189,10 +190,18 @@ async function close(): Promise<void> {
 
     <template v-else>
       <div class="members">
-        <span v-for="s in members" :key="s.id" class="chip" :title="s.name">
+        <span v-for="s in members" :key="s.id" v-tip="s.name" class="chip">
           <span class="dot" :style="{ background: instructionColor(s.name) }"></span>
           <span class="chip-name">{{ s.name }}</span>
-          <button type="button" class="chip-x" :title="`Remove ${s.name}`" @click="removeMember(s)">✕</button>
+          <button
+            v-tip="`Remove ${s.name}`"
+            type="button"
+            class="chip-x"
+            :aria-label="`Remove ${s.name}`"
+            @click="removeMember(s)"
+          >
+            ✕
+          </button>
         </span>
         <span v-if="!members.length" class="empty">No snippets in it yet</span>
       </div>

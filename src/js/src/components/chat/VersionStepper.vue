@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { computed } from 'vue'
 
 // ‹ 2/3 › — steps through the versions of a prompt, reply text or picture.
@@ -29,7 +30,7 @@ const position = computed(() =>
     <button :disabled="!enabled || shown <= 0" :title="prevTitle" @click="emit('step', -1)">
       <svg class="ic sm"><use href="#s-chevL" /></svg>
     </button>
-    <span :title="title">{{ position }}</span>
+    <span v-tip="title">{{ position }}</span>
     <button :disabled="!enabled || shown >= count - 1" :title="nextTitle" @click="emit('step', 1)">
       <svg class="ic sm"><use href="#s-chev" /></svg>
     </button>

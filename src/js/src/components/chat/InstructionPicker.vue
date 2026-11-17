@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { ref, computed } from 'vue'
 import type { Instruction, InstructionGroup } from '../../composables/chatSettingsApi'
 import type { InheritedDefault } from '../../composables/useChatDefaults'
@@ -239,13 +240,13 @@ function onToggle(item: InstructionCard): void {
       <span
         v-for="g in defaultGroups"
         :key="`dg${g.id}`"
+        v-tip="`${g.name} · ${fromTitle(g.from)}`"
         class="chip group inherited"
         :class="{ paused: isPaused('group', g.id) }"
-        :title="`${g.name} · ${fromTitle(g.from)}`"
       >
         <button
+          v-tip="isPaused('group', g.id) ? `Resume ${g.name}` : `Pause ${g.name} for now`"
           class="chip-pause"
-          :title="isPaused('group', g.id) ? `Resume ${g.name}` : `Pause ${g.name} for now`"
           @click="togglePause('group', g)"
         >
           {{ isPaused('group', g.id) ? '▶' : '⏸' }}
@@ -255,8 +256,9 @@ function onToggle(item: InstructionCard): void {
         </button>
         <span class="chip-src">{{ fromIcon(g.from) }}</span>
         <button
+          v-tip="`Hide ${g.name} in this chat`"
           class="chip-x"
-          :title="`Hide ${g.name} in this chat`"
+          :aria-label="`Hide ${g.name} in this chat`"
           @click="emit('hide', { kind: 'group', id: g.id })"
         >
           ✕
@@ -265,13 +267,13 @@ function onToggle(item: InstructionCard): void {
       <span
         v-for="s in defaultSnippets"
         :key="`ds${s.id}`"
+        v-tip="`${s.name} · ${fromTitle(s.from)}`"
         class="chip inherited"
         :class="{ paused: isPaused('snippet', s.id) }"
-        :title="`${s.name} · ${fromTitle(s.from)}`"
       >
         <button
+          v-tip="isPaused('snippet', s.id) ? `Resume ${s.name}` : `Pause ${s.name} for now`"
           class="chip-pause"
-          :title="isPaused('snippet', s.id) ? `Resume ${s.name}` : `Pause ${s.name} for now`"
           @click="togglePause('snippet', s)"
         >
           {{ isPaused('snippet', s.id) ? '▶' : '⏸' }}
@@ -282,8 +284,9 @@ function onToggle(item: InstructionCard): void {
         </button>
         <span class="chip-src">{{ fromIcon(s.from) }}</span>
         <button
+          v-tip="`Hide ${s.name} in this chat`"
           class="chip-x"
-          :title="`Hide ${s.name} in this chat`"
+          :aria-label="`Hide ${s.name} in this chat`"
           @click="emit('hide', { kind: 'snippet', id: s.id })"
         >
           ✕
@@ -292,13 +295,13 @@ function onToggle(item: InstructionCard): void {
       <span
         v-for="g in attachedGroups"
         :key="`g${g.id}`"
+        v-tip="`${g.name} · ${groupTitle(g)}`"
         class="chip group"
         :class="{ paused: isPaused('group', g.id) }"
-        :title="`${g.name} · ${groupTitle(g)}`"
       >
         <button
+          v-tip="isPaused('group', g.id) ? `Resume ${g.name}` : `Pause ${g.name} for now`"
           class="chip-pause"
-          :title="isPaused('group', g.id) ? `Resume ${g.name}` : `Pause ${g.name} for now`"
           @click="togglePause('group', g)"
         >
           {{ isPaused('group', g.id) ? '▶' : '⏸' }}
@@ -306,18 +309,20 @@ function onToggle(item: InstructionCard): void {
         <button class="chip-main" @click="emit('edit', { kind: 'group', id: g.id })">
           <span class="chip-name">📦 {{ g.name }}</span>
         </button>
-        <button class="chip-x" :title="`Detach ${g.name}`" @click="detachGroup(g)">✕</button>
+        <button v-tip="`Detach ${g.name}`" class="chip-x" :aria-label="`Detach ${g.name}`" @click="detachGroup(g)">
+          ✕
+        </button>
       </span>
       <span
         v-for="s in attachedSnippets"
         :key="`s${s.id}`"
+        v-tip="s.name"
         class="chip"
         :class="{ paused: isPaused('snippet', s.id) }"
-        :title="s.name"
       >
         <button
+          v-tip="isPaused('snippet', s.id) ? `Resume ${s.name}` : `Pause ${s.name} for now`"
           class="chip-pause"
-          :title="isPaused('snippet', s.id) ? `Resume ${s.name}` : `Pause ${s.name} for now`"
           @click="togglePause('snippet', s)"
         >
           {{ isPaused('snippet', s.id) ? '▶' : '⏸' }}
@@ -326,7 +331,9 @@ function onToggle(item: InstructionCard): void {
           <span class="dot" :style="{ background: instructionColor(s.name) }"></span>
           <span class="chip-name">{{ s.name }}</span>
         </button>
-        <button class="chip-x" :title="`Detach ${s.name}`" @click="detachSnippet(s)">✕</button>
+        <button v-tip="`Detach ${s.name}`" class="chip-x" :aria-label="`Detach ${s.name}`" @click="detachSnippet(s)">
+          ✕
+        </button>
       </span>
       <button class="add" @click="toggle">
         {{ anyAttached ? '＋' : '＋ Add instructions' }}

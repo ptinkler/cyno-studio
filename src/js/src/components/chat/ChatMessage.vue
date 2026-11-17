@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTip } from '../../directives/tip'
 import { computed, ref, nextTick } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -238,25 +239,30 @@ const { copiedKey, copy } = useCopy()
         />
         <button
           v-if="message.content"
+          v-tip="'Copy prompt'"
           class="iconbtn boxed"
           :class="{ on: copiedKey === 'prompt' }"
-          title="Copy prompt"
           aria-label="Copy prompt"
           @click="copy(message.content, 'prompt')"
         >
           <svg class="ic"><use :href="copiedKey === 'prompt' ? '#s-check' : '#s-copy'" /></svg>
         </button>
         <template v-if="canEdit">
-          <button class="iconbtn boxed" title="Edit prompt" aria-label="Edit prompt" @click="startEdit">
+          <button v-tip="'Edit prompt'" class="iconbtn boxed" aria-label="Edit prompt" @click="startEdit">
             <svg class="ic"><use href="#s-pencil" /></svg>
           </button>
-          <button class="iconbtn boxed" title="Resend" aria-label="Resend" @click="emit('resend')">
+          <button v-tip="'Resend'" class="iconbtn boxed" aria-label="Resend" @click="emit('resend')">
             <svg class="ic"><use href="#s-repeat" /></svg>
           </button>
-          <button class="iconbtn boxed" title="Branch from here" aria-label="Branch from here" @click="emit('fork')">
+          <button v-tip="'Branch from here'" class="iconbtn boxed" aria-label="Branch from here" @click="emit('fork')">
             <svg class="ic"><use href="#s-branch" /></svg>
           </button>
-          <button class="iconbtn boxed danger" title="Delete prompt" aria-label="Delete prompt" @click="emit('delete')">
+          <button
+            v-tip="'Delete prompt'"
+            class="iconbtn boxed danger"
+            aria-label="Delete prompt"
+            @click="emit('delete')"
+          >
             <svg class="ic"><use href="#s-trash" /></svg>
           </button>
         </template>
@@ -278,9 +284,9 @@ const { copiedKey, copy } = useCopy()
         <div v-if="showTextBar" class="act-row text-bar">
           <button
             v-if="showCopy"
+            v-tip="'Copy reply'"
             class="iconbtn boxed"
             :class="{ on: copiedKey === 'reply' }"
-            title="Copy reply"
             aria-label="Copy reply"
             @click="copy(displayText, 'reply')"
           >
@@ -288,14 +294,20 @@ const { copiedKey, copy } = useCopy()
           </button>
           <button
             v-if="showEditText"
+            v-tip="'Edit text'"
             class="iconbtn boxed"
-            title="Edit text"
             aria-label="Edit text"
             @click="textBox = { text: '' }"
           >
             <svg class="ic"><use href="#s-textedit" /></svg>
           </button>
-          <button v-if="showRedoText" class="iconbtn boxed" :title="REDO_TEXT_TITLE" @click="emit('reword', '')">
+          <button
+            v-if="showRedoText"
+            v-tip="REDO_TEXT_TITLE"
+            class="iconbtn boxed"
+            :aria-label="REDO_TEXT_TITLE"
+            @click="emit('reword', '')"
+          >
             <svg class="ic"><use href="#s-textredo" /></svg>
           </button>
           <VersionStepper
@@ -324,7 +336,7 @@ const { copiedKey, copy } = useCopy()
             @open-chat="id => emit('open-chat', id)"
           />
           <span class="meta-spacer"></span>
-          <span v-if="showModel" class="meta-info model" :title="message.model ?? undefined">
+          <span v-if="showModel" v-tip="message.model ?? undefined" class="meta-info model">
             <svg class="ic sm"><use href="#s-chat" /></svg>{{ modelShort }}
           </span>
           <CostChip v-if="message.cost && !hasMedia" :total="message.cost" :media="message.media" />
@@ -358,7 +370,13 @@ const { copiedKey, copy } = useCopy()
 
         <!-- Controls for the reply as a whole, under everything it made -->
         <div v-if="showFoot" class="act-row msg-meta">
-          <button v-if="showRedoFoot" class="iconbtn boxed" :title="REDO_TEXT_TITLE" @click="emit('reword', '')">
+          <button
+            v-if="showRedoFoot"
+            v-tip="REDO_TEXT_TITLE"
+            class="iconbtn boxed"
+            :aria-label="REDO_TEXT_TITLE"
+            @click="emit('reword', '')"
+          >
             <svg class="ic"><use href="#s-textredo" /></svg>
           </button>
           <ReplyControls
