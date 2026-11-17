@@ -477,6 +477,19 @@ const bySpace = computed(() => {
   padding-right: 0.3333rem;
   visibility: hidden;
 }
+.nrow :deep(.nactions) {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  flex: none;
+  padding: 0 5px 0 24px;
+  border-radius: 0 var(--r) var(--r) 0;
+  background: linear-gradient(to right, transparent, var(--shover) 20px);
+}
+.nrow.active :deep(.nactions) {
+  background: linear-gradient(to right, transparent, color-mix(in srgb, var(--saccent) 16%, var(--sbg)) 20px);
+}
 .side :deep(.nact) {
   width: 1.6667rem;
   height: 1.6667rem;

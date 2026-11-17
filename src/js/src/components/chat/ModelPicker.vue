@@ -336,6 +336,11 @@ function onKeydown(event: KeyboardEvent): void {
   box-shadow: none;
 }
 
+/* Borderless field inside the pop-up: the global focus ring would box it in */
+.picker-pop .picker-search.picker-search:focus-visible {
+  box-shadow: none;
+}
+
 .provider-tag {
   text-transform: none;
   letter-spacing: 0;
