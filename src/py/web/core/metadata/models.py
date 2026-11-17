@@ -36,6 +36,23 @@ class Base(DeclarativeBase):
     """Base class for metadata SQLAlchemy models."""
 
 
+class SigninRequest(Base):
+    """A sign-in the allow-lists refused, kept so the admin can approve it from Settings.
+
+    Keyed by ``provider:sub`` (an X account has no email to key on). ``approved`` lets that identity in on its
+    next attempt; denying deletes the row, and a retry simply asks again.
+    """
+
+    __tablename__ = "signin_requests"
+    identity: Mapped[str] = mapped_column(String(300), primary_key=True)  # provider:sub
+    provider: Mapped[str] = mapped_column(String(32))
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    approved: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    first_seen: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    last_seen: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
 class User(Base):
     """Represent a user account.
 
