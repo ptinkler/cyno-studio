@@ -138,7 +138,7 @@ describe('GenerationGrid selecting', () => {
       .find(b => b.text() === 'Select')
       ?.trigger('click')
     await w
-      .findAll('button')
+      .findAll('.pillbtn')
       .find(b => b.text() === 'All')
       ?.trigger('click')
     expect(w.text()).toContain('2 selected') // the pending and failed tiles have nothing to delete
