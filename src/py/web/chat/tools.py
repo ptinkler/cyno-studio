@@ -32,8 +32,8 @@ TOOLS_IMAGE: dict[str, JsonValue] = {
     "function": {
         "name": "generate_image",
         "description": (
-            "Generate an image from a text prompt. Earlier images in the conversation can be passed to the "
-            "image model as references, to keep characters consistent or to edit an image."
+            "Generate an image from a text prompt. The most recent images in the conversation are sent to the "
+            "image model as references automatically, so follow-ups stay consistent; you don't need to ask."
         ),
         "parameters": {
             "type": "object",
@@ -43,12 +43,6 @@ TOOLS_IMAGE: dict[str, JsonValue] = {
                     "type": "string",
                     "enum": ["none", "latest"],
                     "description": "'latest' to edit/transform the most recent image in the conversation.",
-                },
-                "keep_consistent": {
-                    "type": "boolean",
-                    "description": "true = also send the 2 most recent images in the conversation to the "
-                    "image model as reference images. Default false. Images the user "
-                    "has pinned are always sent as references.",
                 },
             },
             "required": ["prompt"],
