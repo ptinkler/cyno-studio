@@ -8,7 +8,7 @@ from collections.abc import Callable, Generator, Sequence
 from pathlib import Path
 from typing import NamedTuple
 
-import httpx
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -162,7 +162,7 @@ class Call(NamedTuple):
     params: dict[str, str] | None
 
 
-type Route = httpx.Response | Callable[[JsonValue], httpx.Response]
+type Route = httpx2.Response | Callable[[JsonValue], httpx2.Response]
 
 
 class FakeVenice:
@@ -173,17 +173,17 @@ class FakeVenice:
         self.calls: list[Call] = []
         self.routes: dict[str, Route] = {}
 
-    def _answer(self, method: str, url: str, body: JsonValue, params: dict[str, str] | None) -> httpx.Response:
+    def _answer(self, method: str, url: str, body: JsonValue, params: dict[str, str] | None) -> httpx2.Response:
         path = url.split("/api/v1", 1)[1]
         self.calls.append(Call(method, path, body, params))
         if path == "/models":
-            return httpx.Response(
+            return httpx2.Response(
                 200, json={"data": MODELS[must(params)["type"]]}, headers={"x-venice-balance-usd": "12.5"}
             )
         handler = self.routes.get(path)
         if handler is None:
             pytest.fail(f"unexpected Venice call {method} {path}")
-        return handler if isinstance(handler, httpx.Response) else handler(body)
+        return handler if isinstance(handler, httpx2.Response) else handler(body)
 
     def request(
         self,
@@ -191,10 +191,10 @@ class FakeVenice:
         url: str,
         *,
         headers: dict[str, str] | None = None,
-        timeout: httpx.Timeout | None = None,
+        timeout: httpx2.Timeout | None = None,
         json: JsonValue = None,
         params: dict[str, str] | None = None,
-    ) -> httpx.Response:
+    ) -> httpx2.Response:
         """Answer a plain request from the canned routes."""
         del headers, timeout
         return self._answer(method, url, json, params)
@@ -205,16 +205,16 @@ class FakeVenice:
         url: str,
         *,
         headers: dict[str, str] | None = None,
-        timeout: httpx.Timeout | None = None,
+        timeout: httpx2.Timeout | None = None,
         json: JsonValue = None,
         params: dict[str, str] | None = None,
-    ) -> contextlib.AbstractContextManager[httpx.Response]:
+    ) -> contextlib.AbstractContextManager[httpx2.Response]:
         """Answer a streaming request from the canned routes."""
         del headers, timeout
         resp = self._answer(method, url, json, params)
 
         @contextlib.contextmanager
-        def ctx() -> Generator[httpx.Response]:
+        def ctx() -> Generator[httpx2.Response]:
             yield resp
 
         return ctx()
@@ -228,8 +228,8 @@ class FakeVenice:
         return obj(self.calls_to(path)[0].body)
 
 
-def _quote(body: JsonValue) -> httpx.Response:
-    return httpx.Response(200, json={"quote": QUOTES.get(text(body, "model"))})
+def _quote(body: JsonValue) -> httpx2.Response:
+    return httpx2.Response(200, json={"quote": QUOTES.get(text(body, "model"))})
 
 
 @pytest.fixture
@@ -429,7 +429,7 @@ class TestPriceOrder:
                 }
             ],
         )
-        venice.routes["/image/generate"] = httpx.Response(
+        venice.routes["/image/generate"] = httpx2.Response(
             200, json={"images": [base64.b64encode(png_bytes()).decode()]}
         )
         assert v.generate_image("venice/tiered", "x", resolution="2K")[1] == 0.1
@@ -461,7 +461,7 @@ class TestImages:
 
     def test_text_to_image_sends_safe_mode_off(self, venice: FakeVenice) -> None:
         """Test that text to image sends safe mode off."""
-        venice.routes["/image/generate"] = httpx.Response(
+        venice.routes["/image/generate"] = httpx2.Response(
             200, json={"images": [base64.b64encode(png_bytes()).decode()]}
         )
         images, cost, sent = v.generate_image("venice/seedream-v5-pro", "a fox", aspect_ratio="16:9", resolution="4K")
@@ -482,7 +482,9 @@ class TestImages:
             p = tmp_path / f"r{i}.png"
             p.write_bytes(png_bytes())
             refs.append(p)
-        venice.routes["/image/multi-edit"] = httpx.Response(200, content=b"IMG", headers={"content-type": "image/webp"})
+        venice.routes["/image/multi-edit"] = httpx2.Response(
+            200, content=b"IMG", headers={"content-type": "image/webp"}
+        )
         images, cost, sent = v.generate_image("venice/seedream-v5-pro", "same fox, at night", ref_paths=refs)
         body = venice.body("/image/multi-edit")
         assert body["modelId"] == "seedream-v5-pro-edit"
@@ -500,7 +502,7 @@ class TestImages:
 
     def test_errors_carry_venices_message(self, venice: FakeVenice) -> None:
         """Test that errors carry venices message."""
-        venice.routes["/image/generate"] = httpx.Response(400, json={"error": "Prompt too long"})
+        venice.routes["/image/generate"] = httpx2.Response(400, json={"error": "Prompt too long"})
         with pytest.raises(VeniceError, match="Venice: Prompt too long"):
             v.generate_image("venice/lustify-v8", "x" * 10)
 
@@ -513,7 +515,7 @@ class TestImages:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Test that chat image mode runs on venice."""
-        venice.routes["/image/generate"] = httpx.Response(
+        venice.routes["/image/generate"] = httpx2.Response(
             200, json={"images": [base64.b64encode(png_bytes()).decode()]}
         )
         monkeypatch.setattr(openrouter, "generate_image", stub(lambda: pytest.fail("not OpenRouter")))
@@ -524,7 +526,7 @@ class TestImages:
 
     def test_content_violation_flag_is_a_moderation_block(self, venice: FakeVenice) -> None:
         """Test that content violation flag is a moderation block."""
-        venice.routes["/image/generate"] = httpx.Response(
+        venice.routes["/image/generate"] = httpx2.Response(
             200,
             json={"images": [base64.b64encode(png_bytes()).decode()]},
             headers={"x-venice-is-content-violation": "true"},
@@ -538,7 +540,7 @@ class TestImages:
     ) -> None:
         """Provider filters send a solid black image instead of an error."""
         black = base64.b64encode(png_bytes(color="black")).decode()
-        venice.routes["/image/generate"] = httpx.Response(200, json={"images": [black]})
+        venice.routes["/image/generate"] = httpx2.Response(200, json={"images": [black]})
         ev = _send(client, conv, "a fox", mode="image", image_model="venice/seedream-v5-pro")
         item = obj(ev[-1], "message", "media", 0)
         assert item["status"] == "error"
@@ -550,7 +552,7 @@ class TestImages:
     ) -> None:
         """Test that dark but not black image is kept."""
         night = base64.b64encode(_dark_png()).decode()
-        venice.routes["/image/generate"] = httpx.Response(200, json={"images": [night]})
+        venice.routes["/image/generate"] = httpx2.Response(200, json={"images": [night]})
         ev = _send(client, conv, "a fox at night", mode="image", image_model="venice/seedream-v5-pro")
         assert dig(ev[-1], "message", "media", 0, "status") == "done"
 
@@ -558,7 +560,7 @@ class TestImages:
         """Test that requests are logged with images cut short."""
         ref = tmp_path / "r.png"
         ref.write_bytes(png_bytes())
-        venice.routes["/image/multi-edit"] = httpx.Response(
+        venice.routes["/image/multi-edit"] = httpx2.Response(
             422, json={"error": "Your prompt violates the content policy of Venice.ai or the model provider"}
         )
         with pytest.raises(VeniceError) as e:
@@ -581,7 +583,7 @@ class TestImages:
         self, client: TestClient, conv: ConversationOut, chat: None, venice: FakeVenice
     ) -> None:
         """Test that failed card keeps the request and the log is readable."""
-        venice.routes["/image/generate"] = httpx.Response(
+        venice.routes["/image/generate"] = httpx2.Response(
             422, json={"error": "Your prompt violates the content policy"}
         )
         ev = _send(client, conv, "a fox", mode="image", image_model="venice/seedream-v5-pro")
@@ -599,7 +601,7 @@ class TestImages:
     ) -> None:
         """Test that done card keeps the request outside params."""
         big = base64.b64encode(png_bytes() + b"\0" * 4096).decode()
-        venice.routes["/image/generate"] = httpx.Response(200, json={"id": "gen-1", "images": [big]})
+        venice.routes["/image/generate"] = httpx2.Response(200, json={"id": "gen-1", "images": [big]})
         ev = _send(client, conv, "a fox", mode="image", image_model="venice/seedream-v5-pro")
         item = obj(ev[-1], "message", "media", 0)
         assert dig(item, "request", "prompt") == "a fox"
@@ -618,8 +620,8 @@ class TestVideo:
 
     def test_text_to_video_snaps_duration_and_quotes(self, venice: FakeVenice) -> None:
         """Test that text to video snaps duration and quotes."""
-        venice.routes["/video/quote"] = httpx.Response(200, json={"quote": 0.42})
-        venice.routes["/video/queue"] = httpx.Response(200, json={"model": "wan-3-0-text-to-video", "queue_id": "q1"})
+        venice.routes["/video/quote"] = httpx2.Response(200, json={"quote": 0.42})
+        venice.routes["/video/queue"] = httpx2.Response(200, json={"model": "wan-3-0-text-to-video", "queue_id": "q1"})
         job = v.submit_video(
             VideoRequest(
                 "venice/wan-3-0-text-to-video",
@@ -649,8 +651,8 @@ class TestVideo:
 
     def test_first_frame_switches_to_the_image_to_video_twin(self, venice: FakeVenice, tmp_path: Path) -> None:
         """Test that first frame switches to the image to video twin."""
-        venice.routes["/video/quote"] = httpx.Response(500, json={"error": "quote down"})  # optional
-        venice.routes["/video/queue"] = httpx.Response(200, json={"queue_id": "q2"})
+        venice.routes["/video/quote"] = httpx2.Response(500, json={"error": "quote down"})  # optional
+        venice.routes["/video/queue"] = httpx2.Response(200, json={"queue_id": "q2"})
         job = v.submit_video(
             VideoRequest(
                 "venice/wan-3-0-text-to-video",
@@ -676,15 +678,15 @@ class TestVideo:
 
     def test_poll_then_download(self, venice: FakeVenice, tmp_path: Path) -> None:
         """Test that poll then download."""
-        venice.routes["/video/quote"] = httpx.Response(200, json={"quote": 0.3})
-        venice.routes["/video/queue"] = httpx.Response(200, json={"queue_id": "q3"})
+        venice.routes["/video/quote"] = httpx2.Response(200, json={"quote": 0.3})
+        venice.routes["/video/queue"] = httpx2.Response(200, json={"queue_id": "q3"})
         job = v.submit_video(VideoRequest("venice/wan-3-0-text-to-video", "waves", duration=5))
-        venice.routes["/video/retrieve"] = httpx.Response(
+        venice.routes["/video/retrieve"] = httpx2.Response(
             200, json={"status": "PROCESSING", "average_execution_time": 1}
         )
         assert v.get_video(job["id"]) == {"status": "in_progress"}
         assert venice.calls_to("/video/retrieve")[0].body == {"model": "wan-3-0-text-to-video", "queue_id": "q3"}
-        venice.routes["/video/retrieve"] = httpx.Response(
+        venice.routes["/video/retrieve"] = httpx2.Response(
             200, content=b"MP4DATA", headers={"content-type": "video/mp4"}
         )
         assert v.get_video(job["id"]) == {"status": "completed", "usage": {"cost": 0.3}}
@@ -694,17 +696,17 @@ class TestVideo:
 
     def test_failed_job_and_transient_errors(self, venice: FakeVenice) -> None:
         """Test that failed job and transient errors."""
-        venice.routes["/video/retrieve"] = httpx.Response(400, json={"error": "Content policy violation"})
+        venice.routes["/video/retrieve"] = httpx2.Response(400, json={"error": "Content policy violation"})
         assert v.get_video("venice:m:q") == {"status": "failed", "error": "Venice: Content policy violation"}
-        venice.routes["/video/retrieve"] = httpx.Response(503, text="busy")
+        venice.routes["/video/retrieve"] = httpx2.Response(503, text="busy")
         with pytest.raises(VeniceError):
             v.get_video("venice:m:q")  # the poller retries these
 
 
-def _sse(*chunks: JsonValue) -> httpx.Response:
+def _sse(*chunks: JsonValue) -> httpx2.Response:
     """A streamed chat completion made of ``chunks``."""
     lines = "".join(f"data: {json.dumps(c)}\n\n" for c in chunks) + "data: [DONE]\n\n"
-    return httpx.Response(200, content=lines.encode(), headers={"content-type": "text/event-stream"})
+    return httpx2.Response(200, content=lines.encode(), headers={"content-type": "text/event-stream"})
 
 
 class TestText:
@@ -791,7 +793,7 @@ def test_balance_reads_usd_from_the_rate_limits_body(client: TestClient, venice:
     """Test that balance reads usd from the rate limits body."""
     # Inference keys can't read /billing/balance; the USD figure is in the
     # rate-limits body under balances.USD (not a response header).
-    venice.routes["/api_keys/rate_limits"] = httpx.Response(
+    venice.routes["/api_keys/rate_limits"] = httpx2.Response(
         200, json={"data": {"balances": {"USD": 4.49725029, "DIEM": 0, "BUNDLED_CREDITS": 0}}}
     )
     assert obj(client.get("/api/chat/venice-balance")) == {"usd": 4.49725029, "credits": 0.0}
@@ -799,7 +801,7 @@ def test_balance_reads_usd_from_the_rate_limits_body(client: TestClient, venice:
 
 def test_balance_includes_the_plans_bundled_credits(client: TestClient, venice: FakeVenice) -> None:
     """Test that balance includes the plans bundled credits."""
-    venice.routes["/api_keys/rate_limits"] = httpx.Response(
+    venice.routes["/api_keys/rate_limits"] = httpx2.Response(
         200, json={"data": {"balances": {"USD": 0.76, "DIEM": 0, "BUNDLED_CREDITS": 4.7635423}}}
     )
     assert obj(client.get("/api/chat/venice-balance")) == {"usd": 0.76, "credits": 4.7635423}
@@ -811,7 +813,7 @@ def test_balance_falls_back_to_the_response_header_when_rate_limits_unreadable(
     """Test that balance falls back to the response header when rate limits unreadable."""
     # If the endpoint errors, fall back to the balance a prior response's header
     # reported (_note_balance runs on the error response too).
-    venice.routes["/api_keys/rate_limits"] = httpx.Response(
+    venice.routes["/api_keys/rate_limits"] = httpx2.Response(
         403, json={"error": "nope"}, headers={"x-venice-balance-usd": "3.5"}
     )
     assert obj(client.get("/api/chat/venice-balance")) == {"usd": 3.5, "credits": None}
@@ -826,8 +828,8 @@ class TestVideoFamiliesInChat:
         client.get("/api/chat/models")
 
     def _queue(self, fake: FakeVenice, queue_id: str = "q") -> None:
-        fake.routes["/video/quote"] = httpx.Response(200, json={"quote": 0.1})
-        fake.routes["/video/queue"] = httpx.Response(200, json={"queue_id": queue_id})
+        fake.routes["/video/quote"] = httpx2.Response(200, json={"quote": 0.1})
+        fake.routes["/video/queue"] = httpx2.Response(200, json={"queue_id": queue_id})
 
     def _image(self, chat: None, conv: ConversationOut, name: str) -> None:
         (chat_pkg.conversation_dir(conv["id"]) / name).write_bytes(png_bytes())

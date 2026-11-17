@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from http import HTTPStatus
 from typing import TYPE_CHECKING
 
-import requests
+import httpx2
 
 from web.core.cache import MISS, TTLCache
 from web.core.cloudflare import is_cloudflare_block
@@ -58,7 +58,7 @@ def estimate(generator: PolloGenerator) -> CreditEstimate | None:
         return hit
     try:
         result, cacheable = _ask(url, payload, generator.api_key)
-    except requests.RequestException:
+    except httpx2.HTTPError:
         return None  # not reachable: ask again next time
     if cacheable:
         _cache.put(key, result)
@@ -76,7 +76,7 @@ def _ask(url: str, payload: Payload, api_key: str | None) -> tuple[CreditEstimat
     Refusals can be cached; server hiccups and Cloudflare blocks cannot.
     """
     headers = {"x-api-key": api_key or "", "Content-Type": "application/json"}
-    resp = requests.post(url, data=json.dumps(payload), headers=headers, timeout=TIMEOUT)
+    resp = httpx2.post(url, content=json.dumps(payload), headers=headers, timeout=TIMEOUT)
     if is_cloudflare_block(resp) or resp.status_code >= HTTPStatus.INTERNAL_SERVER_ERROR:
         return None, False
     if resp.status_code != HTTPStatus.OK:

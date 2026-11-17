@@ -4,7 +4,7 @@ import base64
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import httpx
+import httpx2
 
 from web.jsonutil import as_list, as_object, body_of
 from web.providers.openrouter import IMAGE_TIMEOUT
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from web.types import JsonValue
 
 
-def _check_violation(resp: httpx.Response) -> None:
+def _check_violation(resp: httpx2.Response) -> None:
     """Reject images Venice marked as content violations.
 
     The violation flag means the response is not the requested image.

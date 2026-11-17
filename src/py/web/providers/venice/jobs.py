@@ -6,7 +6,7 @@ import time
 from http import HTTPStatus
 from pathlib import Path
 
-import httpx
+import httpx2
 
 from web.core import net_guard
 from web.core.cache import TTLCache
@@ -146,7 +146,7 @@ def _completed(job_id: str) -> dict[str, JsonValue]:
     return {"status": "completed", "usage": {"cost": _video_quotes.get(job_id)}}
 
 
-def _early_result(job_id: str, resp: httpx.Response) -> dict[str, JsonValue] | None:
+def _early_result(job_id: str, resp: httpx2.Response) -> dict[str, JsonValue] | None:
     """A retrieve response that settles the poll by itself, else None.
 
     Rate limits and 5xx raise (the poller's error budget); other client errors
@@ -205,7 +205,7 @@ def get_video(job_id: str) -> dict[str, JsonValue]:
             resp.read()
             client.note_balance(resp)
             data = as_object(body_of(resp))
-    except (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError, httpx.ConnectError) as e:
+    except (httpx2.RemoteProtocolError, httpx2.ReadError, httpx2.WriteError, httpx2.ConnectError) as e:
         raise PollDroppedError(round(time.monotonic() - start), e) from e
     return _status_from_data(job_id, data)
 
@@ -219,9 +219,9 @@ def download_video(job_id: str, dest: Path) -> None:
             # Another host's link: fetched without our key, and only if it is a public address
             try:
                 net_guard.download_public(net_guard.public_http, url, dest, timeout=IMAGE_TIMEOUT)
-            except httpx.HTTPStatusError as e:
+            except httpx2.HTTPStatusError as e:
                 raise VideoDownloadFailedError(e.response.status_code) from e
-            except (httpx.HTTPError, net_guard.UnsafeURLError) as e:
+            except (httpx2.HTTPError, net_guard.UnsafeURLError) as e:
                 raise VideoDownloadUnreachableError(e) from e
             return
         if get_video(job_id)["status"] != "completed" or not src.is_file():

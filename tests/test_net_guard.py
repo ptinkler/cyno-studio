@@ -5,14 +5,14 @@ import socket
 from collections.abc import Callable
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from web.core import net_guard
 from web.providers import openrouter
 
 PUBLIC = "93.184.216.34"
-Handler = Callable[[httpx.Request], httpx.Response]
+Handler = Callable[[httpx2.Request], httpx2.Response]
 
 
 def _resolves(monkeypatch: pytest.MonkeyPatch, table: dict[str, list[str]]) -> list[str]:
@@ -31,8 +31,8 @@ def _resolves(monkeypatch: pytest.MonkeyPatch, table: dict[str, list[str]]) -> l
     return asked
 
 
-def _client(handler: Handler) -> httpx.Client:
-    return httpx.Client(transport=httpx.MockTransport(handler))
+def _client(handler: Handler) -> httpx2.Client:
+    return httpx2.Client(transport=httpx2.MockTransport(handler))
 
 
 class TestAddresses:
@@ -86,11 +86,11 @@ class TestPinning:
     def test_the_request_goes_to_the_checked_ip_under_the_real_name(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """IP in the URL; the name as Host and for TLS; resolved once."""
         asked = _resolves(monkeypatch, {"cdn.example": [PUBLIC]})
-        seen: list[httpx.Request] = []
+        seen: list[httpx2.Request] = []
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             seen.append(request)
-            return httpx.Response(200, content=b"png")
+            return httpx2.Response(200, content=b"png")
 
         r = net_guard.get_public(_client(handler), "https://cdn.example/a/b.png?x=1", timeout=5)
         assert r.content == b"png"
@@ -106,9 +106,9 @@ class TestPinning:
         asked = _resolves(monkeypatch, {"rebind.example": [PUBLIC]})  # a second lookup is what `asked` would show
         connected: list[str] = []
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             connected.append(request.url.host)
-            return httpx.Response(200, content=b"ok")
+            return httpx2.Response(200, content=b"ok")
 
         net_guard.get_public(_client(handler), "https://rebind.example/", timeout=5)
         assert connected == [PUBLIC]
@@ -119,9 +119,9 @@ class TestPinning:
         _resolves(monkeypatch, {"cdn.example": [PUBLIC]})
         hosts: list[str] = []
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             hosts.append(request.headers["host"])
-            return httpx.Response(200)
+            return httpx2.Response(200)
 
         net_guard.get_public(_client(handler), "https://cdn.example:8443/x", timeout=5)
         assert hosts == ["cdn.example:8443"]
@@ -134,8 +134,8 @@ class TestRedirects:
         """A public URL that bounces to the metadata service."""
         _resolves(monkeypatch, {"cdn.example": [PUBLIC], "meta.example": ["169.254.169.254"]})
 
-        def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(302, headers={"location": "https://meta.example/latest"})
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(302, headers={"location": "https://meta.example/latest"})
 
         with pytest.raises(net_guard.NonPublicAddressError):
             net_guard.get_public(_client(handler), "https://cdn.example/a", timeout=5)
@@ -145,11 +145,11 @@ class TestRedirects:
         _resolves(monkeypatch, {"cdn.example": [PUBLIC], "other.example": ["93.184.216.35"]})
         paths: list[str] = []
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             paths.append(request.url.path)
             if request.url.path == "/a":
-                return httpx.Response(301, headers={"location": "/b"})
-            return httpx.Response(200, content=b"done")
+                return httpx2.Response(301, headers={"location": "/b"})
+            return httpx2.Response(200, content=b"done")
 
         r = net_guard.get_public(_client(handler), "https://cdn.example/a", timeout=5)
         assert (r.content, paths) == (b"done", ["/a", "/b"])
@@ -158,8 +158,8 @@ class TestRedirects:
         """Too many hops is an error, not a hang."""
         asked = _resolves(monkeypatch, {"cdn.example": [PUBLIC]})
 
-        def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(302, headers={"location": "https://cdn.example/again"})
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(302, headers={"location": "https://cdn.example/again"})
 
         with pytest.raises(net_guard.TooManyRedirectsError):
             net_guard.get_public(_client(handler), "https://cdn.example/a", timeout=5)
@@ -173,8 +173,8 @@ class TestSizeCap:
         """Content-Length alone is enough."""
         _resolves(monkeypatch, {"cdn.example": [PUBLIC]})
 
-        def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, headers={"content-length": "999999"}, content=b"x")
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(200, headers={"content-length": "999999"}, content=b"x")
 
         with pytest.raises(net_guard.ResponseTooLargeError):
             net_guard.get_public(_client(handler), "https://cdn.example/", timeout=5, max_bytes=1000)
@@ -183,8 +183,8 @@ class TestSizeCap:
         """No Content-Length, or a false one: counted as it is read."""
         _resolves(monkeypatch, {"cdn.example": [PUBLIC]})
 
-        def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, content=b"x" * 5000)
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(200, content=b"x" * 5000)
 
         with pytest.raises(net_guard.ResponseTooLargeError):
             net_guard.get_public(_client(handler), "https://cdn.example/", timeout=5, max_bytes=1000)
@@ -193,8 +193,8 @@ class TestSizeCap:
         """The returned response doesn't try to decode what is already decoded."""
         _resolves(monkeypatch, {"cdn.example": [PUBLIC]})
 
-        def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, headers={"content-encoding": "gzip"}, content=gzip.compress(b"hello"))
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(200, headers={"content-encoding": "gzip"}, content=gzip.compress(b"hello"))
 
         r = net_guard.get_public(_client(handler), "https://cdn.example/", timeout=5)
         assert r.content == b"hello"
@@ -209,7 +209,7 @@ class TestDownload:
         _resolves(monkeypatch, {"cdn.example": [PUBLIC]})
         dest = tmp_path / "out" / "v.mp4"
         net_guard.download_public(
-            _client(lambda _r: httpx.Response(200, content=b"video")), "https://cdn.example/v", dest, timeout=5
+            _client(lambda _r: httpx2.Response(200, content=b"video")), "https://cdn.example/v", dest, timeout=5
         )
         assert dest.read_bytes() == b"video"
         assert not dest.with_suffix(".mp4.part").exists()
@@ -221,7 +221,7 @@ class TestDownload:
         dest = folder / "v.mp4"
         with pytest.raises(net_guard.ResponseTooLargeError):
             net_guard.download_public(
-                _client(lambda _r: httpx.Response(200, content=b"x" * 5000)),
+                _client(lambda _r: httpx2.Response(200, content=b"x" * 5000)),
                 "https://cdn.example/v",
                 dest,
                 timeout=5,
@@ -234,18 +234,20 @@ class TestDownload:
         _resolves(monkeypatch, {"cdn.example": [PUBLIC]})
         folder = tmp_path / "downloads"
         dest = folder / "v.mp4"
-        with pytest.raises(httpx.HTTPStatusError):
-            net_guard.download_public(_client(lambda _r: httpx.Response(404)), "https://cdn.example/v", dest, timeout=5)
+        with pytest.raises(httpx2.HTTPStatusError):
+            net_guard.download_public(
+                _client(lambda _r: httpx2.Response(404)), "https://cdn.example/v", dest, timeout=5
+            )
         assert list(folder.iterdir()) == []
 
     def test_a_private_address_never_connects(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """Refused before any request is made."""
         _resolves(monkeypatch, {"evil.example": ["127.0.0.1"]})
-        sent: list[httpx.Request] = []
+        sent: list[httpx2.Request] = []
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             sent.append(request)
-            return httpx.Response(200)
+            return httpx2.Response(200)
 
         with pytest.raises(net_guard.NonPublicAddressError):
             net_guard.download_public(_client(handler), "https://evil.example/v", tmp_path / "v", timeout=5)
@@ -266,9 +268,9 @@ class TestOpenRouterVideo:
         """Written, with the key sent to OpenRouter."""
         keys: list[str] = []
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             keys.append(request.headers.get("authorization") or "")
-            return httpx.Response(200, content=b"mp4")
+            return httpx2.Response(200, content=b"mp4")
 
         self._use(monkeypatch, handler)
         dest = tmp_path / "v.mp4"
@@ -281,14 +283,14 @@ class TestOpenRouterVideo:
     ) -> None:
         """The storage address goes through the guard, with none of OpenRouter's credentials."""
         self._use(
-            monkeypatch, lambda _r: httpx.Response(302, headers={"location": "https://store.example/v.mp4?sig=1"})
+            monkeypatch, lambda _r: httpx2.Response(302, headers={"location": "https://store.example/v.mp4?sig=1"})
         )
         _resolves(monkeypatch, {"store.example": [PUBLIC]})
-        seen: list[httpx.Request] = []
+        seen: list[httpx2.Request] = []
 
-        def storage(request: httpx.Request) -> httpx.Response:
+        def storage(request: httpx2.Request) -> httpx2.Response:
             seen.append(request)
-            return httpx.Response(200, content=b"stored")
+            return httpx2.Response(200, content=b"stored")
 
         monkeypatch.setattr(net_guard, "public_http", _client(storage))
         dest = tmp_path / "v.mp4"
@@ -298,7 +300,7 @@ class TestOpenRouterVideo:
 
     def test_a_redirect_to_a_private_address_is_refused(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """Nothing is written, and the reason is plain."""
-        self._use(monkeypatch, lambda _r: httpx.Response(302, headers={"location": "https://internal.example/v"}))
+        self._use(monkeypatch, lambda _r: httpx2.Response(302, headers={"location": "https://internal.example/v"}))
         _resolves(monkeypatch, {"internal.example": ["10.1.2.3"]})
         dest = tmp_path / "v.mp4"
         with pytest.raises(openrouter.UnsafeVideoUrlError):

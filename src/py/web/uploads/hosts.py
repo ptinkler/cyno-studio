@@ -11,8 +11,7 @@ from collections.abc import Mapping
 from http import HTTPStatus
 from pathlib import Path
 
-import httpx
-import requests
+import httpx2
 from bs4 import BeautifulSoup
 from pydantic import TypeAdapter
 
@@ -241,7 +240,7 @@ def _reuse_cached(host: str, key: _CacheKey | None, filepath: Path) -> str | Non
         return None
     try:
         url = _served_url(host, cached, filepath)
-    except (ValueError, requests.RequestException) as exc:
+    except (ValueError, httpx2.HTTPError) as exc:
         log.warning("%s: cached upload no longer served (%s), re-uploading", host, exc)
         _drop_url(key)
         return None
@@ -274,7 +273,7 @@ def upload_file(filepath: Path, prefs: UploadPrefs | None = None) -> str:
         if url is None:
             try:
                 url = _upload_fresh(host, key, filepath, resolved, expiry)
-            except (ValueError, requests.RequestException) as exc:
+            except (ValueError, httpx2.HTTPError) as exc:
                 log.warning("%s failed (%s), trying the next host", host, exc)
                 errors.append(f"{_HOST_LABEL.get(host, host)}: {exc}")
                 continue
@@ -327,7 +326,14 @@ def _served_url(host: str, stored: str, filepath: Path) -> str:
 # the backup. Self-hosting is skipped: this instance can reach itself whatever
 # the outside world sees.
 _VERIFY_HOSTS = ("litterbox", "uguu", "tmpfiles")
-_VERIFY_TIMEOUT = httpx.Timeout(15, connect=8)
+_VERIFY_TIMEOUT = httpx2.Timeout(15, connect=8)
+
+
+def _upload_timeout(read: float) -> httpx2.Timeout:
+    """Connect and response-wait limits only: sending a file takes as long as it takes."""
+    return httpx2.Timeout(read, connect=8, write=None)
+
+
 _VERIFY_MAX_BYTES = 64 * 1024  # a ranged request for one byte: anything bigger is a host ignoring the range
 
 
@@ -342,7 +348,7 @@ def _verify_served(host: str, url: str, filepath: Path) -> None:
             headers={"Range": "bytes=0-0"},
             max_bytes=_VERIFY_MAX_BYTES,
         )
-    except (httpx.HTTPError, net_guard.UnsafeURLError) as exc:
+    except (httpx2.HTTPError, net_guard.UnsafeURLError) as exc:
         raise HostedFileUnreachableError(exc) from exc
     content_type = (resp.headers.get("content-type") or "").split(";")[0].strip().lower()
     if resp.status_code not in (200, 206):
@@ -377,8 +383,8 @@ def upload_to_uguu(filepath: Path) -> str:
         raise FileTooLargeForUguuError(size)
     try:
         with filepath.open("rb") as f:
-            resp = requests.post(UGUU_URL, files={"files[]": (filepath.name, f)}, timeout=(8, 60))
-    except requests.RequestException as exc:
+            resp = httpx2.post(UGUU_URL, files={"files[]": (filepath.name, f)}, timeout=_upload_timeout(60))
+    except httpx2.HTTPError as exc:
         raise UploadFailedError("uguu.se", exc) from exc
     if resp.status_code != HTTPStatus.OK:
         raise _http_failure("uguu.se", resp)
@@ -394,7 +400,7 @@ def upload_to_uguu(filepath: Path) -> str:
     return url
 
 
-def _http_failure(service: str, resp: requests.Response) -> UploadHttpError:
+def _http_failure(service: str, resp: httpx2.Response) -> UploadHttpError:
     return UploadHttpError(service, resp.status_code, resp.text)
 
 
@@ -410,16 +416,18 @@ def _upload_to_litterbox(filepath: Path, expiry_minutes: int = 60) -> str:
     """
     try:
         with filepath.open("rb") as f:
-            resp = requests.post(
+            resp = httpx2.post(
                 LITTERBOX_URL,
                 data={"reqtype": "fileupload", "time": litterbox_time(expiry_minutes)},
                 files={"fileToUpload": (filepath.name, f)},
-                timeout=(8, 15),  # (connect, read) — read is server response time only, not upload duration
+                timeout=httpx2.Timeout(
+                    15, connect=8, write=None
+                ),  # read is server response time only, not upload duration
             )
-    except requests.exceptions.Timeout as exc:
+    except httpx2.TimeoutException as exc:
         log.warning("litterbox upload timed out (%s)", exc)
         raise LitterboxTimeoutError from exc
-    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError) as exc:
+    except httpx2.TransportError as exc:
         log.warning("litterbox upload failed — %s: %s", type(exc).__name__, exc)
         raise UploadFailedError("Litterbox", exc) from exc
     if resp.status_code != HTTPStatus.OK or not resp.text.startswith("https://"):
@@ -436,14 +444,14 @@ def _upload_to_tmpfiles(filepath: Path, expiry_minutes: int = 60) -> str:
     """
     try:
         with filepath.open("rb") as f:
-            resp = requests.post(
+            resp = httpx2.post(
                 TMPFILES_URL,
                 data={"expire": expiry_minutes * 60},
                 files={"file": (filepath.name, f)},
-                timeout=(8, 30),
+                timeout=_upload_timeout(30),
             )
         data = _TMPFILES_RESPONSE.validate_json(resp.text)
-    except (requests.RequestException, ValueError) as exc:
+    except (httpx2.HTTPError, ValueError) as exc:
         raise UploadRejectedError("tmpfiles.org", exc) from exc
     if resp.status_code != HTTPStatus.OK:
         raise _http_failure("tmpfiles.org", resp)
@@ -467,10 +475,10 @@ def _tmpfiles_direct_url(page_url: str) -> str:
     """
     try:
         page = net_guard.get_public(
-            net_guard.public_http, page_url, timeout=httpx.Timeout(30, connect=8), max_bytes=net_guard.MAX_PAGE_BYTES
+            net_guard.public_http, page_url, timeout=httpx2.Timeout(30, connect=8), max_bytes=net_guard.MAX_PAGE_BYTES
         )
         page.raise_for_status()
-    except (httpx.HTTPError, net_guard.UnsafeURLError) as exc:
+    except (httpx2.HTTPError, net_guard.UnsafeURLError) as exc:
         raise HostedFileUnreachableError(exc) from exc
     soup = BeautifulSoup(page.text, "html.parser")
     link = soup.find("a", class_="download") or soup.find("img", id="img_preview")

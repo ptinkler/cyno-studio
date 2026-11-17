@@ -41,7 +41,7 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Literal, TypedDict, cast
 
-import requests
+import httpx2
 
 from scripts.probe_pollo_models import probe_estimate
 from web.jsonutil import as_int, as_list, as_object, as_objects, as_str, body_of
@@ -130,7 +130,7 @@ def _load_spec(path_or_none: str | None) -> Spec:
         with Path(path_or_none).open(encoding="utf-8") as f:
             return as_object(cast("object", json.load(f)))
     write(f"Fetching {SPEC_URL} (~10 MB)…", err=True)
-    resp = requests.get(SPEC_URL, timeout=60)
+    resp = httpx2.get(SPEC_URL, timeout=60, follow_redirects=True)
     resp.raise_for_status()
     return as_object(body_of(resp))
 

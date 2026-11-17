@@ -21,7 +21,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
-import httpx
+import httpx2
 
 MAX_IMAGE_BYTES = 64 * 1024**2
 MAX_VIDEO_BYTES = 2 * 1024**3
@@ -30,7 +30,7 @@ CHUNK = 1 << 16
 DEFAULT_REDIRECTS = 3
 
 # For fetches that have no client of their own: no credentials, no cookies, no redirect following
-public_http = httpx.Client(follow_redirects=False)
+public_http = httpx2.Client(follow_redirects=False)
 
 
 class UnsafeURLError(ValueError):
@@ -135,16 +135,16 @@ def assert_public_url(url: str) -> None:
 
 @contextmanager
 def open_public(
-    client: httpx.Client,
+    client: httpx2.Client,
     url: str,
     *,
-    timeout: float | httpx.Timeout | None,
+    timeout: float | httpx2.Timeout | None,
     headers: Mapping[str, str] | None = None,
     max_redirects: int = DEFAULT_REDIRECTS,
-) -> Generator[httpx.Response]:
+) -> Generator[httpx2.Response]:
     """Stream a GET of a public URL, checking and pinning the address on every redirect hop."""
     for _ in range(max_redirects + 1):
-        target = httpx.URL(url)
+        target = httpx2.URL(url)
         ip = public_address(url)
         request_headers = {**(headers or {}), "Host": target.netloc.decode()}
         with client.stream(
@@ -163,7 +163,7 @@ def open_public(
     raise TooManyRedirectsError
 
 
-def _read_capped(resp: httpx.Response, max_bytes: int, sink: Callable[[bytes], object]) -> None:
+def _read_capped(resp: httpx2.Response, max_bytes: int, sink: Callable[[bytes], object]) -> None:
     """Feed the body to `sink` a chunk at a time, refusing one bigger than `max_bytes`."""
     declared: str = resp.headers.get("content-length") or ""
     if declared.isdigit() and int(declared) > max_bytes:
@@ -177,13 +177,13 @@ def _read_capped(resp: httpx.Response, max_bytes: int, sink: Callable[[bytes], o
 
 
 def get_public(
-    client: httpx.Client,
+    client: httpx2.Client,
     url: str,
     *,
-    timeout: float | httpx.Timeout | None,
+    timeout: float | httpx2.Timeout | None,
     headers: Mapping[str, str] | None = None,
     max_bytes: int = MAX_IMAGE_BYTES,
-) -> httpx.Response:
+) -> httpx2.Response:
     """GET a public URL (each redirect target checked and pinned) and return the whole, size-capped answer.
 
     Raises:
@@ -193,22 +193,22 @@ def get_public(
         chunks: list[bytes] = []
         _read_capped(resp, max_bytes, chunks.append)
         kept = {k: v for k, v in resp.headers.items() if k.lower() not in ("content-encoding", "content-length")}
-        return httpx.Response(resp.status_code, headers=kept, content=b"".join(chunks), request=resp.request)
+        return httpx2.Response(resp.status_code, headers=kept, content=b"".join(chunks), request=resp.request)
 
 
 def download_public(
-    client: httpx.Client,
+    client: httpx2.Client,
     url: str,
     dest: Path,
     *,
-    timeout: float | httpx.Timeout | None,
+    timeout: float | httpx2.Timeout | None,
     max_bytes: int = MAX_VIDEO_BYTES,
 ) -> None:
     """Download a public URL to `dest` (through a .part file, so a failed download leaves nothing at `dest`).
 
     Raises:
         UnsafeURLError: If a URL is unsafe or the file is over `max_bytes`.
-        httpx.HTTPError: On an error status or a network failure.
+        httpx2.HTTPError: On an error status or a network failure.
     """
     tmp = dest.with_suffix(dest.suffix + ".part")
     dest.parent.mkdir(parents=True, exist_ok=True)

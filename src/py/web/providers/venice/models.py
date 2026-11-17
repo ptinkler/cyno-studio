@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import NamedTuple
 
-import httpx
+import httpx2
 
 from web.core.cache import MISS, TTLCache
 from web.jsonutil import as_object, as_objects, as_str, body_of
@@ -134,7 +134,7 @@ def _quote_video(job: _QuoteJob) -> float | None:
     return usd
 
 
-def quote_of(resp: httpx.Response) -> float | None:
+def quote_of(resp: httpx2.Response) -> float | None:
     """The USD price in a ``/video/quote`` reply."""
     return usd_or_none(as_object(body_of(resp)).get("quote"))
 

@@ -16,7 +16,7 @@ import secrets
 from http import HTTPStatus
 from typing import TYPE_CHECKING, Annotated, TypedDict, cast
 
-import httpx
+import httpx2
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
@@ -201,7 +201,7 @@ async def check_selfhost(data: SelfhostTest, user: Annotated[User, Depends(requi
     test_file.write_text(token)
     try:
         url = selfhost_url(test_file, base, ttl_seconds=120)
-        with httpx.Client() as client:
+        with httpx2.Client() as client:
             resp = get_public(client, url, timeout=10)
         if resp.status_code != HTTPStatus.OK:
             return SelfhostCheck(
@@ -215,7 +215,7 @@ async def check_selfhost(data: SelfhostTest, user: Annotated[User, Depends(requi
         return SelfhostCheck(ok=False, detail=f"Not publicly reachable: {e}. Pollo needs a public https address.")
     except ValueError as e:
         return SelfhostCheck(ok=False, detail=str(e))
-    except httpx.HTTPError as e:
+    except httpx2.HTTPError as e:
         return SelfhostCheck(ok=False, detail=f"Couldn't reach the URL: {e}")
     finally:
         test_file.unlink(missing_ok=True)

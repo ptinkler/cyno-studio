@@ -13,7 +13,7 @@ from web.types import JsonValue
 
 
 class _Decodable(Protocol):
-    """An HTTP response whose body can be decoded as JSON (requests or httpx)."""
+    """An HTTP response whose body can be decoded as JSON (requests or httpx2)."""
 
     def json(self) -> object:
         """Decode the body (raises ValueError when it is not JSON)."""

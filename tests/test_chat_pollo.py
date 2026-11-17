@@ -5,8 +5,8 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import ClassVar
 
+import httpx2
 import pytest
-import requests
 from fastapi.testclient import TestClient
 
 import web.chat as chat_pkg
@@ -893,14 +893,6 @@ class TestPolloRequestLog:
     def test_submit_is_logged_with_its_payload(self, chat: None) -> None:
         """Test that submit is logged with its payload."""
 
-        class Resp(requests.Response):
-            def __init__(self) -> None:
-                super().__init__()
-                self.status_code = 200
-
-            def json(self, **_kwargs: object) -> JsonValue:
-                return {"data": {"taskId": "t-9"}}
-
         class Gen(PolloGenerator):
             def __init__(self) -> None:
                 super().__init__(
@@ -915,8 +907,8 @@ class TestPolloRequestLog:
             def get_payload(self) -> Payload:
                 return {"input": {"prompt": "waves", "image": "https://host/x.png"}}
 
-            def send_request(self) -> requests.Response:
-                return Resp()
+            def send_request(self) -> httpx2.Response:
+                return httpx2.Response(200, json={"data": {"taskId": "t-9"}})
 
         assert pollo_tasks.submit_task(Gen()) == "t-9"
         entry = request_log.recent()[0]

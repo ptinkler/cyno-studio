@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from http import HTTPStatus
 
-import httpx
+import httpx2
 
 from web.auth import keyctx
 from web.core import request_log
@@ -28,10 +28,10 @@ from web.types import JsonValue, VeniceBalances
 VENICE_BASE = os.getenv("VENICE_BASE_URL", "https://api.venice.ai/api/v1").rstrip("/")
 
 
-DEFAULT_TIMEOUT = httpx.Timeout(30)
+DEFAULT_TIMEOUT = httpx2.Timeout(30)
 
 
-http = httpx.Client(transport=httpx.HTTPTransport(socket_options=keepalive_socket_options()))
+http = httpx2.Client(transport=httpx2.HTTPTransport(socket_options=keepalive_socket_options()))
 
 
 _balance: dict[str, float | None] = {}  # tenant -> the x-venice-balance-usd header's last value
@@ -64,7 +64,7 @@ def headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {key}"}
 
 
-def note_balance(resp: httpx.Response) -> None:
+def note_balance(resp: httpx2.Response) -> None:
     """Remember the balance Venice reports in a reply's header, for this user."""
     value: str = resp.headers.get("x-venice-balance-usd") or ""
     if value:
@@ -72,7 +72,7 @@ def note_balance(resp: httpx.Response) -> None:
             _balance[tenant()] = float(value)
 
 
-def _error_message(resp: httpx.Response) -> str | None:
+def _error_message(resp: httpx2.Response) -> str | None:
     """Venice's own explanation of an error reply, if it gave one."""
     try:
         body = body_of(resp)
@@ -88,7 +88,7 @@ def _error_message(resp: httpx.Response) -> str | None:
     return message
 
 
-def raise_for_response(resp: httpx.Response) -> None:
+def raise_for_response(resp: httpx2.Response) -> None:
     """Note the balance, then raise Venice's own message for an error reply."""
     note_balance(resp)
     if resp.status_code < HTTPStatus.BAD_REQUEST:
@@ -104,11 +104,11 @@ class Call:
     path: str
     json_body: JsonValue = None
     params: dict[str, str] | None = None
-    timeout: httpx.Timeout = field(default_factory=lambda: DEFAULT_TIMEOUT)  # Timeout is unhashable
+    timeout: httpx2.Timeout = field(default_factory=lambda: DEFAULT_TIMEOUT)  # Timeout is unhashable
     waiting_for: str = "response"
 
 
-def request(call: Call, *, log: bool = False) -> httpx.Response:
+def request(call: Call, *, log: bool = False) -> httpx2.Response:
     """One Venice call. `log`: record it in the request log (web/core/request_log.py)."""
     if not log:
         return _send(call)
@@ -121,7 +121,7 @@ def request(call: Call, *, log: bool = False) -> httpx.Response:
     return resp
 
 
-def _send(call: Call, *, check: bool = True) -> httpx.Response:
+def _send(call: Call, *, check: bool = True) -> httpx2.Response:
     start = time.monotonic()
     try:
         resp = http.request(
@@ -132,9 +132,9 @@ def _send(call: Call, *, check: bool = True) -> httpx.Response:
             json=call.json_body,
             params=call.params,
         )
-    except (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError, httpx.ConnectError) as e:
+    except (httpx2.RemoteProtocolError, httpx2.ReadError, httpx2.WriteError, httpx2.ConnectError) as e:
         raise ConnectionDroppedError(round(time.monotonic() - start), call.waiting_for, e) from e
-    except httpx.TimeoutException as e:
+    except httpx2.TimeoutException as e:
         raise AnswerTimeoutError(e) from e
     if check:  # else the caller checks, after logging the response
         raise_for_response(resp)
