@@ -12,7 +12,7 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-import requests
+import httpx2
 
 from web.core.cloudflare import is_cloudflare_block
 from web.core.config import POLLO_API_TIMEOUT
@@ -106,7 +106,7 @@ class PolloGenerator:
         """The endpoint's free price-check twin (see web/providers/pollo/estimate.py)."""
         return f"{self.model_url}/estimate" if self.model_url else None
 
-    def send_request(self) -> requests.Response:
+    def send_request(self) -> httpx2.Response:
         """Submit the built request to Pollo and return its HTTP response."""
         if not self.model_url:
             raise NoEndpointError(self.spec.model_id)
@@ -115,12 +115,12 @@ class PolloGenerator:
         if self.api_key:
             headers["x-api-key"] = self.api_key
         try:
-            resp = requests.request(
-                "POST", self.model_url, data=json.dumps(payload), headers=headers, timeout=POLLO_API_TIMEOUT
+            resp = httpx2.request(
+                "POST", self.model_url, content=json.dumps(payload), headers=headers, timeout=POLLO_API_TIMEOUT
             )
-        except requests.exceptions.ConnectionError as e:
+        except httpx2.ConnectError as e:
             raise ApiUnreachableError(self.model_url, e) from e
-        except requests.exceptions.Timeout as e:
+        except httpx2.TimeoutException as e:
             raise ApiTimeoutError(self.model_url, e) from e
         if is_cloudflare_block(resp):
             raise CloudflareBlockedError(resp.status_code)

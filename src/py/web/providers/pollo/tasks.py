@@ -6,8 +6,7 @@ from http import HTTPStatus
 from pathlib import Path
 from urllib.parse import urlsplit
 
-import httpx
-import requests
+import httpx2
 
 from web.auth import keyctx
 from web.core import net_guard, request_log
@@ -81,7 +80,7 @@ def download_video(job_id: str, dest: Path, index: int = 0) -> None:
         raise VideoNotReadyError(task["status"])
     try:
         net_guard.download_public(net_guard.public_http, task_urls(task)[index], dest, timeout=DOWNLOAD_TIMEOUT)
-    except (httpx.HTTPError, net_guard.UnsafeURLError) as e:
+    except (httpx2.HTTPError, net_guard.UnsafeURLError) as e:
         raise DownloadFailedError("video", e) from e
 
 
@@ -135,7 +134,7 @@ def _task_state(task_id: str) -> dict[str, JsonValue]:
     """
     try:
         results = get_task_status(task_id, keyctx.provider_key("pollo") or "")
-    except (requests.RequestException, ValueError) as e:  # retry network/VPN hiccups
+    except (httpx2.HTTPError, ValueError) as e:  # retry network/VPN hiccups
         return {"status": "transient", "error": f"Pollo: {e}"}
     status, fail_msg = results[0][0], results[0][1]
     if status == "cloudflare_blocked" or (status == "error" and (fail_msg or "").startswith("HTTP ")):
@@ -205,7 +204,7 @@ def download_image(url: str) -> tuple[bytes, str]:
     try:
         resp = net_guard.get_public(net_guard.public_http, url, timeout=DOWNLOAD_TIMEOUT)
         resp.raise_for_status()
-    except (httpx.HTTPError, net_guard.UnsafeURLError) as e:
+    except (httpx2.HTTPError, net_guard.UnsafeURLError) as e:
         raise DownloadFailedError("image", e) from e
     media_type = (resp.headers.get("Content-Type") or "image/png").split(";")[0].strip()
     return resp.content, media_type

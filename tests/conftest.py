@@ -8,8 +8,8 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import NoReturn
 
+import httpx2
 import pytest
-import requests
 
 # Imported at collection, before any fixture patches anything: a module's
 # `from x import y` names bind once, and whatever they point at then is what
@@ -161,10 +161,7 @@ def _no_outbound_http(monkeypatch: pytest.MonkeyPatch) -> None:
     which is very hard to trace back; this names it on the spot.
     """
 
-    def blocked(*args: object, **kwargs: object) -> NoReturn:
-        target = args[1] if len(args) > 1 else (args[0] if args else kwargs.get("url", "?"))
-        pytest.fail(f"a test tried to reach the network: {target}")
+    def blocked(_self: object, request: httpx2.Request) -> NoReturn:
+        pytest.fail(f"a test tried to reach the network: {request.url}")
 
-    for name in ("request", "get", "post", "put", "delete", "head"):
-        monkeypatch.setattr(requests, name, blocked, raising=False)
-    monkeypatch.setattr(requests.Session, "request", blocked, raising=False)
+    monkeypatch.setattr(httpx2.HTTPTransport, "handle_request", blocked)

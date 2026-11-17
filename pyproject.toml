@@ -11,7 +11,8 @@ dependencies = [
     "beautifulsoup4",
     "cryptography",
     "fastapi",
-    "httpx",
+    "httpx",  # Authlib's Starlette client needs it; our own code uses httpx2
+    "httpx2",
     "itsdangerous",
     "openai",
     "opencv-python",
@@ -20,7 +21,6 @@ dependencies = [
     "pydantic",
     "python-dotenv",
     "python-multipart",
-    "requests",
     "SQLAlchemy",
     "starlette",
     "uvicorn[standard]",
@@ -29,7 +29,6 @@ dependencies = [
 [dependency-groups]
 dev = [
     "basedpyright",
-    "httpx2",  # Starlette's TestClient
     "pre-commit",
     "pytest",
     "ruff",

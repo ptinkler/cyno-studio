@@ -20,7 +20,7 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import cast
 
-import httpx
+import httpx2
 
 from web.auth import keyctx
 from web.core import net_guard, request_log, sse
@@ -31,9 +31,9 @@ from web.uploads.files import file_to_data_url
 
 # Overridable so a local fake can stand in during manual testing
 OPENROUTER_BASE = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1").rstrip("/")
-CHAT_TIMEOUT = httpx.Timeout(connect=15, read=300, write=60, pool=15)
-IMAGE_TIMEOUT = httpx.Timeout(connect=15, read=600, write=120, pool=15)
-DEFAULT_TIMEOUT = httpx.Timeout(30)
+CHAT_TIMEOUT = httpx2.Timeout(connect=15, read=300, write=60, pool=15)
+IMAGE_TIMEOUT = httpx2.Timeout(connect=15, read=600, write=120, pool=15)
+DEFAULT_TIMEOUT = httpx2.Timeout(30)
 
 
 class OpenRouterError(Exception):
@@ -111,7 +111,7 @@ def keepalive_socket_options() -> list[tuple[int, int, int]]:
     Image and video calls can sit silent for a minute or more
     (Seedream 5.0 Pro with references:
     ~2 min), and some networks — VPNs, NAT routers, NAS/Docker hosts — drop
-    connections idle that long, surfacing as httpx.RemoteProtocolError
+    connections idle that long, surfacing as httpx2.RemoteProtocolError
     "Server disconnected without sending a response".
 
     NB: observed cuts at ~62s on both OpenRouter and Venice through the
@@ -127,7 +127,7 @@ def keepalive_socket_options() -> list[tuple[int, int, int]]:
 
 
 # One shared, thread-safe client so every OpenRouter connection gets keepalive
-http_client = httpx.Client(transport=httpx.HTTPTransport(socket_options=keepalive_socket_options()))
+http_client = httpx2.Client(transport=httpx2.HTTPTransport(socket_options=keepalive_socket_options()))
 
 
 @contextmanager
@@ -136,7 +136,7 @@ def _connection_guard(waiting_for: str) -> Generator[None]:
     start = time.monotonic()
     try:
         yield
-    except (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError) as e:
+    except (httpx2.RemoteProtocolError, httpx2.ReadError, httpx2.WriteError) as e:
         waited = round(time.monotonic() - start)
         raise ConnectionDroppedError(waited, waiting_for, e) from e
 
@@ -193,7 +193,7 @@ def request_headers() -> dict[str, str]:
     }
 
 
-def raise_for_response(resp: httpx.Response) -> None:
+def raise_for_response(resp: httpx2.Response) -> None:
     """Raise ``OpenRouterError`` for an HTTP error reply, with OpenRouter's own explanation."""
     if resp.status_code < HTTPStatus.BAD_REQUEST:
         return
@@ -374,7 +374,7 @@ def stream_chat(
     chunks.
 
     OpenRouter sends ": OPENROUTER PROCESSING" keep-alives while a provider
-    is slow, and each one resets httpx's read timeout — so a stalled upstream
+    is slow, and each one resets httpx2's read timeout — so a stalled upstream
     would otherwise hang forever. `max_seconds` caps the whole call and
     `should_stop` is polled on every line (keep-alives included), so a
     cancel is noticed within seconds even when no tokens are flowing.

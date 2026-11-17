@@ -2,30 +2,21 @@
 
 from unittest.mock import patch
 
-import requests
+import httpx2
 
 from web.core.get_task import get_credit_balance, get_task_status
 from web.types import JsonValue
 
 
-class FakeResponse(requests.Response):
-    """A ``requests`` response with a fixed status, decoded JSON body and text."""
+class FakeResponse(httpx2.Response):
+    """A response with a fixed status and either a JSON body or raw text."""
 
     def __init__(self, status_code: int, body: JsonValue = None, text: str = "") -> None:
-        """Hold the status, JSON body and text the fake reply reports."""
-        super().__init__()
-        self.status_code = status_code
-        self._body = body
-        self._text = text
-
-    @property
-    def text(self) -> str:
-        """The reply text."""
-        return self._text
-
-    def json(self, **_kwargs: object) -> JsonValue:
-        """The decoded JSON body."""
-        return self._body
+        """Build the reply: a JSON body when there is one, else the text."""
+        if body is None:
+            super().__init__(status_code, text=text)
+        else:
+            super().__init__(status_code, json=body)
 
 
 class TestGetTaskStatus:
@@ -36,7 +27,7 @@ class TestGetTaskStatus:
         mock_resp = FakeResponse(
             200, {"data": {"generations": [{"status": "succeed", "failMsg": None, "url": "https://video.com/out.mp4"}]}}
         )
-        with patch("web.core.get_task.requests.request", return_value=mock_resp):
+        with patch("web.core.get_task.httpx2.request", return_value=mock_resp):
             results = get_task_status("task123", "api-key-123")
         assert len(results) == 1
         assert results[0] == ("succeed", None, "https://video.com/out.mp4", None)
@@ -54,7 +45,7 @@ class TestGetTaskStatus:
                 }
             },
         )
-        with patch("web.core.get_task.requests.request", return_value=mock_resp):
+        with patch("web.core.get_task.httpx2.request", return_value=mock_resp):
             results = get_task_status("task123", "api-key-123")
         assert results[0][3] == 21
 
@@ -69,7 +60,7 @@ class TestGetTaskStatus:
                 }
             },
         )
-        with patch("web.core.get_task.requests.request", return_value=mock_resp):
+        with patch("web.core.get_task.httpx2.request", return_value=mock_resp):
             results = get_task_status("task123", "api-key-123")
         assert results[0][3] == 15
 
@@ -91,7 +82,7 @@ class TestGetTaskStatus:
                 }
             },
         )
-        with patch("web.core.get_task.requests.request", return_value=mock_resp):
+        with patch("web.core.get_task.httpx2.request", return_value=mock_resp):
             results = get_task_status("task123", "api-key-123")
         assert results[0] == ("succeed", None, "https://cdn.pollo.ai/video.mp4", 21)
 
@@ -100,7 +91,7 @@ class TestGetTaskStatus:
         mock_resp = FakeResponse(
             200, {"data": {"generations": [{"status": "error", "failMsg": "Something broke", "url": None}]}}
         )
-        with patch("web.core.get_task.requests.request", return_value=mock_resp):
+        with patch("web.core.get_task.httpx2.request", return_value=mock_resp):
             results = get_task_status("task123", "api-key-123")
         assert results[0][0] == "error"
         assert results[0][1] == "Something broke"
@@ -110,21 +101,21 @@ class TestGetTaskStatus:
         mock_resp = FakeResponse(
             200, {"data": {"generations": [{"status": "processing", "failMsg": None, "url": None}]}}
         )
-        with patch("web.core.get_task.requests.request", return_value=mock_resp):
+        with patch("web.core.get_task.httpx2.request", return_value=mock_resp):
             results = get_task_status("task123", "api-key-123")
         assert results[0] == ("processing", None, None, None)
 
     def test_no_generations(self) -> None:
         """Test that no generations."""
         mock_resp = FakeResponse(200, {"data": {"generations": []}})
-        with patch("web.core.get_task.requests.request", return_value=mock_resp):
+        with patch("web.core.get_task.httpx2.request", return_value=mock_resp):
             results = get_task_status("task123", "api-key-123")
         assert results == [("error", "No generations found.", None, None)]
 
     def test_api_error_status_code(self) -> None:
         """Test that api error status code."""
         mock_resp = FakeResponse(400, {"data": {"issues": [{"message": "Bad request"}]}})
-        with patch("web.core.get_task.requests.request", return_value=mock_resp):
+        with patch("web.core.get_task.httpx2.request", return_value=mock_resp):
             results = get_task_status("task123", "api-key-123")
         assert results[0][0] == "error"
         assert results[0][1] == "Bad request"
@@ -132,7 +123,7 @@ class TestGetTaskStatus:
     def test_api_error_no_issues(self) -> None:
         """Test that api error no issues."""
         mock_resp = FakeResponse(400, {"data": {"issues": []}})
-        with patch("web.core.get_task.requests.request", return_value=mock_resp):
+        with patch("web.core.get_task.httpx2.request", return_value=mock_resp):
             # No issues means the for-loop doesn't trigger, returns HTTP error fallback
             results = get_task_status("task123", "api-key-123")
         assert results == [("error", "HTTP 400", None, None)]
@@ -150,7 +141,7 @@ class TestGetTaskStatus:
                 }
             },
         )
-        with patch("web.core.get_task.requests.request", return_value=mock_resp):
+        with patch("web.core.get_task.httpx2.request", return_value=mock_resp):
             results = get_task_status("task123", "api-key-123")
         assert len(results) == 2
 
@@ -158,7 +149,7 @@ class TestGetTaskStatus:
         """Test that cloudflare block returns cloudflare blocked status."""
         mock_resp = FakeResponse(403, text="<html><title>Just a moment...</title>cloudflare</html>")
         with (
-            patch("web.core.get_task.requests.request", return_value=mock_resp),
+            patch("web.core.get_task.httpx2.request", return_value=mock_resp),
             patch("web.core.get_task.is_cloudflare_block", return_value=True),
         ):
             results = get_task_status("task123", "api-key-123")
@@ -168,7 +159,7 @@ class TestGetTaskStatus:
     def test_headers_include_api_key(self) -> None:
         """Test that headers include api key."""
         mock_resp = FakeResponse(200, {"data": {"generations": [{"status": "succeed", "failMsg": None, "url": "x"}]}})
-        with patch("web.core.get_task.requests.request", return_value=mock_resp) as mock_req:
+        with patch("web.core.get_task.httpx2.request", return_value=mock_resp) as mock_req:
             get_task_status("task123", "my-key")
         mock_req.assert_called_once_with(
             "GET",
@@ -184,19 +175,19 @@ class TestGetCreditBalance:
     def test_success(self) -> None:
         """Test that success."""
         mock_resp = FakeResponse(200, {"availableCredits": 500, "totalCredits": 1000})
-        with patch("web.core.get_task.requests.get", return_value=mock_resp):
+        with patch("web.core.get_task.httpx2.get", return_value=mock_resp):
             result = get_credit_balance("api-key-123")
         assert result == {"availableCredits": 500, "totalCredits": 1000}
 
     def test_failure(self) -> None:
         """Test that failure."""
         mock_resp = FakeResponse(401)
-        with patch("web.core.get_task.requests.get", return_value=mock_resp):
+        with patch("web.core.get_task.httpx2.get", return_value=mock_resp):
             result = get_credit_balance("bad-key")
         assert result is None
 
     def test_network_error(self) -> None:
         """Test that network error."""
-        with patch("web.core.get_task.requests.get", side_effect=requests.ConnectionError("timeout")):
+        with patch("web.core.get_task.httpx2.get", side_effect=httpx2.ConnectError("timeout")):
             result = get_credit_balance("api-key-123")
         assert result is None

@@ -8,7 +8,7 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import ClassVar, Self
 
-import httpx
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 
@@ -31,8 +31,8 @@ pytest_plugins = ["tests.chat_fixtures"]
 class TestOpenRouterErrors:
     """Tests for open router errors."""
 
-    def _resp(self, status: int, body: dict[str, JsonValue]) -> httpx.Response:
-        return httpx.Response(status, json=body)
+    def _resp(self, status: int, body: dict[str, JsonValue]) -> httpx2.Response:
+        return httpx2.Response(status, json=body)
 
     def test_names_upstream_provider(self) -> None:
         """Test that names upstream provider."""
@@ -63,7 +63,7 @@ class TestOpenRouterErrors:
     def test_non_json_body(self) -> None:
         """Test that non json body."""
         with pytest.raises(openrouter.OpenRouterError) as e:
-            openrouter.raise_for_response(httpx.Response(503, text="upstream down"))
+            openrouter.raise_for_response(httpx2.Response(503, text="upstream down"))
         assert str(e.value) == "upstream down"
 
 
@@ -489,15 +489,15 @@ class TestConversationalImageModels:
 class TestOpenRouterChatImages:
     """Tests for open router chat images."""
 
-    def _resp(self, body: JsonValue) -> httpx.Response:
-        return httpx.Response(200, json=body)
+    def _resp(self, body: JsonValue) -> httpx2.Response:
+        return httpx2.Response(200, json=body)
 
     def test_parses_data_url_images_and_sends_modalities(self, chat: None, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that parses data url images and sends modalities."""
         sent: dict[str, JsonValue] = {}
         b64 = base64.b64encode(png_bytes()).decode()
 
-        def fake_post(url: str, **kw: JsonValue) -> httpx.Response:
+        def fake_post(url: str, **kw: JsonValue) -> httpx2.Response:
             sent.update(jp.obj(kw, "json"))
             return self._resp(
                 {
@@ -570,7 +570,7 @@ class TestOpenRouterConnection:
     def test_dropped_connection_fails_the_card_with_an_explanation(
         self, client: TestClient, conv: ConversationOut, chat: None, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """httpx.RemoteProtocolError used to escape as a raw error and leave the image pending."""
+        """httpx2.RemoteProtocolError used to escape as a raw error and leave the image pending."""
 
         def drop(*_args: object, **_kwargs: object) -> None:
             raise server_disconnected()

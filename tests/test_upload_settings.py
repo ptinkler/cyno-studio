@@ -310,7 +310,7 @@ class TestUguu:
             sent.append(url)
             return _Reply(200, '{"success": true, "files": [{"url": "https://h.uguu.se/AbCd.mov"}]}')
 
-        monkeypatch.setattr(image_hosts.requests, "post", post)
+        monkeypatch.setattr(image_hosts.httpx2, "post", post)
         assert image_hosts.upload_to_uguu(f) == "https://h.uguu.se/AbCd.mov"
         assert sent == [image_hosts.UGUU_URL]
 
@@ -323,7 +323,7 @@ class TestUguu:
         def post(url: str, **kw: object) -> NoReturn:
             pytest.fail("should not upload")
 
-        monkeypatch.setattr(image_hosts.requests, "post", post)
+        monkeypatch.setattr(image_hosts.httpx2, "post", post)
         with pytest.raises(ValueError, match="128 MiB"):
             image_hosts.upload_to_uguu(f)
 
@@ -335,7 +335,7 @@ class TestUguu:
         def post(url: str, **kw: object) -> _Reply:
             return _Reply(200, '{"success": false, "errorcode": 400, "description": "No input file(s)"}')
 
-        monkeypatch.setattr(image_hosts.requests, "post", post)
+        monkeypatch.setattr(image_hosts.httpx2, "post", post)
         with pytest.raises(ValueError, match="No input file"):
             image_hosts.upload_to_uguu(f)
 

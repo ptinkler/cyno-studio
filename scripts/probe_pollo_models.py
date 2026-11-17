@@ -33,7 +33,7 @@ import sys
 from http import HTTPStatus
 from typing import TYPE_CHECKING, cast
 
-import requests
+import httpx2
 
 from web.providers.pollo.engine import VIDEO_GENERATORS
 from web.providers.pollo.engine import video_generator as get_video_generator
@@ -114,13 +114,13 @@ def probe_estimate(key: str, api_key: str) -> tuple[str, str]:
     if not url:
         return "N/A", "no estimate endpoint for this model"
     try:
-        resp = requests.post(
+        resp = httpx2.post(
             url,
-            data=json.dumps(payload),
+            content=json.dumps(payload),
             headers={"x-api-key": api_key, "Content-Type": "application/json"},
             timeout=TIMEOUT,
         )
-    except requests.RequestException as e:
+    except httpx2.HTTPError as e:
         return "ERR", f"not reachable: {e}"
     return _classify(resp.status_code, resp.text)
 
@@ -134,7 +134,7 @@ def _probe_live(key: str, api_key: str) -> tuple[str, str]:
     gen = _build(key, api_key)
     try:
         resp = gen.send_request()
-    except (ConnectionError, ValueError, requests.RequestException) as e:
+    except (ConnectionError, ValueError, httpx2.HTTPError) as e:
         return "ERR", str(e)[:140]
     try:
         body = cast("JsonValue", resp.json())

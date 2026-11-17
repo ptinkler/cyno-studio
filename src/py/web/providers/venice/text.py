@@ -5,7 +5,7 @@ import time
 from collections.abc import Iterator
 from http import HTTPStatus
 
-import httpx
+import httpx2
 
 from web.core import request_log, sse
 from web.jsonutil import as_number, as_object
@@ -61,7 +61,7 @@ def stream_chat(
                 if usage:
                     chunk["usage"] = {**usage, "cost": _chat_cost(model_id, usage, as_object(chunk).get("cost"))}
                 yield chunk
-    except (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError) as e:
+    except (httpx2.RemoteProtocolError, httpx2.ReadError, httpx2.WriteError) as e:
         raise StreamDroppedError(round(time.monotonic() - start), e) from e
 
 

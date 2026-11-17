@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 
-import requests
+import httpx2
 
 from web.auth import keyctx
 from web.core.config import POLLO_API_TIMEOUT, POLLO_PLATFORM_BASE
@@ -145,7 +145,7 @@ def list_voices(page: int = 1, page_size: int = 50, **filters: str) -> dict[str,
     """Pollo's official TTS voices ({"voices": [...], "total"}). A free GET."""
     params = {"page": page, "pageSize": page_size, **{k: v for k, v in filters.items() if v}}
     try:
-        resp = requests.get(
+        resp = httpx2.get(
             f"{POLLO_PLATFORM_BASE}/config/voice/items",
             params=params,
             headers={"x-api-key": keyctx.provider_key("pollo") or ""},
@@ -153,7 +153,7 @@ def list_voices(page: int = 1, page_size: int = 50, **filters: str) -> dict[str,
         )
         resp.raise_for_status()
         body = as_object(body_of(resp))
-    except (requests.RequestException, ValueError) as e:
+    except (httpx2.HTTPError, ValueError) as e:
         raise VoiceListError(e) from e
     keep = ("voiceId", "voiceName", "sampleAudio", "language", "gender", "age", "voiceStyle", "accent", "engineCode")
     voices: list[JsonValue] = [{k: v.get(k) for k in keep} for v in as_objects(body.get("data"))]

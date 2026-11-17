@@ -1,6 +1,6 @@
 """Exceptions that tests make fakes raise, each with the message the scenario needs."""
 
-import httpx
+import httpx2
 
 from web.providers.openrouter import OpenRouterError
 
@@ -29,12 +29,12 @@ class UpstreamTimeoutError(OpenRouterError):
         super().__init__("Upstream timed out", 502)
 
 
-def server_disconnected() -> httpx.RemoteProtocolError:
-    """The server closed the connection without answering (a real ``httpx.RemoteProtocolError``)."""
-    return httpx.RemoteProtocolError("Server disconnected without sending a response.")
+def server_disconnected() -> httpx2.RemoteProtocolError:
+    """The server closed the connection without answering (a real ``httpx2.RemoteProtocolError``)."""
+    return httpx2.RemoteProtocolError("Server disconnected without sending a response.")
 
 
-class NoRouteError(httpx.ConnectError):
+class NoRouteError(httpx2.ConnectError):
     """No network route to the host."""
 
     def __init__(self) -> None:

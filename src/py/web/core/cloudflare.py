@@ -1,12 +1,12 @@
 """Cloudflare challenge/block detection utilities."""
 
-import requests
+import httpx2
 
 # Markers found in Cloudflare challenge pages
 _CF_MARKERS = ("just a moment", "cloudflare", "cf-browser-verification", "challenge-platform")
 
 
-def is_cloudflare_block(response: requests.Response) -> bool:
+def is_cloudflare_block(response: httpx2.Response) -> bool:
     """Detect if a response is a Cloudflare challenge/block page."""
     if response.status_code not in (403, 503):
         return False

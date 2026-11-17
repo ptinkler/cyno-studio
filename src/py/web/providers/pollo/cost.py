@@ -1,6 +1,6 @@
 """Pollo credit estimates, priced from stand-in media so nothing is uploaded."""
 
-import requests
+import httpx2
 
 from web.auth import keyctx
 from web.providers.pollo import catalogue
@@ -59,5 +59,5 @@ def estimate_cost(model_id: str, query: CostQuery) -> CreditEstimate | None:
                 generate_audio=query.generate_audio,
             )
         return pollo_estimate.estimate(generator)
-    except (PolloError, ValueError, TypeError, requests.RequestException):  # estimates must not block the composer
+    except (PolloError, ValueError, TypeError, httpx2.HTTPError):  # estimates must not block the composer
         return None

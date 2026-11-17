@@ -6,7 +6,7 @@ API Docs: https://docs.pollo.ai/task/get-task-status?playground=open
 import logging
 from http import HTTPStatus
 
-import requests
+import httpx2
 
 from web.core.cloudflare import is_cloudflare_block
 from web.core.config import POLLO_API_TIMEOUT, POLLO_PLATFORM_BASE, POLLO_TASK_BASE
@@ -29,7 +29,7 @@ def get_task_status(task_id: str, api_key: str) -> list[TaskResult]:
     when the status cannot be read.
     """
     url = f"{POLLO_TASK_BASE}/{task_id}/status"
-    response = requests.request("GET", url, headers={"x-api-key": api_key}, timeout=POLLO_API_TIMEOUT)
+    response = httpx2.request("GET", url, headers={"x-api-key": api_key}, timeout=POLLO_API_TIMEOUT)
     if is_cloudflare_block(response):
         return [("cloudflare_blocked", CLOUDFLARE_MESSAGE, None, None)]
     if response.status_code != HTTPStatus.OK:
@@ -60,7 +60,7 @@ def get_task_status(task_id: str, api_key: str) -> list[TaskResult]:
     return results
 
 
-def _error_message(response: requests.Response) -> str:
+def _error_message(response: httpx2.Response) -> str:
     """The first issue Pollo reports in an error response, else the HTTP status."""
     try:
         issues = as_objects(as_object(as_object(body_of(response)).get("data")).get("issues"))
@@ -90,7 +90,7 @@ def get_credit_balance(api_key: str) -> PolloBalance | None:
     headers = {"x-api-key": api_key}
     url = f"{POLLO_PLATFORM_BASE}/credit/balance"
     try:
-        response = requests.get(url, headers=headers, timeout=POLLO_API_TIMEOUT)
+        response = httpx2.get(url, headers=headers, timeout=POLLO_API_TIMEOUT)
         if response.status_code == HTTPStatus.OK:
             resp_json = as_object(body_of(response))
             # API wraps response in {"code":"SUCCESS","data":{...}}
@@ -100,6 +100,6 @@ def get_credit_balance(api_key: str) -> PolloBalance | None:
                 "totalCredits": as_int(data.get("totalCredits")) or 0,
             }
         log.warning("credit balance fetch returned HTTP %s from %s: %s", response.status_code, url, response.text[:300])
-    except (requests.RequestException, ValueError) as e:
+    except (httpx2.HTTPError, ValueError) as e:
         log.warning("could not fetch the credit balance: %s", e)
     return None
