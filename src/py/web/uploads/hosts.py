@@ -8,11 +8,11 @@ import logging
 import threading
 import time
 from collections.abc import Mapping
+from html.parser import HTMLParser
 from http import HTTPStatus
 from pathlib import Path
 
 import httpx2
-from bs4 import BeautifulSoup
 from pydantic import TypeAdapter
 
 from web.core import net_guard
@@ -466,6 +466,30 @@ def _upload_to_tmpfiles(filepath: Path, expiry_minutes: int = 60) -> str:
     return url
 
 
+class _DownloadLinkFinder(HTMLParser):
+    """Finds tmpfiles' download link: the first `<a class="download">`, else the preview image `#img_preview`."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.anchor: tuple[bool, str | None] = (False, None)  # (seen, its href)
+        self.image: str | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        found = dict(attrs)
+        if tag == "a" and not self.anchor[0] and "download" in (found.get("class") or "").split():
+            self.anchor = (True, found.get("href"))
+        elif tag == "img" and self.image is None and found.get("id") == "img_preview":
+            self.image = found.get("src")
+
+
+def download_link(html: str) -> str | None:
+    """The file's direct link from a tmpfiles page, or None when the page has neither element."""
+    finder = _DownloadLinkFinder()
+    finder.feed(html)
+    seen, href = finder.anchor
+    return href if seen else finder.image
+
+
 def _tmpfiles_direct_url(page_url: str) -> str:
     """Extract tmpfiles.org's direct-download URL from the file page.
 
@@ -480,10 +504,7 @@ def _tmpfiles_direct_url(page_url: str) -> str:
         page.raise_for_status()
     except (httpx2.HTTPError, net_guard.UnsafeURLError) as exc:
         raise HostedFileUnreachableError(exc) from exc
-    soup = BeautifulSoup(page.text, "html.parser")
-    link = soup.find("a", class_="download") or soup.find("img", id="img_preview")
-    raw_url = (link.get("href") or link.get("src")) if link else None
-    direct_url = raw_url if isinstance(raw_url, str) else None
+    direct_url = download_link(page.text)
     if not direct_url:
         raise TmpfilesNoDirectLinkError(page_url)
     return direct_url
