@@ -761,15 +761,37 @@ class TestDeleteExchange:
         msgs = jp.rows(client.delete(f"/api/chat/messages/{u3.id}"), "messages")
         assert [m["content"] for m in msgs][-1] == "Meow"
 
-    def test_only_prompts_and_not_while_replying(
-        self, client: TestClient, conv: ConversationOut, db: MetadataDB
-    ) -> None:
-        """Test that only prompts and not while replying."""
-        u1, a1, *_ = self._chat(db, conv)
-        assert client.delete(f"/api/chat/messages/{a1.id}").status_code == 400
+    def test_not_while_replying(self, client: TestClient, conv: ConversationOut, db: MetadataDB) -> None:
+        """Test that a delete waits for the reply in progress, and an unknown message is a 404."""
+        u1, *_ = self._chat(db, conv)
         db.add_chat_message(conv["id"], "assistant", "", status="streaming")
         assert client.delete(f"/api/chat/messages/{u1.id}").status_code == 409
         assert client.delete("/api/chat/messages/999999").status_code == 404
+
+    def test_a_reply_deletes_its_prompts_turn(self, client: TestClient, conv: ConversationOut, db: MetadataDB) -> None:
+        """Test that the gallery can hand over the reply holding the media and the whole turn goes."""
+        u1, a1, u2, *_ = self._chat(db, conv)
+        assert jp.dig(client.get(f"/api/chat/messages/{a1.id}/delete-info"), "media") == {"image": 1}
+        client.delete(f"/api/chat/messages/{a1.id}")
+        assert u1.id not in {m.id for m in db.get_chat_messages(conv["id"])}
+        assert jp.must(db.get_chat_message(u2.id)).parent_id is None
+
+    def test_a_reply_without_a_prompt_is_deleted_alone(
+        self, client: TestClient, conv: ConversationOut, db: MetadataDB
+    ) -> None:
+        """Test that a generation with no user prompt above it (imported, migrated) can still be deleted."""
+        lone = db.add_chat_message(
+            conv["id"],
+            "assistant",
+            "",
+            parent_id=None,
+            media=[{"id": "o1", "kind": "image", "source": "generated", "status": "done", "file": "o.png"}],
+        )
+        later = db.add_chat_message(conv["id"], "user", "next", parent_id=lone.id)
+        assert jp.dig(client.get(f"/api/chat/messages/{lone.id}/delete-info"), "media") == {"image": 1}
+        assert client.delete(f"/api/chat/messages/{lone.id}").status_code == 200
+        assert db.get_chat_message(lone.id) is None
+        assert jp.must(db.get_chat_message(later.id)).parent_id is None  # what followed moved up
 
 
 class TestFork:

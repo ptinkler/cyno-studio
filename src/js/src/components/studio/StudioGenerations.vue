@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { vTip } from '../../directives/tip'
-import { computed, ref, watch } from 'vue'
+import { computed, inject, ref, watch } from 'vue'
+import { confirmDialog } from '../../composables/useDialog'
+import { deleteMediaMany } from '../../composables/mediaApi'
+import { showToastKey, noToast } from '../../injection'
+import { messageOf } from '../../utils/errors'
 import type { MediaCard } from '../../composables/chatConversationsApi'
 import { fetchMediaPage } from '../../composables/useMedia'
 import { chatMediaUrl, chatMediaPreviewUrl } from '../../composables/useChat'
@@ -11,7 +15,8 @@ const props = withDefaults(
   defineProps<{ messages?: readonly UiMessage[] | undefined; convId?: string | undefined }>(),
   { messages: () => [], convId: '' },
 )
-const emit = defineEmits<{ open: [item: GenerationItem]; favourite: [item: GenerationItem] }>()
+const emit = defineEmits<{ open: [item: GenerationItem]; favourite: [item: GenerationItem]; deleted: [] }>()
+const showToast = inject(showToastKey, noToast)
 
 /** The full file's URL and the small picture the grid shows (the full file for a video), '' when there is no file. */
 function mediaUrls(item: MediaCard): { url: string; preview: string } {
@@ -95,12 +100,31 @@ function onOpen(item: GenerationItem): void {
 function onFavourite(item: GenerationItem): void {
   if (!item.orphan) emit('favourite', item)
 }
+// Delete the picked files (not their prompts, which stay in the chat)
+async function deleteMany(picked: GenerationItem[]): Promise<void> {
+  const n = picked.length
+  if (!n) return
+  const ok = await confirmDialog({
+    title: `Delete ${String(n)} generation${n === 1 ? '' : 's'}?`,
+    message: "This removes the files and can't be undone.",
+    confirmLabel: 'Delete',
+    danger: true,
+  })
+  if (!ok) return
+  try {
+    await deleteMediaMany(picked.map(i => `chat:${i.conversation_id}:${i.file ?? ''}`))
+    emit('deleted')
+  } catch (e) {
+    showToast(messageOf(e), 'error')
+  }
+}
 const shownItems = computed(() => (showOrphans.value ? orphans.value : items.value))
 </script>
 
 <template>
   <GenerationGrid
     :items="shownItems"
+    :selectable="!showOrphans"
     :empty="
       showOrphans
         ? loadingOrphans
@@ -110,6 +134,7 @@ const shownItems = computed(() => (showOrphans.value ? orphans.value : items.val
     "
     @open="onOpen"
     @favourite="onFavourite"
+    @delete-many="deleteMany"
   >
     <!-- Sits with the grid's own filters rather than floating above them -->
     <template #filters>

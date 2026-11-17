@@ -99,6 +99,14 @@ def _media_row(conv_id: str, at: datetime, item: dict[str, JsonValue]) -> SpendR
     }
 
 
+def _prompt_of(msg: ChatMessage, msgs: dict[int, ChatMessage]) -> ChatMessage | None:
+    """The user prompt a message belongs to: itself, or the user message above a reply; None if there is none."""
+    if msg.role == "user":
+        return msg
+    parent = msgs.get(msg.parent_id) if msg.parent_id else None
+    return parent if parent and parent.role == "user" else None
+
+
 class MessageMixin(DBBase):
     """Provide message, branch, and chat-media operations."""
 
@@ -398,13 +406,20 @@ class MessageMixin(DBBase):
     def _chat_exchange_plan(
         self, session: Session, conversation_id: str, user_message_id: int
     ) -> _ChatExchangePlan | None:
-        """What deleting a prompt's turn removes and keeps (see delete_chat_exchange)."""
+        """What deleting a message's turn removes and keeps (see delete_chat_exchange).
+
+        Given a prompt, that is its whole turn. Given a reply, it is its prompt's turn; a reply with no user prompt
+        above it (imported or migrated) is deleted alone, and what followed it moves up to what came before.
+        """
         prompt = session.get(ChatMessage, user_message_id)
-        if not prompt or prompt.conversation_id != conversation_id or prompt.role != "user":
+        if not prompt or prompt.conversation_id != conversation_id:
             return None
         msgs = {
             m.id: m for m in session.query(ChatMessage).filter(ChatMessage.conversation_id == conversation_id).all()
         }
+        if (turn_prompt := _prompt_of(prompt, msgs)) is None:
+            return self._lone_reply_plan(prompt, msgs)
+        prompt = turn_prompt
         if prompt.lane:
             # A standalone exchange: just the prompt and its replies
             doomed = [prompt.id] + [m.id for m in msgs.values() if m.parent_id == prompt.id]
@@ -448,6 +463,18 @@ class MessageMixin(DBBase):
             "kept_next": kept_next,
             "other_versions": len(versions) - 1,
             "other_messages": len([d for d in doomed if d not in turn]),
+        }
+
+    @staticmethod
+    def _lone_reply_plan(reply: ChatMessage, msgs: dict[int, ChatMessage]) -> _ChatExchangePlan:
+        """A reply with no user prompt: just itself goes, and its followers re-attach (``prompt`` is the reply)."""
+        return {
+            "prompt": reply,
+            "msgs": msgs,
+            "doomed": [reply.id],
+            "kept_next": [m.id for m in msgs.values() if m.parent_id == reply.id],
+            "other_versions": 0,
+            "other_messages": 0,
         }
 
     def chat_exchange_delete_info(
