@@ -1,0 +1,54 @@
+# Deletes image versions from older majors (v1.x once v2.0.0 exists); the latest major and `latest` are never
+# touched, and neither are untagged versions (they can belong to a kept multi-arch image). Run it manually with
+# dry-run on first to see what it would delete.
+name: Prune old-major images
+
+on:
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: List what would be deleted without deleting it
+        type: boolean
+        default: true
+
+permissions:
+  packages: write
+
+concurrency:
+  group: prune-old-images
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: [cyno-studio, cyno-studio-nginx]
+    steps:
+      - name: Delete versions from older majors
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          PACKAGE: ${{ matrix.package }}
+          # Scheduled runs have no input, so they delete for real
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run || 'false' }}
+        run: |
+          base="/users/$OWNER/packages/container/$PACKAGE/versions"
+          gh api --paginate "$base" | jq -s 'add // []' > versions.json
+          ids=$(jq -r '
+            def major: capture("^v(?<m>[0-9]+)\\.") | .m | tonumber;
+            [.[].metadata.container.tags[] | select(test("^v[0-9]+\\."))] as $tags
+            | if ($tags | length) == 0 then empty else
+                ([$tags[] | major] | max) as $latest
+                | .[]
+                | .metadata.container.tags as $t
+                | select(($t | length) > 0
+                    and all($t[]; test("^v[0-9]+\\.") and (major < $latest)))
+                | "\(.id) \($t | join(","))"
+              end' versions.json)
+          if [ -z "$ids" ]; then echo "$PACKAGE: nothing from an older major"; exit 0; fi
+          echo "$ids" | while read -r id tags; do
+            echo "$PACKAGE: $tags (version $id)"
+            [ "$DRY_RUN" = "true" ] || gh api -X DELETE "$base/$id"
+          done
