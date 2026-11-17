@@ -50,7 +50,7 @@ test:
 	cd src/js && npm test
 
 # Regenerate the frontend's API types (src/js/src/api/schema.d.ts) from the backend's OpenAPI schema.
-# CI runs this with PY=python and fails if the committed file is stale.
+# CI runs this too and fails if the committed file is stale.
 PY ?= .venv/bin/python
 gen-api:
 	@tmp=$$(mktemp) && data=$$(mktemp -d) \
