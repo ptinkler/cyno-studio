@@ -3,6 +3,7 @@ import { ref, inject, onMounted } from 'vue'
 import { showToastKey, noToast } from '../../injection'
 import { confirmDialog } from '../../composables/useDialog'
 import MediaGrid from '../media/MediaGrid.vue'
+import SelectionBar from './SelectionBar.vue'
 import type { LibraryEntry, MediaFilters } from '../../composables/mediaApi'
 import { fetchMediaPage, deleteMediaMany, downloadMediaMany } from '../../composables/useMedia'
 import { messageOf } from '../../utils/errors'
@@ -166,12 +167,15 @@ onMounted(load)
       />
     </div>
 
-    <div v-if="picked.size" class="bulkbar">
-      <span>{{ picked.size }} selected</span>
-      <button class="btn btn-sm" :disabled="busy" @click="bulkDownload">Download</button>
-      <button class="btn btn-sm btn-danger-quiet" :disabled="busy" @click="bulkDelete">Delete</button>
-      <button class="btn btn-sm btn-quiet" @click="clearPicked">Clear</button>
-    </div>
+    <SelectionBar
+      v-if="picked.size"
+      :count="picked.size"
+      :busy="busy"
+      @select-all="selectAll"
+      @download="bulkDownload"
+      @delete="bulkDelete"
+      @clear="clearPicked"
+    />
 
     <div v-if="preview" class="ovl" @click="preview = null">
       <video v-if="preview.kind === 'video'" :src="preview.url" class="pv" controls autoplay @click.stop />
@@ -256,19 +260,6 @@ h1 {
   flex: 1;
   overflow-y: auto;
   padding: 0.2667rem 1.2rem 1.6rem;
-}
-.bulkbar {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.5333rem 1.2rem;
-  border-top: 1px solid var(--sborder2);
-  background: var(--spanel2);
-}
-.bulkbar span {
-  flex: 1;
-  color: var(--sfg);
-  font-size: 0.8667rem;
 }
 .ovl {
   position: fixed;

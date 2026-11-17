@@ -6,6 +6,10 @@
     <symbol id="s-chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></symbol>
     <symbol id="s-chevL" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6" /></symbol>
     <symbol id="s-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" /></symbol>
+    <symbol id="s-selectall" viewBox="0 0 24 24">
+      <rect x="3" y="3" width="14" height="14" rx="2" />
+      <path d="m7 10 2.5 2.5L14 7.5M21 8v11a2 2 0 0 1-2 2H8" />
+    </symbol>
     <symbol id="s-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></symbol>
     <symbol id="s-search" viewBox="0 0 24 24">
       <circle cx="11" cy="11" r="7" />

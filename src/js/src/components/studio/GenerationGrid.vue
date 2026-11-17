@@ -4,6 +4,7 @@ import { computed, ref } from 'vue'
 import type { GenerationItem } from '../../composables/studioTypes'
 import { reloadImageLater } from '../../utils/imageRetry'
 import { readText, writeText } from '../../utils/storage'
+import SelectionBar from './SelectionBar.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -20,6 +21,7 @@ const emit = defineEmits<{
   open: [item: GenerationItem]
   favourite: [item: GenerationItem]
   deleteMany: [items: GenerationItem[]]
+  downloadMany: [items: GenerationItem[]]
 }>()
 
 // Picking: only finished files can be picked (a pending or failed tile has no file to delete)
@@ -46,6 +48,9 @@ function pickAll(): void {
 function deletePicked(): void {
   emit('deleteMany', pickedItems.value)
   togglePicking()
+}
+const clearPicked = (): void => {
+  picked.value = new Set()
 }
 
 type Size = 's' | 'm' | 'l'
@@ -88,100 +93,118 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
 </script>
 
 <template>
-  <div class="gens">
-    <div class="gbar">
-      <div class="gleft">
-        <span class="gcount">{{ shown.length }} item{{ shown.length === 1 ? '' : 's' }}</span>
-        <span v-if="inProgress" class="ginprog"><span class="dot"></span>{{ inProgress }} generating</span>
-        <div class="seg" role="group" aria-label="Kind">
-          <button v-for="k in ['all', 'image', 'video']" :key="k" :class="{ on: kind === k }" @click="kind = k">
-            {{ k === 'all' ? 'All' : k === 'image' ? 'Images' : 'Videos' }}
-          </button>
-        </div>
-        <button
-          v-if="favFilter"
-          v-tip="'Favourites only'"
-          class="gfav"
-          :class="{ on: favOnly }"
-          aria-label="Favourites only"
-          @click="favOnly = !favOnly"
-        >
-          <svg class="ic"><use href="#s-star" /></svg>
-        </button>
-        <!-- Extra filters from the page using the grid, in the same toolbar -->
-        <slot name="filters"></slot>
-      </div>
-      <div v-if="selectable && picking" class="gleft">
-        <span class="gcount">{{ picked.size }} selected</span>
-        <button class="pillbtn" @click="pickAll">All</button>
-        <button class="pillbtn danger" :disabled="!picked.size" @click="deletePicked">Delete</button>
-        <button class="pillbtn" @click="togglePicking">Cancel</button>
-      </div>
-      <button v-else-if="selectable" v-tip="'Pick several to delete'" class="pillbtn" @click="togglePicking">
-        Select
-      </button>
-      <div class="seg" role="group" aria-label="Card size">
-        <button v-for="s in SIZES" :key="s" :class="{ on: size === s }" @click="setSize(s)">
-          {{ s.toUpperCase() }}
-        </button>
-      </div>
-    </div>
-    <div v-if="!props.items.length" class="empty">{{ empty }}</div>
-    <div v-else-if="!shown.length" class="empty">Nothing matches these filters.</div>
-    <div v-else class="grid" :style="{ '--min': minCol }">
-      <div
-        v-for="(item, i) in shown"
-        :key="item.id + '-' + i"
-        v-tip="item.prompt || item.file || undefined"
-        class="cell"
-        :class="[item.status, { picked: picked.has(item.id) }]"
-      >
-        <div v-if="item.status === 'pending'" class="thumb state pending">
-          <div class="spinner"></div>
-          <div class="slabel">{{ item.kind === 'image' ? 'Creating image…' : 'Rendering video…' }}</div>
-          <div v-if="item.prompt" class="sprompt">{{ item.prompt }}</div>
-        </div>
-        <button
-          v-else-if="item.status === 'error'"
-          v-tip="'Failed: open for details'"
-          type="button"
-          class="thumb state errored"
-          @click="emit('open', item)"
-        >
-          <div class="slabel">{{ item.moderated ? 'Blocked' : 'Failed' }}</div>
-          <div v-if="item.prompt" class="sprompt">{{ item.prompt }}</div>
-          <div class="shint">Click for details</div>
-        </button>
-        <template v-else>
-          <a class="thumb" :href="item.url" @click.prevent="onThumb(item)">
-            <img
-              v-if="item.kind === 'image'"
-              :src="item.preview || item.url"
-              loading="lazy"
-              alt=""
-              @error="onImgError($event, item)"
-            />
-            <video v-else :src="item.url" preload="metadata" muted playsinline></video>
-            <span v-if="item.kind === 'video'" class="vtag">▶</span>
-          </a>
-          <span v-if="picking" class="tick" :class="{ on: picked.has(item.id) }">✓</span>
+  <div class="gpage">
+    <div class="gens">
+      <div class="gbar">
+        <div class="gleft">
+          <span class="gcount">{{ shown.length }} item{{ shown.length === 1 ? '' : 's' }}</span>
+          <span v-if="inProgress" class="ginprog"><span class="dot"></span>{{ inProgress }} generating</span>
+          <div class="seg" role="group" aria-label="Kind">
+            <button v-for="k in ['all', 'image', 'video']" :key="k" :class="{ on: kind === k }" @click="kind = k">
+              {{ k === 'all' ? 'All' : k === 'image' ? 'Images' : 'Videos' }}
+            </button>
+          </div>
           <button
-            v-if="!picking"
-            v-tip="item.favourite ? 'Unfavourite' : 'Favourite'"
-            class="fav"
-            :class="{ on: item.favourite }"
-            :aria-label="item.favourite ? 'Unfavourite' : 'Favourite'"
-            @click.stop="emit('favourite', item)"
+            v-if="favFilter"
+            v-tip="'Favourites only'"
+            class="gfav"
+            :class="{ on: favOnly }"
+            aria-label="Favourites only"
+            @click="favOnly = !favOnly"
           >
             <svg class="ic"><use href="#s-star" /></svg>
           </button>
-        </template>
+          <!-- Extra filters from the page using the grid, in the same toolbar -->
+          <slot name="filters"></slot>
+        </div>
+        <button
+          v-if="selectable"
+          v-tip="picking ? 'Done selecting' : 'Select several'"
+          class="iconbtn boxed"
+          :class="{ on: picking }"
+          :aria-label="picking ? 'Done selecting' : 'Select several'"
+          :aria-pressed="picking"
+          @click="togglePicking"
+        >
+          <svg class="ic"><use href="#s-check" /></svg>
+        </button>
+        <div class="seg" role="group" aria-label="Card size">
+          <button v-for="s in SIZES" :key="s" :class="{ on: size === s }" @click="setSize(s)">
+            {{ s.toUpperCase() }}
+          </button>
+        </div>
+      </div>
+      <div v-if="!props.items.length" class="empty">{{ empty }}</div>
+      <div v-else-if="!shown.length" class="empty">Nothing matches these filters.</div>
+      <div v-else class="grid" :style="{ '--min': minCol }">
+        <div
+          v-for="(item, i) in shown"
+          :key="item.id + '-' + i"
+          v-tip="item.prompt || item.file || undefined"
+          class="cell"
+          :class="[item.status, { picked: picked.has(item.id) }]"
+        >
+          <div v-if="item.status === 'pending'" class="thumb state pending">
+            <div class="spinner"></div>
+            <div class="slabel">{{ item.kind === 'image' ? 'Creating image…' : 'Rendering video…' }}</div>
+            <div v-if="item.prompt" class="sprompt">{{ item.prompt }}</div>
+          </div>
+          <button
+            v-else-if="item.status === 'error'"
+            v-tip="'Failed: open for details'"
+            type="button"
+            class="thumb state errored"
+            @click="emit('open', item)"
+          >
+            <div class="slabel">{{ item.moderated ? 'Blocked' : 'Failed' }}</div>
+            <div v-if="item.prompt" class="sprompt">{{ item.prompt }}</div>
+            <div class="shint">Click for details</div>
+          </button>
+          <template v-else>
+            <a class="thumb" :href="item.url" @click.prevent="onThumb(item)">
+              <img
+                v-if="item.kind === 'image'"
+                :src="item.preview || item.url"
+                loading="lazy"
+                alt=""
+                @error="onImgError($event, item)"
+              />
+              <video v-else :src="item.url" preload="metadata" muted playsinline></video>
+              <span v-if="item.kind === 'video'" class="vtag">▶</span>
+            </a>
+            <span v-if="picking" class="tick" :class="{ on: picked.has(item.id) }">✓</span>
+            <button
+              v-if="!picking"
+              v-tip="item.favourite ? 'Unfavourite' : 'Favourite'"
+              class="fav"
+              :class="{ on: item.favourite }"
+              :aria-label="item.favourite ? 'Unfavourite' : 'Favourite'"
+              @click.stop="emit('favourite', item)"
+            >
+              <svg class="ic"><use href="#s-star" /></svg>
+            </button>
+          </template>
+        </div>
       </div>
     </div>
+    <SelectionBar
+      v-if="selectable && picking"
+      :count="picked.size"
+      @select-all="pickAll"
+      @download="emit('downloadMany', pickedItems)"
+      @delete="deletePicked"
+      @clear="clearPicked"
+    />
   </div>
 </template>
 
 <style scoped>
+.gpage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 .gens {
   flex: 1;
   min-height: 0;
