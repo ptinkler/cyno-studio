@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import type { Balances, Spend, UiMessage } from '../../composables/studioTypes'
 import { shortModel, fmtCost, creditsToUsd } from '../../utils/format'
+import InfoTip from '../InfoTip.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -57,17 +58,11 @@ const byModel = computed(() => {
     <button v-if="label" class="bseg spent" title="Thread spend" @click="open = !open">
       Spent <b>{{ label }}</b>
     </button>
-    <a
-      v-for="p in pills"
-      :key="p.id"
-      class="bseg"
-      :class="p.id"
-      :title="`${p.tip} — click for usage`"
-      href="/usage"
-      @click.prevent="emit('usage')"
-    >
-      {{ p.label }} <b>{{ p.value }}</b>
-    </a>
+    <InfoTip v-for="p in pills" :key="p.id" :text="`${p.tip} — click for usage`" :focusable="false" :toggle="false">
+      <a class="bseg" :class="p.id" href="/usage" @click.prevent="emit('usage')">
+        {{ p.label }} <b>{{ p.value }}</b>
+      </a>
+    </InfoTip>
 
     <div v-if="open" class="pop-back" @click="open = false"></div>
     <div v-if="open" class="pop">
@@ -108,11 +103,13 @@ const byModel = computed(() => {
   white-space: nowrap;
   cursor: pointer;
 }
-.bseg:first-child {
+/* Each pill sits in an InfoTip's span, so the ends are found through it */
+.bals > :first-child.bseg,
+.bals > :first-child > .bseg {
   border-left: 0;
   border-radius: 0.4667rem 0 0 0.4667rem;
 }
-.bseg:last-of-type {
+.bals > span:last-of-type > .bseg {
   border-radius: 0 0.4667rem 0.4667rem 0;
 }
 .bseg:hover {

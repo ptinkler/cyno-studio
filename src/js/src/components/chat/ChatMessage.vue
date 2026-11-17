@@ -8,6 +8,7 @@ import { shortModel } from '../../utils/format'
 import ChatAttachments from './ChatAttachments.vue'
 import ChatMediaCard from './ChatMediaCard.vue'
 import CostChip from './CostChip.vue'
+import InfoTip from '../InfoTip.vue'
 import ForkList from './ForkList.vue'
 import PromptBox from './PromptBox.vue'
 import ReplyControls from './ReplyControls.vue'
@@ -222,7 +223,9 @@ const { copiedKey, copy } = useCopy()
           align="right"
           @open="id => emit('open-chat', id)"
         />
-        <span v-if="modeTag" class="mode-tag" :title="`Sent in ${modeTag} mode`">{{ modeTag }}</span>
+        <InfoTip v-if="modeTag" :text="`Sent in ${modeTag} mode`"
+          ><span class="mode-tag">{{ modeTag }}</span></InfoTip
+        >
         <VersionStepper
           v-if="siblings.length > 1"
           class="branch-nav"
