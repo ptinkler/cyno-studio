@@ -136,7 +136,7 @@ docker image prune -f
 
 ### Backup
 
-The app also copies its database by itself: every `BACKUP_INTERVAL_HOURS` (default 24, `0` = off) a consistent snapshot goes to `backups/` in the data directory, and all but the newest `BACKUP_KEEP` (default 7) are deleted. That guards against a bad migration or a deleted row, not a dead disk, so still copy the data directory elsewhere. To restore: stop the app, copy a snapshot over `data/metadata.db`, start it.
+The app also copies its database by itself: every `BACKUP_INTERVAL_HOURS` (default 24, `0` = off) a consistent snapshot goes to `backups/` in the data directory (or `CYNO_BACKUP_DIR`), and all but the newest `BACKUP_KEEP` (default 7) are deleted. That guards against a bad migration or a deleted row, not a dead disk, so still copy the data directory elsewhere. To restore: stop the app, copy a snapshot over `data/metadata.db` (in `CYNO_DB_DIR` if set), start it.
 
 Everything lives in `CYNO_HOST_DATA_DIR` (SQLite DB, videos, images). Also keep a copy of `.env`: without the original `KEYS_SECRET` and `PASSWORD_PEPPER`, a restored database is unusable. Stop the stack for a consistent copy:
 
