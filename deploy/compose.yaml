@@ -1,0 +1,105 @@
+# Cyno Studio behind a reverse proxy on a shared Docker network, with all app traffic leaving through a VPN.
+# Meant to be run by a stack manager (Komodo) that supplies the variables below as the stack's environment
+# (it writes them to a .env next to this file). The root docker-compose.yml is the generic try-it-out file.
+#
+# Shape: gluetun owns the network; the app and nginx run inside its network namespace (network_mode: service:gluetun),
+# so everything they send out goes through the VPN. gluetun is what joins the proxy network and accepts the reverse
+# proxy's connections on port 80 (reach the stack at cyno-gluetun:80). Nothing is published on the host.
+#
+# Host requirements:
+#   - an external Docker network named "proxy" with the reverse proxy attached to it
+#   - CYNO_MEDIA_DIR: the media folder (e.g. an NFS mount); the database and cache stay on LOCAL disk
+#     (CYNO_DB_DIR, CYNO_CACHE_DIR), because SQLite does not belong on a network share. The two local folders
+#     are mounted over same-named folders inside the data directory, so those must already exist in CYNO_MEDIA_DIR.
+#   - /dev/net/tun
+#
+# Variables (required unless a default is shown):
+#   CYNO_VERSION            image tag for BOTH images (default latest; pin e.g. v1.2.9 to roll back)
+#   CYNO_UID / CYNO_GID     user the app runs as; must own the media folder
+#   CYNO_MEDIA_DIR, CYNO_DB_DIR, CYNO_CACHE_DIR
+#   VPN_SERVICE_PROVIDER, WIREGUARD_PRIVATE_KEY, WIREGUARD_ADDRESSES, SERVER_COUNTRIES, (VPN_TYPE, default wireguard)
+#   GLUETUN_API_KEY         gluetun control-server key; the app uses the same one
+#   TZ                      (default UTC)
+#   ...plus the application settings from .env.example in this repo (ADMIN_EMAILS, SESSION_SECRET, PASSWORD_PEPPER,
+#   KEYS_SECRET, PUBLIC_BASE_URL, OAuth ids/secrets, ...). The app container receives the whole .env.
+
+services:
+  gluetun:
+    image: qmcgaw/gluetun:v3.40.0
+    container_name: cyno-gluetun
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    volumes:
+      - gluetun_state:/gluetun
+    # Only the VPN settings: the third-party gluetun container does not receive the app's secrets.
+    environment:
+      VPN_SERVICE_PROVIDER: ${VPN_SERVICE_PROVIDER:?set VPN_SERVICE_PROVIDER}
+      VPN_TYPE: ${VPN_TYPE:-wireguard}
+      WIREGUARD_PRIVATE_KEY: ${WIREGUARD_PRIVATE_KEY:?set WIREGUARD_PRIVATE_KEY}
+      WIREGUARD_ADDRESSES: ${WIREGUARD_ADDRESSES:?set WIREGUARD_ADDRESSES}
+      SERVER_COUNTRIES: ${SERVER_COUNTRIES:?set SERVER_COUNTRIES}
+      TZ: ${TZ:-UTC}
+      # Gluetun's firewall drops all inbound traffic except what is listed here: the reverse proxy reaches nginx on 80.
+      # The control server (8000) stays loopback-only; the app talks to it inside this shared namespace.
+      FIREWALL_INPUT_PORTS: "80"
+      HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE: '{"auth":"apikey","apikey":"${GLUETUN_API_KEY:?set GLUETUN_API_KEY}"}'
+    healthcheck:
+      test: ["CMD", "/gluetun-entrypoint", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    networks:
+      - proxy
+
+  app:
+    image: ghcr.io/ptinkler/cyno-studio:${CYNO_VERSION:-latest}
+    container_name: cyno-app
+    user: "${CYNO_UID:?set CYNO_UID}:${CYNO_GID:?set CYNO_GID}"
+    restart: unless-stopped
+    network_mode: "service:gluetun"
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    volumes:
+      - ${CYNO_MEDIA_DIR:?set CYNO_MEDIA_DIR}:/data
+      - ${CYNO_DB_DIR:?set CYNO_DB_DIR}:/data/data
+      - ${CYNO_CACHE_DIR:?set CYNO_CACHE_DIR}:/data/cache
+    env_file: .env
+    environment:
+      CYNO_DATA_DIR: /data
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  nginx:
+    image: ghcr.io/ptinkler/cyno-studio-nginx:${CYNO_VERSION:-latest}
+    container_name: cyno-nginx
+    restart: unless-stopped
+    network_mode: "service:gluetun"
+    depends_on:
+      gluetun:
+        condition: service_healthy
+      app:
+        condition: service_started
+    cap_drop:
+      - ALL
+    cap_add:         # what the official nginx image needs: bind :80, then drop its workers to the nginx user
+      - NET_BIND_SERVICE
+      - SETUID
+      - SETGID
+      - CHOWN
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  proxy:
+    external: true
+    name: proxy
+
+volumes:
+  gluetun_state:
