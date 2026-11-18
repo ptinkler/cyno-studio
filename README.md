@@ -252,7 +252,7 @@ All data (videos, source images, chat media, character images, SQLite DB) is sto
 
 ## NAS / Synology
 
-The previous production host. See [SYNOLOGY-README.md](SYNOLOGY-README.md) for DSM setup, boot automation and the DSM reverse proxy.
+The previous production host, being retired (production moves to the home server, whose stack, reverse proxy and backups are defined in the separate `homelab` repo under `cyno/`: gluetun + app + nginx, no published port, media on the NAS over NFS, the SQLite DB on the server's local disk). See [SYNOLOGY-README.md](SYNOLOGY-README.md) for the old DSM setup, boot automation and reverse proxy. Delete that file and `synology-boot.sh` once the NAS copy is switched off.
 
 ## Security
 
