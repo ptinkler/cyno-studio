@@ -1,6 +1,6 @@
 # Cyno Studio behind a reverse proxy on a shared Docker network, with all app traffic leaving through a VPN.
-# Meant to be run by a stack manager (Komodo) that supplies the variables below as the stack's environment
-# (it writes them to a .env next to this file). The root docker-compose.yml is the generic try-it-out file.
+# The variables below come from a .env next to this file (or the environment). The root docker-compose.yml is the
+# generic try-it-out file.
 #
 # Shape: gluetun owns the network; the app and nginx run inside its network namespace (network_mode: service:gluetun),
 # so everything they send out goes through the VPN. gluetun is what joins the proxy network and accepts the reverse

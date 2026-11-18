@@ -146,21 +146,6 @@ sudo rsync -a /opt/cyno-studio/data/ /mnt/backup/cyno-studio/data/
 docker compose start
 ```
 
-### Moving from the Synology NAS
-
-1. On the NAS: `docker compose down` (stops writes to the SQLite DB).
-2. Copy the data dir and `.env` across, keeping permissions:
-
-   ```bash
-   rsync -aH --info=progress2 nas:/path/to/cyno-studio/data/ /opt/cyno-studio/data/
-   scp nas:/path/to/cyno-studio/.env /opt/cyno-studio/.env
-   ```
-
-3. Edit `.env` for the new host: `CYNO_HOST_DATA_DIR`, `PUID` / `PGID` (then `sudo chown -R PUID:PGID /opt/cyno-studio/data`), `PUBLIC_BASE_URL`. **Keep the three secrets exactly as they were.** `APP_HOSTNAME` and `synology-boot.sh` are Synology-only and can be ignored.
-4. `docker compose up -d`, then sign in with your existing admin account (no need to run `provision_admin`).
-5. Point DNS (or the router's port forward) at the new server. If the hostname is unchanged the OAuth redirect URIs keep working; if not, update them at each provider and `PUBLIC_BASE_URL`.
-6. Keep the NAS data until you have used the new server for a few days.
-
 ## Configuration
 
 See `.env.example` for the full list.
@@ -186,7 +171,6 @@ See `.env.example` for the full list.
 | `APP_PORT`                                    | Host port to expose the app on (default `8080`)                               |
 | `COMPOSE_PROFILES`                            | `novpn` (default) or `vpn` — selects the stack                                |
 | `PUID` / `PGID`                               | User/group the app container runs as (run `id` to find values)                |
-| `APP_HOSTNAME`                                | Synology only: hostname for the HTTPS redirect in the boot script             |
 | `GLUETUN_API_KEY`                             | Gluetun control server API key (VPN stack only)                               |
 
 Provider keys (`POLLO_API_KEY`, `OPENROUTER_API_KEY`, `VENICE_API_KEY`) are entered per-user in the UI and are never read from the environment.
@@ -254,9 +238,9 @@ Code standards, enforced in CI:
 
 All data (videos, source images, chat media, character images, SQLite DB) is stored in `CYNO_HOST_DATA_DIR` on the host. Back this up.
 
-## NAS / Synology
+## Reverse proxy + VPN deployment (`deploy/compose.yaml`)
 
-The previous production host, being retired (production moves to the home server, whose stack, reverse proxy and backups are defined in the separate `homelab` repo under `cyno/`: gluetun + app + nginx, no published port, media on the NAS over NFS, the SQLite DB on the server's local disk). See [SYNOLOGY-README.md](SYNOLOGY-README.md) for the old DSM setup, boot automation and reverse proxy. Delete that file and `synology-boot.sh` once the NAS copy is switched off.
+An alternative to the root `docker-compose.yml` for hosts that already run a reverse proxy on a shared Docker network: gluetun (VPN) + the app + nginx, no published host port, the media folder and the local-disk database/cache folders given separately. Every host-specific value is a variable (listed at the top of the file), supplied through a `.env` next to it or the environment, so the file itself holds no secrets or host paths. The app backs up its own database daily to `<data dir>/backups` (see `BACKUP_INTERVAL_HOURS` and `BACKUP_KEEP`).
 
 ## Security
 
