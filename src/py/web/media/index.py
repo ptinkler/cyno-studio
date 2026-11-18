@@ -173,7 +173,7 @@ def build_items(db: MetadataDB) -> list[LibraryEntry]:
 
 
 # The built list, cached so paging through it doesn't rebuild it each request
-# (scanning the user's chat folders and the chat DB is slow on a NAS). Keyed on
+# (scanning the user's chat folders and the chat DB is slow on network or slow storage). Keyed on
 # (ROOT_DIR, tenant) so one user never sees another's list, and tests (each with
 # their own ROOT_DIR) stay isolated. Writes invalidate it; a short TTL catches
 # creations made elsewhere.

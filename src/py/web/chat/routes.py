@@ -470,7 +470,7 @@ def api_delete_conversation(conv_id: str, *, delete_media: bool = True) -> Delet
     require_conv(conv_id)
     characters.delete_for_conversation(conv_id, get_db())
     get_db().delete_conversation(conv_id)
-    # Its files go in the background: hundreds of images take a while on a NAS
+    # Its files go in the background: hundreds of images take a while on slow storage
     folder = chat_root() / conv_id
     if delete_media and folder.exists():
         folder.rename(folder.with_name(f".deleting-{conv_id}"))  # out of the way at once

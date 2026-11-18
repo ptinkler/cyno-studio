@@ -179,6 +179,10 @@ See `.env.example` for the full list.
 | `MICROSOFT_OAUTH_TENANT`                      | Your Microsoft tenant id or domain — required, or Microsoft sign-in is refused |
 | `BACKUP_INTERVAL_HOURS` / `BACKUP_KEEP`       | Database snapshot every N hours (default 24, `0` = off) and how many to keep (default 7) |
 | `CYNO_HOST_DATA_DIR`                          | Host path for persistent data (videos, DB)                                    |
+| `CYNO_DB_DIR`                                 | Folder for the SQLite database (default `<data dir>/data`): keep it on local disk, not a network share |
+| `CYNO_CACHE_DIR`                              | Folder for thumbnails and other disposable caches (default `<data dir>/cache`) |
+| `CYNO_BACKUP_DIR`                             | Folder for the scheduled database backups (default `<data dir>/backups`): ideally another disk or machine |
+| `THUMB_WORKERS`                               | Thumbnails generated at once (default 2); raise it on a fast CPU              |
 | `APP_PORT`                                    | Host port to expose the app on (default `8080`)                               |
 | `COMPOSE_PROFILES`                            | `novpn` (default) or `vpn` — selects the stack                                |
 | `PUID` / `PGID`                               | User/group the app container runs as (run `id` to find values)                |

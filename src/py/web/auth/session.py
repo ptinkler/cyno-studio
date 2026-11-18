@@ -103,7 +103,7 @@ def make_user_session(user_id: str, version: int = 0) -> str:
 def cookie_secure(request: Request) -> bool:
     """Whether the session cookie should be marked Secure (HTTPS-only).
 
-    Secure by default, so a TLS deployment (e.g. the NAS) needs no config. The
+    Secure by default, so a deployment behind a TLS reverse proxy needs no config. The
     one automatic exemption is plain-HTTP access to a loopback host, where
     local dev would otherwise break — browsers treat localhost as secure, so
     the cookie still works there. COOKIE_SECURE=true/false overrides either

@@ -110,7 +110,7 @@ def keepalive_socket_options() -> list[tuple[int, int, int]]:
 
     Image and video calls can sit silent for a minute or more
     (Seedream 5.0 Pro with references:
-    ~2 min), and some networks — VPNs, NAT routers, NAS/Docker hosts — drop
+    ~2 min), and some networks — VPNs, NAT routers, Docker hosts — drop
     connections idle that long, surfacing as httpx2.RemoteProtocolError
     "Server disconnected without sending a response".
 

@@ -1,7 +1,7 @@
 """Derived facts about media files, cached beside the thumbnails.
 
-A video's length is read by opening the file with OpenCV, which on a NAS costs
-a fraction of a second each — enough to make listing a library of videos take
+A video's length is read by opening the file with OpenCV, which on network or slow
+storage costs a fraction of a second each — enough to make listing a library of videos take
 the best part of a minute. The answers are kept here rather than in the
 metadata database: this is a cache of what's on disk, not anything a user
 wrote, so it lives with the thumbnails under <data>/cache, where deleting the
@@ -37,8 +37,8 @@ _sweep_lock = threading.Lock()
 
 def db_path() -> Path:
     """Return the SQLite file path used for cached media durations."""
-    # Read config at call time so tests can redirect ROOT_DIR
-    return config.ROOT_DIR / "cache" / "media-cache.sqlite"
+    # Read config at call time so tests can redirect the data directory
+    return config.cache_dir() / "media-cache.sqlite"
 
 
 def _with_db[T, D](work: Callable[[sqlite3.Connection], T], default: D) -> T | D:
