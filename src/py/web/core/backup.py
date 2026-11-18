@@ -12,12 +12,11 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from web.core.config import ROOT_DIR
+from web.core import config
 from web.core.metadata import get_db
 
 log = logging.getLogger(__name__)
 
-BACKUP_DIR = ROOT_DIR / "backups"
 PREFIX = "metadata-"
 SUFFIX = ".db"
 DEFAULT_INTERVAL_HOURS = 24.0
@@ -41,9 +40,9 @@ def keep_count() -> int:
     return max(1, int(_number_env("BACKUP_KEEP", DEFAULT_KEEP)))
 
 
-def list_backups(directory: Path = BACKUP_DIR) -> list[Path]:
-    """The backups, oldest first (the timestamp in the name sorts)."""
-    return sorted(directory.glob(f"{PREFIX}*{SUFFIX}"))
+def list_backups(directory: Path | None = None) -> list[Path]:
+    """The backups in `directory` (default: the configured folder), oldest first (the timestamp in the name sorts)."""
+    return sorted((directory or config.backup_dir()).glob(f"{PREFIX}*{SUFFIX}"))
 
 
 def prune(directory: Path, keep: int) -> int:
@@ -54,8 +53,9 @@ def prune(directory: Path, keep: int) -> int:
     return len(old)
 
 
-def run_backup(directory: Path = BACKUP_DIR, keep: int | None = None) -> Path:
+def run_backup(directory: Path | None = None, keep: int | None = None) -> Path:
     """Write one backup (to a temp name first, so a crash never leaves a half file that looks real), then prune."""
+    directory = directory or config.backup_dir()
     directory.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     final = directory / f"{PREFIX}{stamp}{SUFFIX}"
@@ -69,7 +69,7 @@ def run_backup(directory: Path = BACKUP_DIR, keep: int | None = None) -> Path:
 
 def seconds_until_due(interval: float, directory: Path | None = None) -> float:
     """How long until the next backup: restarts must not push it back, so the newest file's age counts."""
-    existing = list_backups(directory or BACKUP_DIR)
+    existing = list_backups(directory)
     if not existing:
         return 60.0  # first run: shortly after startup, once the app is settled
     return max(60.0, interval - (time.time() - existing[-1].stat().st_mtime))
@@ -93,5 +93,5 @@ def start_backups() -> threading.Event | None:
         return None
     stop = threading.Event()
     threading.Thread(target=_loop, args=(stop, interval), daemon=True, name="db-backup").start()
-    log.info("database backups every %g h, keeping %d, in %s", interval / 3600, keep_count(), BACKUP_DIR)
+    log.info("database backups every %g h, keeping %d, in %s", interval / 3600, keep_count(), config.backup_dir())
     return stop

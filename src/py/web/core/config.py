@@ -26,10 +26,30 @@ def data_dir() -> Path:
     return _PROJECT_ROOT
 
 
+def _folder_setting(name: str, default: Path) -> Path:
+    """A folder from the environment variable `name`, else `default`."""
+    if configured := os.environ.get(name):
+        return Path(configured)
+    return default
+
+
+def cache_dir() -> Path:
+    """Thumbnails and derived-media caches: CYNO_CACHE_DIR, else <data dir>/cache. Disposable, may be local disk."""
+    # Read ROOT_DIR at call time so tests can redirect it
+    return _folder_setting("CYNO_CACHE_DIR", ROOT_DIR / "cache")
+
+
+def backup_dir() -> Path:
+    """Scheduled database backups: CYNO_BACKUP_DIR, else <data dir>/backups."""
+    return _folder_setting("CYNO_BACKUP_DIR", ROOT_DIR / "backups")
+
+
 # Support external data directory via the CYNO_DATA_DIR env var
 ROOT_DIR = data_dir()
 ASSETS_DIR = ROOT_DIR / "assets"
-DB_PATH = ROOT_DIR / "data" / "metadata.db"
+# The database folder (CYNO_DB_DIR, else <data dir>/data) is separate so it can live on local disk while the
+# media sits on a network share.
+DB_PATH = _folder_setting("CYNO_DB_DIR", ROOT_DIR / "data") / "metadata.db"
 
 # Pollo API settings. Three bases, because Pollo splits them that way:
 # the account/config endpoints sit at the platform root, task status under

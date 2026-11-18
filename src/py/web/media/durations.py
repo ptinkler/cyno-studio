@@ -7,8 +7,8 @@ from web.media import cache as media_cache
 from web.media.paths import LibraryEntry, item_path
 from web.media.video import video_seconds
 
-# Reading a length means opening the file with OpenCV, which on a NAS costs
-# ~a tenth of a second each — enough to make building the whole list take the
+# Reading a length means opening the file with OpenCV, which on network or slow
+# storage costs ~a tenth of a second each — enough to make building the whole list take the
 # best part of a minute. So lengths are remembered in the media cache (see
 # web/media/cache.py), the list build only ever uses what's already known, and
 # a request reads a handful of the rest for the page it returns (the length is

@@ -200,7 +200,7 @@ def reset_login_attempts() -> None:
 
 
 # Where a reverse proxy in front of the app connects from: this machine, or a private / link-local network
-# (a docker network, a NAS). Not "anything non-global": documentation and other reserved ranges are not proxies.
+# (a docker network, a home LAN). Not "anything non-global": documentation and other reserved ranges are not proxies.
 _PROXY_NETWORKS = tuple(
     ipaddress.ip_network(n)
     for n in (

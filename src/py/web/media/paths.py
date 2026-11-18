@@ -52,7 +52,7 @@ def library_dir() -> Path:
 
 def thumb_dir() -> Path:
     """Return the directory used to cache media thumbnails."""
-    return config.ROOT_DIR / "cache" / "media-thumbs"
+    return config.cache_dir() / "media-thumbs"
 
 
 def chat_dir(conv_id: str) -> Path:

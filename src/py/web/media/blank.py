@@ -20,7 +20,7 @@ from web.uploads.files import (
 
 # Which saved images are solid black, per file version, kept on disk: the
 # Media page asks on every load, and decoding every chat image again after
-# each restart takes minutes on a NAS
+# each restart takes minutes on slow storage
 class _BlankChecks:
     """Which saved images are blank, by file version; loaded from disk on first use."""
 
@@ -41,7 +41,7 @@ def reset_blank_checks() -> None:
 
 
 def _blank_cache_path() -> Path:
-    return config.ROOT_DIR / "cache" / "blank-images.json"
+    return config.cache_dir() / "blank-images.json"
 
 
 def _blank_checks() -> dict[str, bool]:
