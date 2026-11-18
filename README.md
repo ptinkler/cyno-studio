@@ -234,9 +234,9 @@ Code standards, enforced in CI:
 
 All data (videos, source images, chat media, character images, SQLite DB) is stored in `CYNO_HOST_DATA_DIR` on the host. Back this up.
 
-## Home server deployment
+## Reverse proxy + VPN deployment (`deploy/compose.yaml`)
 
-Production runs on a home server, deployed by [Komodo](https://komo.do) from `deploy/compose.yaml`: gluetun (VPN) + the app + nginx, no published host port, behind a shared reverse proxy; media on a NAS share, the SQLite database and cache on the server's local disk. Every host-specific value in that file is a variable, supplied by the stack manager as its environment, so no secrets or host paths are in this repo. The app backs up its own database daily to `<data dir>/backups` (see `BACKUP_INTERVAL_HOURS` and `BACKUP_KEEP`).
+An alternative to the root `docker-compose.yml` for hosts that already run a reverse proxy on a shared Docker network: gluetun (VPN) + the app + nginx, no published host port, the media folder and the local-disk database/cache folders given separately. Every host-specific value is a variable (listed at the top of the file), supplied through a `.env` next to it or the environment, so the file itself holds no secrets or host paths. The app backs up its own database daily to `<data dir>/backups` (see `BACKUP_INTERVAL_HOURS` and `BACKUP_KEEP`).
 
 ## Security
 
