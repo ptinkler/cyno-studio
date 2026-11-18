@@ -29,7 +29,7 @@ class MetadataDB(
 ):
     """Manage metadata through a SQLAlchemy engine.
 
-    The engine, schema catch-up, and locked session live on ``DBBase``; domain
+    The engines and the write/read sessions live on ``DBBase``; domain
     methods come from the mixins.
     """
 

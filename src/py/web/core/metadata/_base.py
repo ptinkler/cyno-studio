@@ -1,13 +1,21 @@
 """Provide infrastructure shared by the metadata database mixins.
 
-This module configures the engine and SQLite pragmas, provides the locked
-session context manager and shared list/get/save helpers, and detaches ids from
-JSON-backed lists. Alembic owns the schema; see ``schema.py``.
+This module configures the two engines and the SQLite pragmas, provides the
+write and read session context managers and shared list/get/save helpers, and
+detaches ids from JSON-backed lists. Alembic owns the schema; see ``schema.py``.
+
+Concurrency: the database runs in WAL mode, so readers never block the writer
+and the writer never blocks readers. SQLite allows ONE writer at a time, and a
+write session takes that write lock when its transaction begins
+(``BEGIN IMMEDIATE``), so a read-modify-write inside it cannot interleave with
+another writer: no update is lost. Read sessions use a separate engine whose
+connections refuse writes, so a call site that writes through ``read_session``
+fails at once instead of racing.
 """
 
 import inspect
+import logging
 import sqlite3
-import threading
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from datetime import datetime
@@ -17,12 +25,14 @@ from typing import Protocol, TypeVar, cast, overload
 import sqlalchemy as sa
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import InstrumentedAttribute, Session
-from sqlalchemy.pool import StaticPool
 from sqlalchemy.sql.elements import ColumnElement
 
 from web.core.config import DB_PATH
+from web.core.fsinfo import filesystem_type, is_network_filesystem
 from web.core.metadata.models import Base
 from web.types import JsonValue
+
+log = logging.getLogger(__name__)
 
 ModelT = TypeVar("ModelT", bound=Base)
 
@@ -57,8 +67,40 @@ class _Stamped(Protocol):
 OrderByT = TypeVar("OrderByT")
 
 
+def _make_engine(db_path: Path, *, read_only: bool) -> sa.Engine:
+    """An engine on the database file: the writer's (takes the write lock per transaction) or a read-only one.
+
+    Python's sqlite3 module normally starts transactions itself, and only before a write, so a read followed by a
+    write would not be inside one transaction. Turning that off and issuing BEGIN ourselves (SQLAlchemy's documented
+    recipe for pysqlite) makes the transaction start where the session does.
+    """
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        echo=False,
+        connect_args={"check_same_thread": False, "timeout": 30},  # wait up to 30 s for the write lock
+    )
+
+    @event.listens_for(engine, "connect")
+    def _configure(dbapi_conn: sqlite3.Connection, _connection_record: sa.pool.ConnectionPoolEntry) -> None:
+        dbapi_conn.isolation_level = None  # we emit BEGIN ourselves (see _begin)
+        cursor = dbapi_conn.cursor()
+        if read_only:
+            cursor.execute("PRAGMA query_only=ON")  # any write fails with "attempt to write a readonly database"
+        else:
+            cursor.execute("PRAGMA journal_mode=WAL")  # persists in the file; needs a local disk, not a network share
+            cursor.execute("PRAGMA synchronous=NORMAL")  # safe with WAL: a crash can lose the last commits, not corrupt
+        cursor.close()
+
+    @event.listens_for(engine, "begin")
+    def _begin(conn: sa.Connection) -> None:
+        # IMMEDIATE takes the single write lock now, before the first read, so read-modify-write cannot interleave.
+        conn.exec_driver_sql("BEGIN" if read_only else "BEGIN IMMEDIATE")
+
+    return engine
+
+
 class DBBase:
-    """Provide the engine and locked sessions used by domain mixins.
+    """Provide the engines and sessions used by domain mixins.
 
     Also handles fresh-database initialization and shared ORM helpers.
     """
@@ -66,27 +108,15 @@ class DBBase:
     def __init__(self, db_path: Path | None = None) -> None:
         self.db_path = db_path or DB_PATH
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._lock = threading.Lock()
-        # StaticPool keeps a single connection open for the process lifetime.
-        # This avoids repeated file-lock acquire/release cycles, which is
-        # critical when the DB file lives on a NAS (NFS/SMB) where POSIX
-        # locking may be unreliable.
-        self.engine = create_engine(
-            f"sqlite:///{self.db_path}",
-            echo=False,
-            connect_args={"check_same_thread": False, "timeout": 30},
-            poolclass=StaticPool,
-        )
-
-        @event.listens_for(self.engine, "connect")
-        def _set_sqlite_pragma(dbapi_conn: sqlite3.Connection, _connection_record: sa.pool.ConnectionPoolEntry) -> None:
-            cursor = dbapi_conn.cursor()
-            cursor.execute("PRAGMA journal_mode=DELETE")
-            cursor.execute("PRAGMA synchronous=NORMAL")
-            # Hold an exclusive lock for the lifetime of the connection so
-            # SQLite never re-negotiates locks against the filesystem.
-            cursor.execute("PRAGMA locking_mode=EXCLUSIVE")
-            cursor.close()
+        if is_network_filesystem(self.db_path.parent):
+            log.warning(
+                "the database folder %s is on a network filesystem (%s): SQLite's WAL mode is NOT safe there and can "
+                "corrupt the database. Put the database on a local disk (CYNO_DB_DIR).",
+                self.db_path.parent,
+                filesystem_type(self.db_path.parent),
+            )
+        self.engine = _make_engine(self.db_path, read_only=False)  # the writer: also creates and migrates the file
+        self.read_engine = _make_engine(self.db_path, read_only=True)
 
         # Alembic owns the schema (see schema.ensure_schema, run at startup).
         # create_all only has to make the tables of a brand-new file.
@@ -97,20 +127,31 @@ class DBBase:
     def backup_to(self, target: Path) -> None:
         """Write a consistent copy of the database to `target` (which must not exist).
 
-        The one connection holds an exclusive lock, so the copy goes through it, under the thread lock.
+        VACUUM INTO reads one snapshot, so it neither blocks writers nor is disturbed by them.
         """
-        with self._lock, self.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-            conn.exec_driver_sql("VACUUM INTO ?", (str(target),))
+        raw = self.engine.raw_connection()
+        try:
+            cast("sqlite3.Connection", raw.driver_connection).execute("VACUUM INTO ?", (str(target),))
+        finally:
+            raw.close()
 
     @contextmanager
-    def _session(self) -> Generator[Session]:
-        """Yield a Session while holding the thread lock.
+    def write_session(self) -> Generator[Session]:
+        """Yield a Session whose transaction takes the database's write lock when it begins.
 
-        Because StaticPool shares one raw connection across threads, we
-        serialise all database work through a threading.Lock so two
-        threads never interleave SQL on the same connection.
+        Use it for anything that writes, and for read-modify-write: other writers wait (up to 30 s) until it ends, so
+        nothing it read can change underneath it. Readers are not blocked.
         """
-        with self._lock, Session(self.engine) as session:
+        with Session(self.engine) as session:
+            yield session
+
+    @contextmanager
+    def read_session(self) -> Generator[Session]:
+        """Yield a read-only Session that sees one consistent snapshot and never waits for a writer.
+
+        Writing through it fails ("attempt to write a readonly database").
+        """
+        with Session(self.read_engine) as session:
             yield session
 
     # ── small helpers the domain mixins share. Each opens a session, does the
@@ -121,7 +162,7 @@ class DBBase:
         model: type[ModelT],
         order_by: ColumnElement[OrderByT] | InstrumentedAttribute[OrderByT] | None = None,
     ) -> list[ModelT]:
-        with self._session() as session:
+        with self.read_session() as session:
             query = session.query(model)
             items = (query.order_by(order_by) if order_by is not None else query).all()
             for item in items:
@@ -129,7 +170,7 @@ class DBBase:
             return items
 
     def _get(self, model: type[ModelT], pk: int | str) -> ModelT | None:
-        with self._session() as session:
+        with self.read_session() as session:
             item = session.get(model, pk)
             if item:
                 session.expunge(item)
@@ -143,7 +184,7 @@ class DBBase:
 
     def _save(self, model: type[ModelT], pk: int | str | None, **fields: JsonValue) -> ModelT | None:
         """Create (pk None) or update one row; None if the pk isn't there."""
-        with self._session() as session:
+        with self.write_session() as session:
             if pk is None:
                 item = model(**fields)
                 session.add(item)

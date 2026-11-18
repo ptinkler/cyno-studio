@@ -2,7 +2,7 @@
 
     models       ORM models + the `iso` timestamp helper
     tenant       multi-tenant row scoping (ORM events) + set/reset/current
-    _base        engine, schema catch-up, the locked session, _detach_id
+    _base        the writer and read-only engines, the write/read sessions, _detach_id
     users / conversations / instructions / characters / messages / imports /
     library      the MetadataDB method mixins, by domain
     manager      MetadataDB (composed from the mixins) + get_db

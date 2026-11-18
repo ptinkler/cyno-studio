@@ -14,7 +14,7 @@ class CharacterMixin(DBBase):
 
     def create_character(self, name: str, description: str = "", conversation_id: str | None = None) -> Character:
         """Create a character with no reference images."""
-        with self._session() as session:
+        with self.write_session() as session:
             char = Character(name=name, description=description, conversation_id=conversation_id, images=[])
             session.add(char)
             session.commit()
@@ -24,7 +24,7 @@ class CharacterMixin(DBBase):
 
     def get_character(self, character_id: int) -> Character | None:
         """Return a character by id, or ``None`` if it does not exist."""
-        with self._session() as session:
+        with self.read_session() as session:
             char = session.get(Character, character_id)
             if char:
                 session.expunge(char)
@@ -32,7 +32,7 @@ class CharacterMixin(DBBase):
 
     def list_characters(self) -> list[Character]:
         """Return all characters ordered by name and then id."""
-        with self._session() as session:
+        with self.read_session() as session:
             chars = session.query(Character).order_by(func.lower(Character.name), Character.id).all()
             for c in chars:
                 session.expunge(c)
@@ -40,7 +40,7 @@ class CharacterMixin(DBBase):
 
     def update_character(self, character_id: int, **fields: JsonValue) -> Character | None:
         """Set name / description / images (list of filenames) / conversation_id."""
-        with self._session() as session:
+        with self.write_session() as session:
             char = session.get(Character, character_id)
             if not char:
                 return None
@@ -56,7 +56,7 @@ class CharacterMixin(DBBase):
 
         Returns whether the character existed and was deleted.
         """
-        with self._session() as session:
+        with self.write_session() as session:
             char = session.get(Character, character_id)
             if not char:
                 return False

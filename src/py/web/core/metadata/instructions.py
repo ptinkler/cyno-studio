@@ -23,7 +23,7 @@ class InstructionMixin(DBBase):
         """Snippets for the given ids, in that order; unknown ids drop out."""
         if not ids:
             return []
-        with self._session() as session:
+        with self.read_session() as session:
             by_id = {i.id: i for i in session.query(ChatInstruction).filter(ChatInstruction.id.in_(ids))}
             items = [by_id[i] for i in ids if i in by_id]
             for i in items:
@@ -42,7 +42,7 @@ class InstructionMixin(DBBase):
 
     def delete_instruction(self, instruction_id: int) -> bool:
         """Delete a snippet and detach it from chats, groups, and defaults."""
-        with self._session() as session:
+        with self.write_session() as session:
             item = session.get(ChatInstruction, instruction_id)
             if not item:
                 return False
@@ -89,7 +89,7 @@ class InstructionMixin(DBBase):
 
         The group's snippets are not deleted.
         """
-        with self._session() as session:
+        with self.write_session() as session:
             item = session.get(ChatInstructionGroup, group_id)
             if not item:
                 return False
@@ -124,7 +124,7 @@ class InstructionMixin(DBBase):
 
     def get_settings(self) -> ChatSettings:
         """The current user's defaults row, created empty on first access."""
-        with self._session() as session:
+        with self.write_session() as session:
             item = session.query(ChatSettings).first()
             if not item:
                 item = ChatSettings()
@@ -136,7 +136,7 @@ class InstructionMixin(DBBase):
 
     def save_settings(self, **fields: JsonValue) -> ChatSettings:
         """Update the current user's defaults row and return it."""
-        with self._session() as session:
+        with self.write_session() as session:
             item = session.query(ChatSettings).first() or ChatSettings()
             session.add(item)
             set_fields(item, fields)
@@ -166,7 +166,7 @@ class InstructionMixin(DBBase):
 
     def delete_space(self, space_id: int) -> bool:
         """Delete a space; its chats become unfiled (space_id null), not deleted."""
-        with self._session() as session:
+        with self.write_session() as session:
             item = session.get(ChatSpace, space_id)
             if not item:
                 return False
