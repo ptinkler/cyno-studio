@@ -123,7 +123,7 @@ class MessageMixin(DBBase):
         media = fields.get("media")
         parent_id = fields.get("parent_id", _APPEND)
         lane = fields.get("lane")
-        with self._session() as session:
+        with self.write_session() as session:
             conv = session.get(ChatConversation, conversation_id)
             if parent_id is _APPEND:
                 parent_id = None if lane else (self._chat_leaf_id(session, conv) if conv else None)
@@ -155,7 +155,7 @@ class MessageMixin(DBBase):
         The first row starts the chat. Each row contains ``ChatMessage`` fields with ``media`` as a list;
         batching avoids one commit per message.
         """
-        with self._session() as session:
+        with self.write_session() as session:
             conv = session.get(ChatConversation, conversation_id)
             parent_id = None
             for row in rows:
@@ -184,13 +184,13 @@ class MessageMixin(DBBase):
 
     def get_chat_leaf_id(self, conversation_id: str) -> int | None:
         """Return the shown branch's last message id, if available."""
-        with self._session() as session:
+        with self.read_session() as session:
             conv = session.get(ChatConversation, conversation_id)
             return self._chat_leaf_id(session, conv) if conv else None
 
     def set_chat_leaf(self, conversation_id: str, leaf_id: int) -> None:
         """Show another branch. Not an edit, so the chat keeps its place in the list."""
-        with self._session() as session:
+        with self.write_session() as session:
             session.query(ChatConversation).filter(ChatConversation.id == conversation_id).update(
                 {ChatConversation.current_leaf_id: leaf_id, ChatConversation.updated_at: ChatConversation.updated_at}
             )
@@ -201,7 +201,7 @@ class MessageMixin(DBBase):
 
         Versions share a parent and lane.
         """
-        with self._session() as session:
+        with self.read_session() as session:
             rows = (
                 session.query(ChatMessage.id)
                 .filter(
@@ -221,7 +221,7 @@ class MessageMixin(DBBase):
         **fields: JsonValue,
     ) -> ChatMessage | None:
         """Update a message's fields and optional media, or return ``None``."""
-        with self._session() as session:
+        with self.write_session() as session:
             msg = session.get(ChatMessage, message_id)
             if not msg:
                 return None
@@ -242,7 +242,7 @@ class MessageMixin(DBBase):
         Background video pollers update items while the chat stream may be
         appending others, so the read-modify-write must happen under one lock.
         """
-        with self._session() as session:
+        with self.write_session() as session:
             msg = session.get(ChatMessage, message_id)
             if msg:
                 media = msg.media
@@ -262,7 +262,7 @@ class MessageMixin(DBBase):
 
     def find_chat_media_item(self, message_id: int, media_id: str) -> dict[str, JsonValue] | None:
         """The media item's current state, wherever it lives (message or library)."""
-        with self._session() as session:
+        with self.read_session() as session:
             msg = session.get(ChatMessage, message_id)
             if msg:
                 item = next((i for i in msg.media if i.get("id") == media_id), None)
@@ -273,7 +273,7 @@ class MessageMixin(DBBase):
 
     def append_chat_media_item(self, message_id: int, item: dict[str, JsonValue]) -> ChatMessage | None:
         """Atomically append one media item to a message."""
-        with self._session() as session:
+        with self.write_session() as session:
             msg = session.get(ChatMessage, message_id)
             if not msg:
                 return None
@@ -285,7 +285,7 @@ class MessageMixin(DBBase):
 
     def get_chat_messages_by_status(self, status: str) -> list[ChatMessage]:
         """Return messages with the requested status."""
-        with self._session() as session:
+        with self.read_session() as session:
             msgs = session.query(ChatMessage).filter(ChatMessage.status == status).all()
             for m in msgs:
                 session.expunge(m)
@@ -293,7 +293,7 @@ class MessageMixin(DBBase):
 
     def get_chat_message(self, message_id: int) -> ChatMessage | None:
         """Return a message by id, or ``None`` if it does not exist."""
-        with self._session() as session:
+        with self.read_session() as session:
             msg = session.get(ChatMessage, message_id)
             if msg:
                 session.expunge(msg)
@@ -305,7 +305,7 @@ class MessageMixin(DBBase):
         A reply's dollar cost includes its media, and detached library media
         remains included even after its message is gone.
         """
-        with self._session() as session:
+        with self.read_session() as session:
             usd, credit_cost = 0.0, 0
             for msg in session.query(ChatMessage).filter(ChatMessage.conversation_id == conversation_id):
                 usd += msg.cost or 0
@@ -327,7 +327,7 @@ class MessageMixin(DBBase):
         rows: list[SpendRow] = []
         if not conversation_ids:
             return rows
-        with self._session() as session:
+        with self.read_session() as session:
             msgs = session.query(ChatMessage).filter(ChatMessage.conversation_id.in_(conversation_ids))
             for msg in msgs:
                 if msg.cost:
@@ -356,7 +356,7 @@ class MessageMixin(DBBase):
 
     def get_chat_messages(self, conversation_id: str) -> list[ChatMessage]:
         """Return a conversation's messages ordered by id."""
-        with self._session() as session:
+        with self.read_session() as session:
             msgs = (
                 session.query(ChatMessage)
                 .filter(ChatMessage.conversation_id == conversation_id)
@@ -376,7 +376,7 @@ class MessageMixin(DBBase):
 
         Returns the detached media items.
         """
-        with self._session() as session:
+        with self.write_session() as session:
             msgs = (
                 session.query(ChatMessage)
                 .filter(
@@ -486,7 +486,7 @@ class MessageMixin(DBBase):
         confirmation dialog. Turns without successful generated files have no
         media to report.
         """
-        with self._session() as session:
+        with self.read_session() as session:
             plan = self._chat_exchange_plan(session, conversation_id, user_message_id)
             if not plan:
                 return None
@@ -515,7 +515,7 @@ class MessageMixin(DBBase):
 
         Returns the detached media items.
         """
-        with self._session() as session:
+        with self.write_session() as session:
             plan = self._chat_exchange_plan(session, conversation_id, user_message_id)
             if not plan:
                 return []
@@ -546,7 +546,7 @@ class MessageMixin(DBBase):
 
     def get_chat_messages_with_media(self) -> list[ChatMessage]:
         """Return messages that have media attached, newest first."""
-        with self._session() as session:
+        with self.read_session() as session:
             msgs = (
                 session.query(ChatMessage)
                 .filter(ChatMessage.media_json.isnot(None))
@@ -559,7 +559,7 @@ class MessageMixin(DBBase):
 
     def get_chat_messages_with_pending_media(self) -> list[ChatMessage]:
         """Return messages whose media JSON contains a pending item."""
-        with self._session() as session:
+        with self.read_session() as session:
             msgs = session.query(ChatMessage).filter(ChatMessage.media_json.contains('"status": "pending"')).all()
             for m in msgs:
                 session.expunge(m)
@@ -569,7 +569,7 @@ class MessageMixin(DBBase):
         """Return messages matching the provided ids."""
         if not ids:
             return []
-        with self._session() as session:
+        with self.read_session() as session:
             msgs = session.query(ChatMessage).filter(ChatMessage.id.in_(ids)).all()
             for m in msgs:
                 session.expunge(m)

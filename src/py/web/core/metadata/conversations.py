@@ -15,7 +15,7 @@ class ConversationMixin(DBBase):
 
     def create_conversation(self, title: str = "New chat", **fields: JsonValue) -> ChatConversation:
         """Create a conversation with a generated id."""
-        with self._session() as session:
+        with self.write_session() as session:
             conv = ChatConversation(id=uuid.uuid4().hex, title=title, **fields)
             session.add(conv)
             session.commit()
@@ -32,7 +32,7 @@ class ConversationMixin(DBBase):
 
     def get_conversation(self, conv_id: str) -> ChatConversation | None:
         """Return a conversation by id, or ``None`` if it does not exist."""
-        with self._session() as session:
+        with self.read_session() as session:
             conv = session.get(ChatConversation, conv_id)
             if conv:
                 session.expunge(conv)
@@ -46,7 +46,7 @@ class ConversationMixin(DBBase):
         """
         token = set_tenant(None)  # None disables the per-tenant select filter
         try:
-            with self._session() as session:
+            with self.read_session() as session:
                 return session.get(ChatConversation, conv_id) is not None
         finally:
             reset_tenant(token)
@@ -56,7 +56,7 @@ class ConversationMixin(DBBase):
 
         Pass ``limit=None`` to return every conversation.
         """
-        with self._session() as session:
+        with self.read_session() as session:
             query = session.query(ChatConversation).order_by(
                 ChatConversation.pinned.desc(), ChatConversation.updated_at.desc()
             )
@@ -73,7 +73,7 @@ class ConversationMixin(DBBase):
         out: dict[str, str] = {}
         if not conv_ids:
             return out
-        with self._session() as session:
+        with self.read_session() as session:
             rows = (
                 session.query(ChatMessage)
                 .filter(ChatMessage.conversation_id.in_(conv_ids), ChatMessage.media_json.isnot(None))
@@ -97,7 +97,7 @@ class ConversationMixin(DBBase):
         ``None`` when only the title matched).
         """
         pattern = "%" + re.sub(r"([\\%_])", r"\\\1", query) + "%"
-        with self._session() as session:
+        with self.read_session() as session:
             snippets: dict[str, str] = {}
             for msg in (
                 session.query(ChatMessage)
@@ -120,7 +120,7 @@ class ConversationMixin(DBBase):
 
     def list_conversation_forks(self, conv_id: str) -> list[ChatConversation]:
         """Chats branched off this one, oldest first."""
-        with self._session() as session:
+        with self.read_session() as session:
             convs = (
                 session.query(ChatConversation)
                 .filter(ChatConversation.forked_from_id == conv_id)
@@ -133,7 +133,7 @@ class ConversationMixin(DBBase):
 
     def set_conversation_pinned(self, conv_id: str, *, pinned: bool) -> None:
         """Pin or unpin. Not an edit, so the chat keeps its place among the rest."""
-        with self._session() as session:
+        with self.write_session() as session:
             session.query(ChatConversation).filter(ChatConversation.id == conv_id).update(
                 {ChatConversation.pinned: pinned, ChatConversation.updated_at: ChatConversation.updated_at}
             )
@@ -141,7 +141,7 @@ class ConversationMixin(DBBase):
 
     def update_conversation(self, conv_id: str, **fields: JsonValue | datetime) -> ChatConversation | None:
         """Update supported conversation fields, or return ``None`` if missing."""
-        with self._session() as session:
+        with self.write_session() as session:
             conv = session.get(ChatConversation, conv_id)
             if not conv:
                 return None
@@ -154,7 +154,7 @@ class ConversationMixin(DBBase):
 
     def delete_conversation(self, conv_id: str) -> bool:
         """Delete a conversation and its messages and library items."""
-        with self._session() as session:
+        with self.write_session() as session:
             conv = session.get(ChatConversation, conv_id)
             if not conv:
                 return False

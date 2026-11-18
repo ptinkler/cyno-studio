@@ -9,7 +9,7 @@ class LibraryMixin(DBBase):
 
     def list_chat_library(self) -> list[ChatLibraryItem]:
         """Return detached media items, newest first."""
-        with self._session() as session:
+        with self.read_session() as session:
             items = session.query(ChatLibraryItem).order_by(ChatLibraryItem.created_at.desc()).all()
             for i in items:
                 session.expunge(i)
@@ -17,7 +17,7 @@ class LibraryMixin(DBBase):
 
     def get_chat_library_item(self, media_id: str) -> ChatLibraryItem | None:
         """Return the detached item with this media id, if present."""
-        with self._session() as session:
+        with self.read_session() as session:
             item = session.query(ChatLibraryItem).filter(ChatLibraryItem.media_id == media_id).first()
             if item:
                 session.expunge(item)
@@ -25,7 +25,7 @@ class LibraryMixin(DBBase):
 
     def delete_chat_library_item(self, media_id: str) -> bool:
         """Delete a detached media item and report whether it existed."""
-        with self._session() as session:
+        with self.write_session() as session:
             item = session.query(ChatLibraryItem).filter(ChatLibraryItem.media_id == media_id).first()
             if not item:
                 return False

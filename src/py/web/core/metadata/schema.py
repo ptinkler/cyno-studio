@@ -47,17 +47,10 @@ def ensure_schema(engine: sa.Engine, db_path: Path, *, fresh: bool) -> None:
     """Bring an unversioned database up to the current Alembic revision.
 
     A failure raises ``MigrationFailedError``: the server must not start on a half-migrated database, where it
-    would fail later and more confusingly, or write data the next migration can't read. The
-    engine is disposed first because its connections hold
-    ``PRAGMA locking_mode=EXCLUSIVE`` (see ``_base.py``), so
-    while one is open Alembic's own connection can't write — it would block
-    until SQLite's busy timeout and then fail. Disposing releases the lock;
-    the pool reconnects on the next query.
+    would fail later and more confusingly, or write data the next migration can't read.
     """
     try:
-        # Ask before disposing: inspecting reconnects, which would retake the lock.
         versioned = sa.inspect(engine).has_table("alembic_version")
-        engine.dispose()
         cfg = _config(db_path)
         if not versioned:
             at = "head" if fresh else ADOPT_AT

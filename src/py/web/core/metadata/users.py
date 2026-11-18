@@ -14,7 +14,7 @@ class UserMixin(DBBase):
 
     def get_user(self, user_id: str) -> User | None:
         """Return a user by id, or ``None`` if it does not exist."""
-        with self._session() as session:
+        with self.read_session() as session:
             user = session.get(User, user_id)
             if user:
                 session.expunge(user)
@@ -22,7 +22,7 @@ class UserMixin(DBBase):
 
     def get_user_by_email(self, email: str) -> User | None:
         """Return a user by case-insensitive email address, if present."""
-        with self._session() as session:
+        with self.read_session() as session:
             user = session.query(User).filter(User.email == email.lower()).first()
             if user:
                 session.expunge(user)
@@ -41,7 +41,7 @@ class UserMixin(DBBase):
         if not isinstance(provider, str) or not isinstance(sub, str):
             raise TypeError(profile)
 
-        with self._session() as session:
+        with self.write_session() as session:
             user = session.query(User).filter(User.provider == provider, User.provider_sub == sub).first()
             if not user and email:
                 user = session.query(User).filter(User.email == email).first()
@@ -73,7 +73,7 @@ class UserMixin(DBBase):
 
     def count_users(self) -> int:
         """Return the number of registered users."""
-        with self._session() as session:
+        with self.read_session() as session:
             return session.query(User).count()
 
     def ensure_admin(self, email: str, name: str = "Admin") -> User:
@@ -81,7 +81,7 @@ class UserMixin(DBBase):
 
         Promoting an existing user does not change their sign-in provider.
         """
-        with self._session() as session:
+        with self.write_session() as session:
             user = session.query(User).filter(User.email == email.lower()).first()
             if user:
                 user.is_admin = True
@@ -107,7 +107,7 @@ class UserMixin(DBBase):
         are visible.
         """
         count = 0
-        with self._session() as session:
+        with self.write_session() as session:
             for model in TENANT_MODELS:
                 count += session.query(model).filter(model.user_id.is_(None)).update({model.user_id: user_id}) or 0
             session.commit()
@@ -115,7 +115,7 @@ class UserMixin(DBBase):
 
     def set_user_api_keys(self, user_id: str, api_keys_json: str | None) -> None:
         """Store the user's (encrypted) provider keys blob."""
-        with self._session() as session:
+        with self.write_session() as session:
             user = session.get(User, user_id)
             if user:
                 user.api_keys_json = api_keys_json
@@ -126,7 +126,7 @@ class UserMixin(DBBase):
 
         Pass ``None`` to use the instance default.
         """
-        with self._session() as session:
+        with self.write_session() as session:
             user = session.get(User, user_id)
             if user:
                 user.upload_prefs_json = upload_prefs_json
@@ -137,7 +137,7 @@ class UserMixin(DBBase):
 
         Used to determine whether the database already contains encrypted keys.
         """
-        with self._session() as session:
+        with self.read_session() as session:
             return [user.api_keys_json for user in session.query(User) if user.api_keys_json]
 
     def create_local_admin(self, email: str, password_hash: str, name: str = "Admin") -> User:
@@ -145,7 +145,7 @@ class UserMixin(DBBase):
 
         The caller enforces that the email is allowed for administration.
         """
-        with self._session() as session:
+        with self.write_session() as session:
             user = session.query(User).filter(User.email == email.lower()).first()
             if not user:
                 user = User(
@@ -168,7 +168,7 @@ class UserMixin(DBBase):
 
     def bump_session_version(self, user_id: str) -> int:
         """Invalidate every login cookie made so far for this user; return the version new ones carry."""
-        with self._session() as session:
+        with self.write_session() as session:
             user = session.get(User, user_id)
             if not user:
                 return 0
@@ -178,7 +178,7 @@ class UserMixin(DBBase):
 
     def set_user_password(self, user_id: str, password_hash: str) -> None:
         """Replace a user's stored password hash (e.g. after a transparent rehash)."""
-        with self._session() as session:
+        with self.write_session() as session:
             user = session.get(User, user_id)
             if user:
                 user.password_hash = password_hash

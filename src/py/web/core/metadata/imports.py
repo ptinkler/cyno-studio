@@ -155,7 +155,7 @@ class ImportMixin(DBBase):
 
     def get_imported_conversations(self, source: str) -> dict[str, ChatConversation]:
         """Chats imported from `source`, by their id there."""
-        with self._session() as session:
+        with self.read_session() as session:
             convs = session.query(ChatConversation).filter(ChatConversation.import_source == source).all()
             result: dict[str, ChatConversation] = {}
             for conv in convs:
@@ -166,7 +166,7 @@ class ImportMixin(DBBase):
 
     def get_import_skips(self, source: str) -> set[str]:
         """Ids of chats imported from `source` and since deleted."""
-        with self._session() as session:
+        with self.read_session() as session:
             return {r[0] for r in session.query(ChatImportSkip.import_id).filter(ChatImportSkip.source == source)}
 
     def add_imported_messages(
@@ -186,7 +186,7 @@ class ImportMixin(DBBase):
         `updates` maps existing message ids to new `content`/`media`. With
         `show`, the last new message becomes the shown branch's end.
         """
-        with self._session() as session:
+        with self.write_session() as session:
             conv = session.get(ChatConversation, conversation_id)
             if conv is None:
                 raise LookupError(conversation_id)
@@ -217,7 +217,7 @@ class ImportMixin(DBBase):
 
     def get_chat_import_ids(self, conversation_id: str) -> dict[str, ChatMessage]:
         """A chat's imported messages, by the id they were imported from."""
-        with self._session() as session:
+        with self.read_session() as session:
             msgs = (
                 session.query(ChatMessage)
                 .filter(ChatMessage.conversation_id == conversation_id, ChatMessage.import_id.isnot(None))
@@ -242,7 +242,7 @@ class ImportMixin(DBBase):
         that wasn't exported starts a branch). Library items are added once. The exported shown branch is shown here
         unless the chat has been carried on here. Returns (added, updated).
         """
-        with self._session() as session:
+        with self.write_session() as session:
             conv = session.get(ChatConversation, conversation_id)
             if conv is None:
                 raise LookupError(conversation_id)

@@ -19,7 +19,7 @@ class UploadMixin(DBBase):
 
     def record_hosted_upload(self, url: str, expires_at: datetime) -> None:
         """Remember a URL until `expires_at` (a later upload of the same URL moves it)."""
-        with self._session() as session:
+        with self.write_session() as session:
             row = session.get(HostedUpload, url)
             if row:
                 row.expires_at = max(row.expires_at, expires_at)
@@ -29,13 +29,13 @@ class UploadMixin(DBBase):
 
     def expired_hosted_uploads(self) -> list[str]:
         """The remembered URLs whose host has dropped the file by now."""
-        with self._session() as session:
+        with self.read_session() as session:
             rows = session.query(HostedUpload.url).filter(HostedUpload.expires_at <= _now()).all()
             return [r[0] for r in rows]
 
     def scrub_hosted_uploads(self, urls: list[str], placeholder: str) -> None:
         """Replace each URL in stored messages and library items, then forget it."""
-        with self._session() as session:
+        with self.write_session() as session:
             for url in urls:
                 for model, column in (
                     (ChatMessage, ChatMessage.media_json),

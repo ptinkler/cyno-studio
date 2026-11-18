@@ -164,7 +164,7 @@ See `.env.example` for the full list.
 | `MICROSOFT_OAUTH_TENANT`                      | Your Microsoft tenant id or domain — required, or Microsoft sign-in is refused |
 | `BACKUP_INTERVAL_HOURS` / `BACKUP_KEEP`       | Database snapshot every N hours (default 24, `0` = off) and how many to keep (default 7) |
 | `CYNO_HOST_DATA_DIR`                          | Host path for persistent data (videos, DB)                                    |
-| `CYNO_DB_DIR`                                 | Folder for the SQLite database (default `<data dir>/data`): keep it on local disk, not a network share |
+| `CYNO_DB_DIR`                                 | Folder for the SQLite database (default `<data dir>/data`): **must be a local disk**, not NFS/SMB (see below) |
 | `CYNO_CACHE_DIR`                              | Folder for thumbnails and other disposable caches (default `<data dir>/cache`) |
 | `CYNO_BACKUP_DIR`                             | Folder for the scheduled database backups (default `<data dir>/backups`): ideally another disk or machine |
 | `THUMB_WORKERS`                               | Thumbnails generated at once (default 2); raise it on a fast CPU              |
@@ -237,6 +237,8 @@ Code standards, enforced in CI:
 ## Data
 
 All data (videos, source images, chat media, character images, SQLite DB) is stored in `CYNO_HOST_DATA_DIR` on the host. Back this up.
+
+The database runs in SQLite's WAL mode: readers never wait for the writer, and writers take SQLite's single write lock at the start of each transaction, so concurrent updates are never lost. WAL relies on shared memory between the processes using the file, so **the database folder must be on a local disk, never on NFS or SMB**; the app logs a warning at startup if it finds it on a network filesystem. Media can live on a share: point `CYNO_DB_DIR` (and `CYNO_CACHE_DIR`) at local disk and leave the rest. While the app runs the database has `-wal` and `-shm` files beside it, so don't copy the file by hand: use the app's own backups, or stop the app first.
 
 ## Reverse proxy + VPN deployment (`deploy/compose.yaml`)
 

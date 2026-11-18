@@ -21,10 +21,8 @@ from web.core import metadata
 
 # Every setting the app reads from the environment. A developer's .env is
 # loaded at import (web/core/config.py), so without this a test would behave
-# differently on their machine than in CI — and DEV_LOGIN in particular sends
-# /api/keys down a path that opens a SECOND connection to the same SQLite
-# file, which blocks for 30s on `PRAGMA locking_mode=EXCLUSIVE` and then 500s.
-# A test that wants one of these sets it itself.
+# differently on their machine than in CI (DEV_LOGIN, for one, changes how the
+# key routes behave). A test that wants one of these sets it itself.
 _APP_ENV = (
     "ADMIN_EMAILS",
     "ALLOWED_EMAILS",
