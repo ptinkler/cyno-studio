@@ -8,15 +8,15 @@
 #
 # Host requirements:
 #   - an external Docker network named "proxy" with the reverse proxy attached to it
-#   - CYNO_MEDIA_DIR: the media folder (e.g. an NFS mount); the database and cache stay on LOCAL disk
-#     (CYNO_DB_DIR, CYNO_CACHE_DIR), because SQLite does not belong on a network share. The two local folders
-#     are mounted over same-named folders inside the data directory, so those must already exist in CYNO_MEDIA_DIR.
+#   - CYNO_HOST_MEDIA_DIR: the media folder (e.g. an NFS mount). The database and cache are separate folders on
+#     LOCAL disk (CYNO_HOST_DB_DIR, CYNO_HOST_CACHE_DIR): SQLite's WAL mode is not safe on a network share. The
+#     app is pointed at the three folders with CYNO_DATA_DIR, CYNO_DB_DIR and CYNO_CACHE_DIR (set below).
 #   - /dev/net/tun
 #
 # Variables (required unless a default is shown):
 #   CYNO_VERSION            image tag for BOTH images (default latest; pin e.g. v1.2.9 to roll back)
 #   CYNO_UID / CYNO_GID     user the app runs as; must own the media folder
-#   CYNO_MEDIA_DIR, CYNO_DB_DIR, CYNO_CACHE_DIR
+#   CYNO_HOST_MEDIA_DIR, CYNO_HOST_DB_DIR, CYNO_HOST_CACHE_DIR   host folders (see above)
 #   VPN_SERVICE_PROVIDER, WIREGUARD_PRIVATE_KEY, WIREGUARD_ADDRESSES, SERVER_COUNTRIES, (VPN_TYPE, default wireguard)
 #   GLUETUN_API_KEY         gluetun control-server key; the app uses the same one
 #   TZ                      (default UTC)
@@ -65,12 +65,14 @@ services:
       gluetun:
         condition: service_healthy
     volumes:
-      - ${CYNO_MEDIA_DIR:?set CYNO_MEDIA_DIR}:/data
-      - ${CYNO_DB_DIR:?set CYNO_DB_DIR}:/data/data
-      - ${CYNO_CACHE_DIR:?set CYNO_CACHE_DIR}:/data/cache
+      - ${CYNO_HOST_MEDIA_DIR:?set CYNO_HOST_MEDIA_DIR}:/data
+      - ${CYNO_HOST_DB_DIR:?set CYNO_HOST_DB_DIR}:/db
+      - ${CYNO_HOST_CACHE_DIR:?set CYNO_HOST_CACHE_DIR}:/cache
     env_file: .env
     environment:
       CYNO_DATA_DIR: /data
+      CYNO_DB_DIR: /db
+      CYNO_CACHE_DIR: /cache
     cap_drop:
       - ALL
     security_opt:
