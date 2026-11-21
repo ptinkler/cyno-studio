@@ -62,7 +62,7 @@ src/
 ## How the types work
 
 - The backend's Pydantic models are exported as OpenAPI (`scripts/export_openapi.py`) and turned into
-  `src/api/schema.d.ts` by `openapi-typescript`. The client in `api/` takes request and response types from it,
+  `src/api/schema.d.ts` by `openapi-typesafe`. The client in `api/` takes request and response types from it,
   so a path the backend doesn't serve, or a body of the wrong shape, is a compile error.
 - Server JSON is trusted only through that generated schema. Anything else read from outside (localStorage,
   third-party catalogue rows, a media card's open-JSON `params`) is parsed where it enters:
