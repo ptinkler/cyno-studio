@@ -25,7 +25,7 @@
 
 services:
   gluetun:
-    image: qmcgaw/gluetun:v3.40.0
+    image: qmcgaw/gluetun:v3.41.3
     container_name: cyno-gluetun
     restart: unless-stopped
     cap_add:
