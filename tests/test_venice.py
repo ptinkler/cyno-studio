@@ -834,18 +834,9 @@ class TestVideoFamiliesInChat:
     def _image(self, chat: None, conv: ConversationOut, name: str) -> None:
         (chat_pkg.conversation_dir(conv["id"]) / name).write_bytes(png_bytes())
 
-    def test_reference_model_gets_attached_pinned_and_character_images(
-        self,
-        client: TestClient,
-        conv: ConversationOut,
-        chat: None,
-        db: MetadataDB,
-        venice: FakeVenice,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Test that reference model gets attached pinned and character images."""
-        self._load_catalogue(client, chat, monkeypatch)
-        self._queue(venice)
+    def _pinned_and_attached(
+        self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB
+    ) -> list[JsonValue]:
         for f in ("pin.png", "a.png", "b.png"):
             self._image(chat, conv, f)
         db.add_chat_message(conv["id"], "user", "x")
@@ -858,7 +849,46 @@ class TestVideoFamiliesInChat:
             ],
         )
         client.post(f"/api/chat/messages/{msg.id}/media/p/pin", json={"pinned": True})
-        ups = [_attach(client, conv, "a.png", "red"), _attach(client, conv, "b.png", "blue")]
+        return [_attach(client, conv, "a.png", "red"), _attach(client, conv, "b.png", "blue")]
+
+    def test_images_slider_caps_pins_but_not_attachments(
+        self,
+        client: TestClient,
+        conv: ConversationOut,
+        chat: None,
+        db: MetadataDB,
+        venice: FakeVenice,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """With Images sent at 0, only the attachments go: the pinned image stays out."""
+        self._load_catalogue(client, chat, monkeypatch)
+        self._queue(venice)
+        ups = self._pinned_and_attached(client, conv, chat, db)
+        ev = _send(
+            client,
+            conv,
+            "they dance",
+            attachments=ups,
+            mode="video",
+            image_limit=0,
+            video_model="venice/wan-3-0-reference-to-video",
+        )
+        assert len(seq(venice.body("/video/queue"), "reference_image_urls")) == 2
+        assert dig(obj(ev[-1], "message", "media", 0), "params", "refs") == ups
+
+    def test_reference_model_gets_attached_pinned_and_character_images(
+        self,
+        client: TestClient,
+        conv: ConversationOut,
+        chat: None,
+        db: MetadataDB,
+        venice: FakeVenice,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that reference model gets attached pinned and character images."""
+        self._load_catalogue(client, chat, monkeypatch)
+        self._queue(venice)
+        ups = self._pinned_and_attached(client, conv, chat, db)
         ev = _send(
             client,
             conv,

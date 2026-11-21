@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import InspectorSection from './InspectorSection.vue'
 import { vTip } from '../../directives/tip'
 import { ref, computed, watch } from 'vue'
 import { composerSettingsKey, injectRequired } from '../../injection'
@@ -31,9 +32,7 @@ const voiceLabel = (voice: Voice): string => [voice.voiceName, voice.language, v
 </script>
 
 <template>
-  <div v-if="showAudioOpts" class="isection">
-    <div class="ilabel">Audio options</div>
-
+  <InspectorSection v-if="showAudioOpts" title="Audio options">
     <div v-if="has('voice')" class="orow">
       <label class="ifield">
         <span class="fcap">Voice</span>
@@ -95,7 +94,7 @@ const voiceLabel = (voice: Voice): string => [voice.voiceName, voice.language, v
         </label>
       </div>
     </template>
-  </div>
+  </InspectorSection>
 </template>
 
 <style scoped>

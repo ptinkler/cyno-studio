@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import InspectorSection from './InspectorSection.vue'
 import type { Character } from '../../composables/charactersApi'
 import type { InheritedDefault } from '../../composables/useChatDefaults'
 import CharacterPicker from '../characters/CharacterPicker.vue'
@@ -32,8 +33,7 @@ defineEmits<{
 </script>
 
 <template>
-  <div class="isection">
-    <div class="ilabel">Characters</div>
+  <InspectorSection title="Characters">
     <p v-if="!props.support.ok" class="warn">{{ props.support.reason }}</p>
     <CharacterPicker
       v-else
@@ -49,7 +49,7 @@ defineEmits<{
       @unhide="$emit('unhide', $event)"
     />
     <div v-if="names" class="attached">{{ names }}</div>
-  </div>
+  </InspectorSection>
 </template>
 
 <style scoped>

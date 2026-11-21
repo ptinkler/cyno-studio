@@ -175,14 +175,17 @@ class GenerationTurn(HistoryTurn):
         info = model_info("video", self.s.video_model) or {}
         out: dict[str, JsonValue] = {}
         if info.get("reference_images") or info.get("family") == "motion":
-            own = dedupe([*attached, *([first_frame] if first_frame else []), *self._pinned_images()])
+            lead = dedupe([*attached, *([first_frame] if first_frame else [])])
+            # Attachments always go; the Images slider caps the pinned chat images on top of them
+            pins = [f for f in self._pinned_images() if f not in lead]
+            limit = self.s.image_limit
             limits = RefLimits(
-                None,
-                after=len(attached) or (1 if first_frame else 0),
+                None if limit is None else len(lead) + limit,
+                after=len(lead),
                 max_refs=info.get("max_refs"),
                 choices=self.s.ref_choices,
             )
-            out["refs"], _ = plan_refs(own, chars, limits)
+            out["refs"], _ = plan_refs([*lead, *pins], chars, limits)
         if last_frame and "last_frame" in (info.get("frame_images") or []):
             out["last_frame"] = last_frame
         if info.get("video_input"):

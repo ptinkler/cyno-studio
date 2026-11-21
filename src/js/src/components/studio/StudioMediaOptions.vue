@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import InspectorSection from './InspectorSection.vue'
 import { vTip } from '../../directives/tip'
 import { computed } from 'vue'
 import { composerSettingsKey, injectRequired } from '../../injection'
@@ -42,8 +43,7 @@ function onDuration(event: Event): void {
 </script>
 
 <template>
-  <div v-if="showImageOpts" class="isection">
-    <div class="ilabel">Image options</div>
+  <InspectorSection v-if="showImageOpts" title="Image options">
     <div class="orow">
       <label v-if="imageShowsRatio" class="ifield">
         <span class="fcap">Ratio</span>
@@ -60,10 +60,9 @@ function onDuration(event: Event): void {
         </select>
       </label>
     </div>
-  </div>
+  </InspectorSection>
 
-  <div v-if="showVideoOpts" class="isection">
-    <div class="ilabel">Video options</div>
+  <InspectorSection v-if="showVideoOpts" title="Video options">
     <div class="orow">
       <label v-if="videoShowsRatio" class="ifield">
         <span class="fcap">Ratio</span>
@@ -116,7 +115,7 @@ function onDuration(event: Event): void {
         <span class="dval">{{ durText }}</span>
       </div>
     </div>
-  </div>
+  </InspectorSection>
 </template>
 
 <style scoped>
