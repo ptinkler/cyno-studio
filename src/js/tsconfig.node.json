@@ -3,5 +3,5 @@
   // tsconfig.json doesn't (browser code must not see `process` and friends). Same strictness otherwise.
   "extends": "./tsconfig.json",
   "compilerOptions": { "types": ["node"], "lib": ["ES2023"] },
-  "include": ["vite.config.ts", "eslint.config.ts"]
+  "include": ["vite.config.ts", "eslint.config.ts", "playwright.config.ts"]
 }

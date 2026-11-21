@@ -34,13 +34,15 @@ const collapsed = computed(() => isCollapsed(props.title))
 .ihead:hover {
   color: var(--sfg);
 }
+/* The chevron points down while the section is open, right once it is folded */
 .ihead .ic {
+  transform: rotate(90deg);
   transition: transform 0.15s;
 }
 .folded .ihead {
   margin-bottom: 0;
 }
 .folded .ihead .ic {
-  transform: rotate(-90deg);
+  transform: none;
 }
 </style>

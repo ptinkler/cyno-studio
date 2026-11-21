@@ -1,0 +1,6 @@
+{
+  // The end-to-end tests run in Node (Playwright), not the browser: Node's types, the app's strictness.
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "types": ["node"], "lib": ["ES2023", "DOM"] },
+  "include": ["**/*.ts"]
+}
