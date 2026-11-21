@@ -228,6 +228,18 @@ describe('useStudio', () => {
     expect(studio.activeKind.value).toBe('chat')
   })
 
+  it('files added together on a new thread share one new thread', async () => {
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: () => 'blob:x' }))
+    const { studio } = setup()
+    const png = (name: string) => new File(['x'], name, { type: 'image/png' })
+    studio.addFiles([png('a.png')])
+    studio.addFiles([png('b.png')])
+    await vi.waitFor(() => {
+      expect(studio.active.value).toBe('c1')
+    })
+    expect(chat.createConversation).toHaveBeenCalledOnce()
+  })
+
   it('does not send an empty draft', async () => {
     const { studio } = setup()
     await studio.send()
