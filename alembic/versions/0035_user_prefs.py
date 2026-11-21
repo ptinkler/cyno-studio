@@ -1,4 +1,4 @@
-"""add chat_settings.model_favourites_json, the user's starred models per picker kind.
+"""add chat_settings.model_favourites_json and presets_json: the user's starred models and composer presets.
 
 Revision ID: 0035
 Revises: 0034
@@ -19,13 +19,16 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    """Add the column."""
-    if "model_favourites_json" not in {c["name"] for c in sa.inspect(op.get_bind()).get_columns("chat_settings")}:
-        with op.batch_alter_table("chat_settings") as batch_op:
-            batch_op.add_column(sa.Column("model_favourites_json", sa.Text(), nullable=True))
+    """Add the columns."""
+    have = {c["name"] for c in sa.inspect(op.get_bind()).get_columns("chat_settings")}
+    with op.batch_alter_table("chat_settings") as batch_op:
+        for name in ("model_favourites_json", "presets_json"):
+            if name not in have:
+                batch_op.add_column(sa.Column(name, sa.Text(), nullable=True))
 
 
 def downgrade() -> None:
-    """Drop the column."""
+    """Drop the columns."""
     with op.batch_alter_table("chat_settings") as batch_op:
+        batch_op.drop_column("presets_json")
         batch_op.drop_column("model_favourites_json")

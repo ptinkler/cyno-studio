@@ -326,6 +326,7 @@ class TestCustomInstructions:
             "default_instruction_group_ids": [],
             "title_model": None,
             "model_favourites": {},
+            "presets": None,
         }
         updated = client.put("/api/chat/settings", json={"default_instruction_ids": [s]})
         assert jp.dig(updated, "default_instruction_ids") == [s]
@@ -887,6 +888,13 @@ class TestModelFavourites:
             "image": ["a/x", "b/y"],
             "text": [],
         }
+
+    def test_presets_round_trip(self, client: TestClient) -> None:
+        """Never saved is null (so a browser's own presets can be uploaded); saving replaces the list."""
+        assert dig(client.get("/api/chat/settings"), "presets") is None
+        presets = [{"id": "a", "name": "Recast", "mode": "video", "models": {"video": "pollo/x"}}]
+        assert dig(client.put("/api/chat/settings/presets", json={"presets": presets}), "presets") == presets
+        assert dig(client.put("/api/chat/settings/presets", json={"presets": []}), "presets") == []
 
     def test_rejects_unknown_kind(self, client: TestClient) -> None:
         """Only the picker kinds are accepted."""

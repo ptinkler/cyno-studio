@@ -20,7 +20,7 @@ import {
   videoOptsFrom,
 } from './composerPrefs'
 import type { Mode, PickKind } from './composerPrefs'
-import { readPresets, snapshotKey, storePresets } from './composerPresets'
+import { readPresets, serverPresets, snapshotKey, storePresets } from './composerPresets'
 import type { Snapshot, StoredPreset } from './composerPresets'
 import { writeStored } from '../utils/storage'
 
@@ -204,6 +204,9 @@ export function useComposerSettings(models: Catalogues) {
 
   // --- Presets -----------------------------------------------------------------------------------------------
   const presets = ref<StoredPreset[]>(readPresets())
+  void serverPresets(presets.value).then(list => {
+    if (list) presets.value = list
+  })
   const snapshot = (): Snapshot => ({
     mode: mode.value,
     models: { ...selected },

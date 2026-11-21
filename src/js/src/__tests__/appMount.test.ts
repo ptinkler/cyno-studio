@@ -33,6 +33,7 @@ const ANSWERS: readonly (readonly [RegExp, unknown])[] = [
       default_instruction_group_ids: [],
       title_model: null,
       model_favourites: {},
+      presets: null,
     },
   ],
   [/\/api\/chat\/spend\/breakdown/, { days: 0, total_usd: 0, rows: [] }],

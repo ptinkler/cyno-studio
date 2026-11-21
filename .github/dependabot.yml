@@ -32,3 +32,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+
+  # Pinned third-party images in the deploy stack (gluetun)
+  - package-ecosystem: docker-compose
+    directory: /deploy
+    schedule:
+      interval: weekly

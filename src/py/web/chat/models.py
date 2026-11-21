@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from web.chat.constants import DEFAULT_IMAGE_LIMIT
+from web.types import JsonValue
 
 
 class ConversationCreate(BaseModel):
@@ -71,6 +72,15 @@ class ModelFavouritesIn(BaseModel):
     """Starred model ids per picker kind."""
 
     model_favourites: dict[Literal["text", "image", "video", "audio"], list[str]]
+
+
+MAX_PRESETS = 200
+
+
+class PresetsIn(BaseModel):
+    """The composer's presets, replaced as a whole."""
+
+    presets: list[dict[str, JsonValue]] = Field(max_length=MAX_PRESETS)
 
 
 class TitleModelIn(BaseModel):

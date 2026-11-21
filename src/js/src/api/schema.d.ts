@@ -1339,6 +1339,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/chat/settings/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Api Set Presets
+         * @description Save the user's composer presets, so they follow them to any browser.
+         */
+        put: operations["api_set_presets_api_chat_settings_presets_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chat/settings/title-model": {
         parameters: {
             query?: never;
@@ -2177,6 +2197,10 @@ export interface components {
             model_favourites: {
                 [key: string]: string[];
             };
+            /** Presets */
+            presets: {
+                [key: string]: components["schemas"]["JsonValue-Output"];
+            }[] | null;
             /** Title Model */
             title_model: string | null;
         };
@@ -3074,10 +3098,13 @@ export interface components {
             type: "instructions";
         };
         JsonObject: {
-            [key: string]: components["schemas"]["JsonValue"];
+            [key: string]: components["schemas"]["JsonValue-Output"];
         };
-        JsonValue: string | number | boolean | components["schemas"]["JsonValue"][] | {
-            [key: string]: components["schemas"]["JsonValue"];
+        "JsonValue-Input": string | number | boolean | components["schemas"]["JsonValue-Input"][] | {
+            [key: string]: components["schemas"]["JsonValue-Input"];
+        } | null;
+        "JsonValue-Output": string | number | boolean | components["schemas"]["JsonValue-Output"][] | {
+            [key: string]: components["schemas"]["JsonValue-Output"];
         } | null;
         /**
          * KeyStatus
@@ -3500,6 +3527,16 @@ export interface components {
             totalCredits: number;
         };
         /**
+         * PresetsIn
+         * @description The composer's presets, replaced as a whole.
+         */
+        PresetsIn: {
+            /** Presets */
+            presets: {
+                [key: string]: components["schemas"]["JsonValue-Input"];
+            }[];
+        };
+        /**
          * PublicIp
          * @description The address the app reaches the internet from, and where that is.
          */
@@ -3617,8 +3654,8 @@ export interface components {
             path: string;
             /** Provider */
             provider: string;
-            request?: components["schemas"]["JsonValue"];
-            response?: components["schemas"]["JsonValue"];
+            request?: components["schemas"]["JsonValue-Output"];
+            response?: components["schemas"]["JsonValue-Output"];
             /** Seconds */
             seconds?: number | null;
             /** Status */
@@ -6818,6 +6855,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ModelFavouritesIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_set_presets_api_chat_settings_presets_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                user_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PresetsIn"];
             };
         };
         responses: {

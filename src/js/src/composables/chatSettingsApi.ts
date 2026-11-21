@@ -48,3 +48,6 @@ export const setTitleModel = (titleModel: string | null) =>
 // Starred models per picker kind
 export const setModelFavourites = (modelFavourites: Schemas['ModelFavouritesIn']['model_favourites']) =>
   api.put('/api/chat/settings/model-favourites', { model_favourites: modelFavourites })
+// The composer's presets, replaced as a whole
+export const setPresets = (presets: Schemas['PresetsIn']['presets']) =>
+  api.put('/api/chat/settings/presets', { presets })
