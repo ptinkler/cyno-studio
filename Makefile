@@ -49,6 +49,15 @@ test:
 	.venv/bin/python -m pytest -q
 	cd src/js && npm test
 
+# End-to-end: build the frontend, then run Playwright against the app + mock providers (tests/mock_providers).
+# First time: cd src/js && npx playwright install --only-shell chromium. ARGS passes through, e.g. ARGS="uploads"
+e2e:
+	cd src/js && npm run build && npx playwright test $(ARGS)
+
+# The mock providers on their own (http://127.0.0.1:5056/docs), e.g. to point a dev server at them
+mock-providers:
+	PYTHONPATH=src/py:. $(PY) -m tests.mock_providers
+
 # Regenerate the frontend's API types (src/js/src/api/schema.d.ts) from the backend's OpenAPI schema.
 # CI runs this too and fails if the committed file is stale.
 PY ?= .venv/bin/python

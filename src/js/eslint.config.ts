@@ -7,7 +7,7 @@ import tseslint from 'typescript-eslint'
 import vueParser from 'vue-eslint-parser'
 
 export default [
-  { ignores: ['coverage/**', 'dist/**', 'src/api/schema.d.ts'] }, // dist is the build output; schema.d.ts is generated
+  { ignores: ['coverage/**', 'dist/**', 'src/api/schema.d.ts', 'playwright-report/**', 'test-results/**'] }, // dist is the build output; schema.d.ts is generated
   js.configs.recommended,
   ...pluginVue.configs['flat/recommended'],
   {
@@ -33,7 +33,7 @@ export default [
   },
   {
     // Tests read top to bottom: long files and long cases are fine
-    files: ['src/__tests__/**'],
+    files: ['src/__tests__/**', 'e2e/**'],
     rules: { complexity: 'off', 'max-lines': 'off' },
   },
   {
@@ -44,7 +44,7 @@ export default [
   ...defineConfig({
     // TypeScript: the strictest preset, type-aware. No `any`, no unsafe member access, no floating
     // promises. It is why the typed client reads server JSON in exactly one place (api/json.ts).
-    files: ['src/**/*.ts'],
+    files: ['src/**/*.ts', 'e2e/**/*.ts'],
     extends: [...tseslint.configs.strictTypeChecked, ...tseslint.configs.stylisticTypeChecked],
     languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } },
     rules: {
