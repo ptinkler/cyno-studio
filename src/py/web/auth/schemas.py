@@ -1,7 +1,7 @@
 """Response models for the sign-in and account endpoints.
 
-These are the contract the frontend's generated types come from (see TODO.md, TypeScript
-migration): a route returns one of these instead of a loose dict, so the OpenAPI schema
+These are the contract the frontend's generated types come from (see docs/DEVELOPMENT.md, Typed
+API): a route returns one of these instead of a loose dict, so the OpenAPI schema
 says exactly which fields exist and which can be null.
 """
 
