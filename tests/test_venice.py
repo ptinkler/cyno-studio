@@ -796,15 +796,15 @@ def test_balance_reads_usd_from_the_rate_limits_body(client: TestClient, venice:
     venice.routes["/api_keys/rate_limits"] = httpx2.Response(
         200, json={"data": {"balances": {"USD": 4.49725029, "DIEM": 0, "BUNDLED_CREDITS": 0}}}
     )
-    assert obj(client.get("/api/chat/venice-balance")) == {"usd": 4.49725029, "credits": 0.0}
+    assert obj(client.get("/api/chat/venice-balance")) == {"usd": 4.49725029, "credits": 0.0, "diem": 0.0}
 
 
 def test_balance_includes_the_plans_bundled_credits(client: TestClient, venice: FakeVenice) -> None:
     """Test that balance includes the plans bundled credits."""
     venice.routes["/api_keys/rate_limits"] = httpx2.Response(
-        200, json={"data": {"balances": {"USD": 0.76, "DIEM": 0, "BUNDLED_CREDITS": 4.7635423}}}
+        200, json={"data": {"balances": {"USD": 0.76, "DIEM": 1.5, "BUNDLED_CREDITS": 4.7635423}}}
     )
-    assert obj(client.get("/api/chat/venice-balance")) == {"usd": 0.76, "credits": 4.7635423}
+    assert obj(client.get("/api/chat/venice-balance")) == {"usd": 0.76, "credits": 4.7635423, "diem": 1.5}
 
 
 def test_balance_falls_back_to_the_response_header_when_rate_limits_unreadable(
@@ -816,7 +816,7 @@ def test_balance_falls_back_to_the_response_header_when_rate_limits_unreadable(
     venice.routes["/api_keys/rate_limits"] = httpx2.Response(
         403, json={"error": "nope"}, headers={"x-venice-balance-usd": "3.5"}
     )
-    assert obj(client.get("/api/chat/venice-balance")) == {"usd": 3.5, "credits": None}
+    assert obj(client.get("/api/chat/venice-balance")) == {"usd": 3.5, "credits": None, "diem": None}
 
 
 class TestVideoFamiliesInChat:

@@ -67,6 +67,12 @@ class DefaultsIn(BaseModel):
     default_instruction_group_ids: list[int] = []
 
 
+class ModelFavouritesIn(BaseModel):
+    """Starred model ids per picker kind."""
+
+    model_favourites: dict[Literal["text", "image", "video", "audio"], list[str]]
+
+
 class TitleModelIn(BaseModel):
     """Optional model used to generate new chat titles."""
 

@@ -136,4 +136,5 @@ export interface Balances {
   openrouter: number | null
   venice: number | null
   veniceCredits: number | null
+  veniceDiem: number | null
 }

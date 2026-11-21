@@ -20,6 +20,7 @@ from web.chat.models import (
     DefaultsIn,
     InstructionGroupIn,
     InstructionIn,
+    ModelFavouritesIn,
     SpaceIn,
     TitleModelIn,
 )
@@ -164,6 +165,13 @@ def api_set_title_model(data: TitleModelIn) -> ChatSettings:
     """The text model that names new chats (empty = the chat's own model)."""
     saved = get_db().save_settings(title_model=(data.title_model or "").strip() or None)
     return ChatSettings.model_validate(saved.to_dict())
+
+
+@router.put("/settings/model-favourites")
+def api_set_model_favourites(data: ModelFavouritesIn) -> ChatSettings:
+    """Save the user's starred models (per picker kind), so they follow them to any browser."""
+    favourites = {kind: [i.strip() for i in ids if i.strip()] for kind, ids in data.model_favourites.items()}
+    return ChatSettings.model_validate(get_db().save_settings(model_favourites=favourites).to_dict())
 
 
 @router.get("/instructions")

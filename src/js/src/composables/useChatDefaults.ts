@@ -36,6 +36,7 @@ const EMPTY = (): GlobalSettings => ({
   default_instruction_ids: [],
   default_instruction_group_ids: [],
   title_model: null,
+  model_favourites: {},
 })
 
 const globalSettings = ref<GlobalSettings>(EMPTY())

@@ -137,7 +137,11 @@ describe('sidebar navigation is linkable', () => {
 describe('balance tiles are linkable', () => {
   it('open the usage page', () => {
     const w = mount(StudioBalances, {
-      props: { balances: { openrouter: 1, venice: null, veniceCredits: null, pollo: 10 }, spend: null, messages: [] },
+      props: {
+        balances: { openrouter: 1, venice: null, veniceCredits: null, veniceDiem: null, pollo: 10 },
+        spend: null,
+        messages: [],
+      },
     })
     const tile = w.find('a.bseg')
     expect(tile.attributes('href')).toBe('/usage')

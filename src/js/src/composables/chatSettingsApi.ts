@@ -45,3 +45,6 @@ export const updateSettings = (data: Schemas['DefaultsIn']) => api.put('/api/cha
 // The text model that names new chats ('' / null = the chat's own model)
 export const setTitleModel = (titleModel: string | null) =>
   api.put('/api/chat/settings/title-model', { title_model: titleModel })
+// Starred models per picker kind
+export const setModelFavourites = (modelFavourites: Schemas['ModelFavouritesIn']['model_favourites']) =>
+  api.put('/api/chat/settings/model-favourites', { model_favourites: modelFavourites })

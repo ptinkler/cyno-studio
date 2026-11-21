@@ -38,6 +38,7 @@ class ChatSettings(Defaults):
     """The user's global chat defaults."""
 
     title_model: str | None
+    model_favourites: dict[str, list[str]]
 
 
 class Space(Defaults):
