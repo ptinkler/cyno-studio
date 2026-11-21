@@ -38,6 +38,8 @@ class ChatSettings(Defaults):
     """The user's global chat defaults."""
 
     title_model: str | None
+    model_favourites: dict[str, list[str]]
+    presets: list[dict[str, JsonValue]] | None  # None = never saved
 
 
 class Space(Defaults):

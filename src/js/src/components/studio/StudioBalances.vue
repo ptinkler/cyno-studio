@@ -3,6 +3,7 @@ import { vTip } from '../../directives/tip'
 import { computed, ref } from 'vue'
 import type { Balances, Spend, UiMessage } from '../../composables/studioTypes'
 import { shortModel, fmtCost, creditsToUsd } from '../../utils/format'
+import { veniceBreakdown, veniceTotal } from '../../utils/veniceBalance'
 import InfoTip from '../InfoTip.vue'
 
 const props = withDefaults(
@@ -12,7 +13,7 @@ const props = withDefaults(
     messages?: readonly UiMessage[] | undefined
   }>(),
   {
-    balances: () => ({ openrouter: null, venice: null, veniceCredits: null, pollo: null }),
+    balances: () => ({ openrouter: null, venice: null, veniceCredits: null, veniceDiem: null, pollo: null }),
     spend: null,
     messages: () => [],
   },
@@ -31,7 +32,12 @@ const pills = computed(() => [
     tip: `Pollo balance (${fmtCredits(props.balances.pollo)} credits)`,
   },
   { id: 'openrouter', label: 'OpenRouter', value: fmtBal(props.balances.openrouter), tip: 'OpenRouter balance' },
-  { id: 'venice', label: 'Venice', value: fmtBal(props.balances.venice), tip: 'Venice balance' },
+  {
+    id: 'venice',
+    label: 'Venice',
+    value: fmtBal(veniceTotal(props.balances)),
+    tip: `Venice balance (${veniceBreakdown(props.balances)})`,
+  },
 ])
 
 const label = computed(() => {

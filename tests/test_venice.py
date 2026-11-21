@@ -796,15 +796,15 @@ def test_balance_reads_usd_from_the_rate_limits_body(client: TestClient, venice:
     venice.routes["/api_keys/rate_limits"] = httpx2.Response(
         200, json={"data": {"balances": {"USD": 4.49725029, "DIEM": 0, "BUNDLED_CREDITS": 0}}}
     )
-    assert obj(client.get("/api/chat/venice-balance")) == {"usd": 4.49725029, "credits": 0.0}
+    assert obj(client.get("/api/chat/venice-balance")) == {"usd": 4.49725029, "credits": 0.0, "diem": 0.0}
 
 
 def test_balance_includes_the_plans_bundled_credits(client: TestClient, venice: FakeVenice) -> None:
     """Test that balance includes the plans bundled credits."""
     venice.routes["/api_keys/rate_limits"] = httpx2.Response(
-        200, json={"data": {"balances": {"USD": 0.76, "DIEM": 0, "BUNDLED_CREDITS": 4.7635423}}}
+        200, json={"data": {"balances": {"USD": 0.76, "DIEM": 1.5, "BUNDLED_CREDITS": 4.7635423}}}
     )
-    assert obj(client.get("/api/chat/venice-balance")) == {"usd": 0.76, "credits": 4.7635423}
+    assert obj(client.get("/api/chat/venice-balance")) == {"usd": 0.76, "credits": 4.7635423, "diem": 1.5}
 
 
 def test_balance_falls_back_to_the_response_header_when_rate_limits_unreadable(
@@ -816,7 +816,7 @@ def test_balance_falls_back_to_the_response_header_when_rate_limits_unreadable(
     venice.routes["/api_keys/rate_limits"] = httpx2.Response(
         403, json={"error": "nope"}, headers={"x-venice-balance-usd": "3.5"}
     )
-    assert obj(client.get("/api/chat/venice-balance")) == {"usd": 3.5, "credits": None}
+    assert obj(client.get("/api/chat/venice-balance")) == {"usd": 3.5, "credits": None, "diem": None}
 
 
 class TestVideoFamiliesInChat:
@@ -834,18 +834,9 @@ class TestVideoFamiliesInChat:
     def _image(self, chat: None, conv: ConversationOut, name: str) -> None:
         (chat_pkg.conversation_dir(conv["id"]) / name).write_bytes(png_bytes())
 
-    def test_reference_model_gets_attached_pinned_and_character_images(
-        self,
-        client: TestClient,
-        conv: ConversationOut,
-        chat: None,
-        db: MetadataDB,
-        venice: FakeVenice,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Test that reference model gets attached pinned and character images."""
-        self._load_catalogue(client, chat, monkeypatch)
-        self._queue(venice)
+    def _pinned_and_attached(
+        self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB
+    ) -> list[JsonValue]:
         for f in ("pin.png", "a.png", "b.png"):
             self._image(chat, conv, f)
         db.add_chat_message(conv["id"], "user", "x")
@@ -858,7 +849,46 @@ class TestVideoFamiliesInChat:
             ],
         )
         client.post(f"/api/chat/messages/{msg.id}/media/p/pin", json={"pinned": True})
-        ups = [_attach(client, conv, "a.png", "red"), _attach(client, conv, "b.png", "blue")]
+        return [_attach(client, conv, "a.png", "red"), _attach(client, conv, "b.png", "blue")]
+
+    def test_images_slider_caps_pins_but_not_attachments(
+        self,
+        client: TestClient,
+        conv: ConversationOut,
+        chat: None,
+        db: MetadataDB,
+        venice: FakeVenice,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """With Images sent at 0, only the attachments go: the pinned image stays out."""
+        self._load_catalogue(client, chat, monkeypatch)
+        self._queue(venice)
+        ups = self._pinned_and_attached(client, conv, chat, db)
+        ev = _send(
+            client,
+            conv,
+            "they dance",
+            attachments=ups,
+            mode="video",
+            image_limit=0,
+            video_model="venice/wan-3-0-reference-to-video",
+        )
+        assert len(seq(venice.body("/video/queue"), "reference_image_urls")) == 2
+        assert dig(obj(ev[-1], "message", "media", 0), "params", "refs") == ups
+
+    def test_reference_model_gets_attached_pinned_and_character_images(
+        self,
+        client: TestClient,
+        conv: ConversationOut,
+        chat: None,
+        db: MetadataDB,
+        venice: FakeVenice,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that reference model gets attached pinned and character images."""
+        self._load_catalogue(client, chat, monkeypatch)
+        self._queue(venice)
+        ups = self._pinned_and_attached(client, conv, chat, db)
         ev = _send(
             client,
             conv,

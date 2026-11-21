@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import InspectorSection from './InspectorSection.vue'
 import type { Instruction, InstructionGroup } from '../../composables/chatSettingsApi'
 import type { InstructionEditEvent, InstructionTarget } from '../../composables/studioTypes'
 import type { InheritedDefault } from '../../composables/useChatDefaults'
@@ -45,8 +46,7 @@ defineEmits<{
 </script>
 
 <template>
-  <div class="isection">
-    <div class="ilabel">Instructions</div>
+  <InspectorSection title="Instructions">
     <InstructionPicker
       :instructions="instructions"
       :groups="groups"
@@ -68,7 +68,7 @@ defineEmits<{
       @resume="$emit('resume', $event)"
     />
     <div v-if="summary" class="attached">{{ summary }}</div>
-  </div>
+  </InspectorSection>
 </template>
 
 <style scoped>

@@ -1,9 +1,11 @@
 import type { AudioOpts, ImageOpts, Mode, PickKind, VideoOpts } from './composerPrefs'
 import { audioOptsFrom, imageOptsFrom, isMode, videoOptsFrom } from './composerPrefs'
+import { fetchSettings, setPresets } from './chatSettingsApi'
 import { asRecord, readStored, writeStored } from '../utils/storage'
 
-// Presets: a named snapshot of the models + media options + mode, loaded in one click. Per browser
-// (localStorage), like the rest of the composer prefs.
+// Presets: a named snapshot of the models + media options + mode, loaded in one click. Saved on the server with
+// the user's settings so they follow the user to any browser; localStorage caches them for the first paint (and
+// held them before they were saved on the server).
 
 export interface Snapshot {
   mode: Mode
@@ -45,13 +47,35 @@ export function presetFrom(raw: unknown): StoredPreset | null {
   }
 }
 
-export function readPresets(): StoredPreset[] {
-  const stored = readStored(PRESETS_KEY)
-  return Array.isArray(stored) ? stored.flatMap(item => presetFrom(item) ?? []) : []
-}
+const presetsFrom = (raw: unknown): StoredPreset[] =>
+  Array.isArray(raw) ? raw.flatMap(item => presetFrom(item) ?? []) : []
 
+/** This browser's cached presets. */
+export const readPresets = (): StoredPreset[] => presetsFrom(readStored(PRESETS_KEY))
+
+/** Cache the presets here and save them on the server (a failed save keeps the cached copy). */
 export function storePresets(presets: readonly StoredPreset[]): void {
   writeStored(PRESETS_KEY, presets)
+  setPresets(presets.map(p => ({ ...p }))).catch(() => undefined)
+}
+
+/**
+ * The server's presets, or null to keep this browser's: when it has never saved any, the cached ones are uploaded
+ * (a one-off move from browser-only presets); when it can't be reached, the cache stands.
+ */
+export async function serverPresets(cached: readonly StoredPreset[]): Promise<StoredPreset[] | null> {
+  try {
+    const { presets } = await fetchSettings()
+    if (Array.isArray(presets)) {
+      const list = presetsFrom(presets)
+      writeStored(PRESETS_KEY, list)
+      return list
+    }
+    if (cached.length) storePresets(cached)
+  } catch {
+    /* signed out or offline */
+  }
+  return null
 }
 
 const bySortedKeys = (_key: string, value: unknown): unknown =>

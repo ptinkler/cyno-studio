@@ -325,6 +325,8 @@ class TestCustomInstructions:
             "default_instruction_ids": [],
             "default_instruction_group_ids": [],
             "title_model": None,
+            "model_favourites": {},
+            "presets": None,
         }
         updated = client.put("/api/chat/settings", json={"default_instruction_ids": [s]})
         assert jp.dig(updated, "default_instruction_ids") == [s]
@@ -871,3 +873,30 @@ class TestTitleModel:
         # saving the default lists doesn't touch it
         assert dig(client.put("/api/chat/settings", json={}), "title_model") == "x/cheap"
         assert dig(client.put("/api/chat/settings/title-model", json={"title_model": ""}), "title_model") is None
+
+
+class TestModelFavourites:
+    """Starred models are saved with the user's settings."""
+
+    def test_round_trip(self, client: TestClient) -> None:
+        """Unset is {}; a save keeps each kind's list, deduplicated, and other settings don't touch it."""
+        assert dig(client.get("/api/chat/settings"), "model_favourites") == {}
+        body = {"model_favourites": {"image": ["a/x", "a/x", " b/y "], "text": []}}
+        r = client.put("/api/chat/settings/model-favourites", json=body)
+        assert dig(r, "model_favourites") == {"image": ["a/x", "b/y"], "text": []}
+        assert dig(client.put("/api/chat/settings", json={}), "model_favourites") == {
+            "image": ["a/x", "b/y"],
+            "text": [],
+        }
+
+    def test_presets_round_trip(self, client: TestClient) -> None:
+        """Never saved is null (so a browser's own presets can be uploaded); saving replaces the list."""
+        assert dig(client.get("/api/chat/settings"), "presets") is None
+        presets = [{"id": "a", "name": "Recast", "mode": "video", "models": {"video": "pollo/x"}}]
+        assert dig(client.put("/api/chat/settings/presets", json={"presets": presets}), "presets") == presets
+        assert dig(client.put("/api/chat/settings/presets", json={"presets": []}), "presets") == []
+
+    def test_rejects_unknown_kind(self, client: TestClient) -> None:
+        """Only the picker kinds are accepted."""
+        r = client.put("/api/chat/settings/model-favourites", json={"model_favourites": {"nope": ["a"]}})
+        assert r.status_code == 422

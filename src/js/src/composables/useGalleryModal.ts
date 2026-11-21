@@ -48,7 +48,10 @@ export function useGalleryModal({
 
   async function onGalleryFavourite(item: GenerationItem): Promise<void> {
     if (item.message_id === null) return
-    await favouriteMedia({ message_id: item.message_id }, { mediaId: item.id, favourite: !item.favourite })
+    const favourite = !item.favourite
+    await favouriteMedia({ message_id: item.message_id }, { mediaId: item.id, favourite })
+    // The open modal holds a copy of the item, so flip its star too
+    if (galleryItem.value?.id === item.id) galleryItem.value = { ...galleryItem.value, favourite }
   }
 
   // Modal "Retry" / "Regenerate". A failed item retries in place (backend only

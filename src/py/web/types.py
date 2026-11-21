@@ -32,10 +32,15 @@ class OpenRouterCredits(TypedDict):
 
 
 class VeniceBalances(TypedDict):
-    """A Venice account's USD balance and bundled plan credits; null when unreadable."""
+    """A Venice account's balances; null when unreadable.
+
+    `usd`: pay-as-you-go dollars. `credits`: the plan's bundled credits, also in dollars. `diem`: DIEM staking
+    allowance (Venice spends DIEM first, then bundled credits, then USD).
+    """
 
     usd: float | None
     credits: float | None
+    diem: float | None
 
 
 class Catalogue(TypedDict, total=False):

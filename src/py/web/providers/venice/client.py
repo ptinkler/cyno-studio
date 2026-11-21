@@ -144,8 +144,8 @@ def _send(call: Call, *, check: bool = True) -> httpx2.Response:
 def get_balances() -> VeniceBalances:
     """Return the account's USD balance and bundled credits.
 
-    Both values come from one rate-limits call. Venice spends BUNDLED_CREDITS
-    after DIEM and before USD. The admin-only /billing/balance endpoint is not
+    All come from one rate-limits call. Venice spends DIEM first, then
+    BUNDLED_CREDITS (denominated in USD), then USD. The admin-only /billing/balance endpoint is not
     used; the USD figure
     lives in the body — not a response header, despite older API versions. If the
     endpoint can't be read, fall back to the balance a prior response's header
@@ -155,12 +155,16 @@ def get_balances() -> VeniceBalances:
     try:
         data = as_object(body_of(request(Call("GET", "/api_keys/rate_limits"))))
     except VeniceError:
-        return {"usd": _balance.get(key), "credits": None}
+        return {"usd": _balance.get(key), "credits": None, "diem": None}
     balances = as_object(as_object(data.get("data") or data).get("balances"))
     usd = float_or_none(balances.get("USD"))
     if usd is not None:
         _balance[key] = usd
-    return {"usd": _balance.get(key), "credits": float_or_none(balances.get("BUNDLED_CREDITS"))}
+    return {
+        "usd": _balance.get(key),
+        "credits": float_or_none(balances.get("BUNDLED_CREDITS")),
+        "diem": float_or_none(balances.get("DIEM")),
+    }
 
 
 def clear() -> None:

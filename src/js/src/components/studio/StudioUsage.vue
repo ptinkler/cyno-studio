@@ -5,6 +5,7 @@ import { fetchUserKeys } from '../../composables/useAccount'
 import { fetchSpendBreakdown } from '../../composables/useChat'
 import type { Balances } from '../../composables/studioTypes'
 import { fmtCost, creditsToUsd, shortModel } from '../../utils/format'
+import { veniceBreakdown, veniceTotal } from '../../utils/veniceBalance'
 
 type KeyStatus = Awaited<ReturnType<typeof fetchUserKeys>>['keys']
 type Breakdown = Awaited<ReturnType<typeof fetchSpendBreakdown>>
@@ -14,7 +15,7 @@ const props = withDefaults(
     /** Nulls show as —. */
     balances?: Balances | undefined
   }>(),
-  { balances: () => ({ pollo: null, openrouter: null, venice: null, veniceCredits: null }) },
+  { balances: () => ({ pollo: null, openrouter: null, venice: null, veniceCredits: null, veniceDiem: null }) },
 )
 const emit = defineEmits<{ close: []; 'manage-keys': []; refresh: [] }>()
 
@@ -78,9 +79,8 @@ const providers = computed(() => [
     id: 'venice',
     label: 'Venice',
     unit: 'balance',
-    value: fmtBal(props.balances.venice),
-    note:
-      props.balances.veniceCredits === null ? 'Chat & media' : `${String(props.balances.veniceCredits)} plan credits`,
+    value: fmtBal(veniceTotal(props.balances)),
+    note: `${veniceBreakdown(props.balances)} · chat & media`,
   },
 ])
 const keySet = (id: string): boolean => !!keys.value[id]?.set

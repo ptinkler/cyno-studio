@@ -27,7 +27,14 @@ const ANSWERS: readonly (readonly [RegExp, unknown])[] = [
   [/\/api\/chat\/instructions/, { instructions: [], groups: [] }],
   [
     /\/api\/chat\/settings/,
-    { default_character_ids: [], default_instruction_ids: [], default_instruction_group_ids: [], title_model: null },
+    {
+      default_character_ids: [],
+      default_instruction_ids: [],
+      default_instruction_group_ids: [],
+      title_model: null,
+      model_favourites: {},
+      presets: null,
+    },
   ],
   [/\/api\/chat\/spend\/breakdown/, { days: 0, total_usd: 0, rows: [] }],
   [/\/api\/chat\/pollo-balance/, { availableCredits: 0, totalCredits: 0 }],

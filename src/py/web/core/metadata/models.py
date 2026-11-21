@@ -20,6 +20,8 @@ _JSON_IDS = TypeAdapter(list[int])
 _JSON_STRINGS = TypeAdapter(list[str])
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
 _JSON_ID_GROUPS = TypeAdapter(dict[str, list[int]])
+_JSON_STRING_GROUPS = TypeAdapter(dict[str, list[str]])
+_JSON_OBJECTS = TypeAdapter(list[dict[str, JsonValue]])
 _JSON_MEDIA = TypeAdapter(list[dict[str, JsonValue]])
 
 
@@ -424,10 +426,47 @@ class ChatSettings(DefaultsBucket, Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
     # The text model that names new chats (None = the chat's own model)
     title_model: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Starred models per picker kind (text / image / video / audio)
+    model_favourites_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The composer's presets (named model + option snapshots); the frontend owns their shape
+    presets_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    @property
+    def model_favourites(self) -> dict[str, list[str]]:
+        """Starred model ids by picker kind; {} when unset or unreadable."""
+        try:
+            return _JSON_STRING_GROUPS.validate_json(self.model_favourites_json or "{}")
+        except ValidationError:
+            return {}
+
+    @model_favourites.setter
+    def model_favourites(self, value: dict[str, list[str]]) -> None:
+        self.model_favourites_json = json.dumps({kind: list(dict.fromkeys(ids)) for kind, ids in value.items()})
+
+    @property
+    def presets(self) -> list[dict[str, JsonValue]] | None:
+        """The composer's saved presets (opaque to the server); None when never saved."""
+        if self.presets_json is None:
+            return None
+        try:
+            return _JSON_OBJECTS.validate_json(self.presets_json)
+        except ValidationError:
+            return []
+
+    @presets.setter
+    def presets(self, value: list[dict[str, JsonValue]]) -> None:
+        self.presets_json = json.dumps(value)
 
     def to_dict(self) -> dict[str, JsonValue]:
-        """Serialize the default lists and title model."""
-        return {**self.defaults_dict(), "title_model": self.title_model}
+        """Serialize the default lists, title model, model favourites and presets."""
+        favourites: dict[str, JsonValue] = {kind: list[JsonValue](ids) for kind, ids in self.model_favourites.items()}
+        presets = self.presets
+        return {
+            **self.defaults_dict(),
+            "title_model": self.title_model,
+            "model_favourites": favourites,
+            "presets": None if presets is None else list[JsonValue](presets),
+        }
 
 
 class ChatMessage(Base):

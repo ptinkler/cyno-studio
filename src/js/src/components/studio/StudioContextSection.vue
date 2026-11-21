@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import InspectorSection from './InspectorSection.vue'
 import { computed } from 'vue'
 import { composerSettingsKey, injectRequired } from '../../injection'
 import { MEMORY_STEPS, IMAGE_STEPS } from '../../composables/useComposerSettings'
@@ -15,9 +16,7 @@ const imageFill = computed(() => pct(imageIndex.value, IMAGE_STEPS))
 </script>
 
 <template>
-  <div v-if="mode !== 'video'" class="isection">
-    <div class="ilabel">Context</div>
-
+  <InspectorSection v-if="mode !== 'audio'" title="Context">
     <div v-if="mode === 'auto' || mode === 'text'" class="slider">
       <div class="srow">
         <span>Memory</span>
@@ -47,7 +46,7 @@ const imageFill = computed(() => pct(imageIndex.value, IMAGE_STEPS))
         :style="{ '--fill': imageFill }"
       />
     </div>
-  </div>
+  </InspectorSection>
 </template>
 
 <style scoped>

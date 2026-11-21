@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import InspectorSection from './InspectorSection.vue'
 import { composerSettingsKey, injectRequired } from '../../injection'
 import type { Catalogues } from '../../composables/useComposerSettings'
 import ModelPicker from '../chat/ModelPicker.vue'
@@ -10,8 +11,7 @@ const { selected } = injectRequired(composerSettingsKey)
 </script>
 
 <template>
-  <div class="isection">
-    <div class="ilabel">Models</div>
+  <InspectorSection title="Models">
     <StudioPresets />
     <div class="pickers">
       <ModelPicker
@@ -26,5 +26,5 @@ const { selected } = injectRequired(composerSettingsKey)
       <ModelPicker v-model="selected.video" :models="models.video" label="Video" kind="video" :loading="loading" />
       <ModelPicker v-model="selected.audio" :models="models.audio" label="Audio" kind="audio" :loading="loading" />
     </div>
-  </div>
+  </InspectorSection>
 </template>

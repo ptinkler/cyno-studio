@@ -127,8 +127,18 @@ export function useStudioThreads({ state, settings, link, polling, showToast }: 
     }
   }
 
-  async function ensureThread(): Promise<string> {
-    if (active.value) return active.value
+  // Uploads started together on a new thread share one creation; otherwise each would make its own thread and
+  // the files would land in a different one from the message that names them ("Attachment not found").
+  let creating: Promise<string> | null = null
+  function ensureThread(): Promise<string> {
+    if (active.value) return Promise.resolve(active.value)
+    creating ??= createThread().finally(() => {
+      creating = null
+    })
+    return creating
+  }
+
+  async function createThread(): Promise<string> {
     const conv = await createConversation({
       kind: newKind.value,
       text_model: selected.text || null,

@@ -1319,6 +1319,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/chat/settings/model-favourites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Api Set Model Favourites
+         * @description Save the user's starred models (per picker kind), so they follow them to any browser.
+         */
+        put: operations["api_set_model_favourites_api_chat_settings_model_favourites_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/settings/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Api Set Presets
+         * @description Save the user's composer presets, so they follow them to any browser.
+         */
+        put: operations["api_set_presets_api_chat_settings_presets_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chat/settings/title-model": {
         parameters: {
             query?: never;
@@ -2153,6 +2193,14 @@ export interface components {
             default_instruction_group_ids: number[];
             /** Default Instruction Ids */
             default_instruction_ids: number[];
+            /** Model Favourites */
+            model_favourites: {
+                [key: string]: string[];
+            };
+            /** Presets */
+            presets: {
+                [key: string]: components["schemas"]["JsonValue-Output"];
+            }[] | null;
             /** Title Model */
             title_model: string | null;
         };
@@ -3050,10 +3098,13 @@ export interface components {
             type: "instructions";
         };
         JsonObject: {
-            [key: string]: components["schemas"]["JsonValue"];
+            [key: string]: components["schemas"]["JsonValue-Output"];
         };
-        JsonValue: string | number | boolean | components["schemas"]["JsonValue"][] | {
-            [key: string]: components["schemas"]["JsonValue"];
+        "JsonValue-Input": string | number | boolean | components["schemas"]["JsonValue-Input"][] | {
+            [key: string]: components["schemas"]["JsonValue-Input"];
+        } | null;
+        "JsonValue-Output": string | number | boolean | components["schemas"]["JsonValue-Output"][] | {
+            [key: string]: components["schemas"]["JsonValue-Output"];
         } | null;
         /**
          * KeyStatus
@@ -3360,6 +3411,16 @@ export interface components {
             video: components["schemas"]["VideoModel"][];
         };
         /**
+         * ModelFavouritesIn
+         * @description Starred model ids per picker kind.
+         */
+        ModelFavouritesIn: {
+            /** Model Favourites */
+            model_favourites: {
+                [key: string]: string[];
+            };
+        };
+        /**
          * ModelPrice
          * @description A price badge: dollars, and what they buy ("1080p", "per 1M output tokens").
          */
@@ -3464,6 +3525,16 @@ export interface components {
             availableCredits: number;
             /** Totalcredits */
             totalCredits: number;
+        };
+        /**
+         * PresetsIn
+         * @description The composer's presets, replaced as a whole.
+         */
+        PresetsIn: {
+            /** Presets */
+            presets: {
+                [key: string]: components["schemas"]["JsonValue-Input"];
+            }[];
         };
         /**
          * PublicIp
@@ -3583,8 +3654,8 @@ export interface components {
             path: string;
             /** Provider */
             provider: string;
-            request?: components["schemas"]["JsonValue"];
-            response?: components["schemas"]["JsonValue"];
+            request?: components["schemas"]["JsonValue-Output"];
+            response?: components["schemas"]["JsonValue-Output"];
             /** Seconds */
             seconds?: number | null;
             /** Status */
@@ -4155,11 +4226,16 @@ export interface components {
         };
         /**
          * VeniceBalances
-         * @description A Venice account's USD balance and bundled plan credits; null when unreadable.
+         * @description A Venice account's balances; null when unreadable.
+         *
+         *     `usd`: pay-as-you-go dollars. `credits`: the plan's bundled credits, also in dollars. `diem`: DIEM staking
+         *     allowance (Venice spends DIEM first, then bundled credits, then USD).
          */
         VeniceBalances: {
             /** Credits */
             credits: number | null;
+            /** Diem */
+            diem: number | null;
             /** Usd */
             usd: number | null;
         };
@@ -6744,6 +6820,76 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["DefaultsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_set_model_favourites_api_chat_settings_model_favourites_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                user_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelFavouritesIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_set_presets_api_chat_settings_presets_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                user_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PresetsIn"];
             };
         };
         responses: {
