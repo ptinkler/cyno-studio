@@ -1,33 +1,12 @@
-# TODO
+# Development notes
 
-The project was renamed from pollo-api to **Cyno Studio** (`cyno-studio`). Pollo is now just one provider.
+Cyno Studio (`cyno-studio`, formerly pollo-api; Pollo is now just one provider). Durable notes on how this codebase is built and checked.
 
-What is left to do for clean, consistent code. Kept in-repo so people and Claude can read it.
-Update it when an item is started, finished or dropped; delete finished items.
-
-Rules that apply to everything below:
-- Run `ruff check`, `ruff format --check`, `basedpyright` (strict, no baseline), `pytest`, and in `src/js` `npm run lint`, `npm run format:check`, `npm test` before calling anything done.
-- Lint and type rules are mandatory. Do not add ignores, `noqa`, `type: ignore` or a pyright baseline; fix the code. A suppression that is truly unavoidable needs the maintainer's approval first. Adding *stricter* rules is fine.
-- Never submit real Pollo jobs (billable, no cancel or refund) without explicit per-run consent.
-- Work on a branch and open a PR; never push to `main`, and only the maintainer reviews and merges. No Claude or Co-Authored-By attribution on commits or PRs.
+Before calling anything done run `ruff check`, `ruff format --check`, `basedpyright` (strict, no baseline), `pytest`, and in `src/js` `npm run lint`, `npm run format:check`, `npm test`. Lint and type rules are mandatory: no ignores, `noqa`, `type: ignore` or pyright baseline; fix the code. A suppression that is truly unavoidable needs the maintainer's approval first. Adding *stricter* rules is fine. Never submit real Pollo jobs (billable, no cancel or refund) without explicit per-run consent.
 
 Layout: Python lives in `src/py/web/` (an import root: `src/py` is on the path, the package is still `web`), the Vue app in `src/js/`; `tests/`, `alembic/`, `scripts/` stay at the repo root. Paths below are relative to the repo root.
 
-Status as of 2026-11-17. Measured numbers are from running the tools, not estimates.
-
-## Open
-
-- [ ] Keep the refs-to-video docs and the audit/probe scripts (`scripts/`) in sync with what Pollo actually accepts (frontend/backend `[@name]` naming contract).
-- [ ] Periodically re-diff `docs.pollo.ai/openapi.json` against `MODEL_INFO` for newly added models (`make audit-models` with no key: spec only, nothing billed). Last run 2026-11-17: 53 models registered, 199 documented; the unregistered ones that matter are the ones listed under the reference-modes item below, plus image models never registered (`minimax-h3-image`, `kling-v3-image`, `kling-image-o1`, `grok-imagine-image-2-0`, the `pollojourney-*` family, `flux-2-max`). Whether to add them is a product call, not a gap.
-- [ ] **Reference modes found by the 2026-11-16 audit** (`make audit-models`, estimate probe only, nothing billed). Enabled models whose docs have a reference-to-video branch but which declare no `ref_mode`: `hailuo03` (up to 15, image/video), `veo31` (3 images), `wan26` (3 videos). `pollo26` / `pollo26fast` (15) answer UNKNOWN to the estimate probe; `klingv3omni` declares a `ref_mode` the docs don't show (known; kept). Also documented but not in the registry: `gemini-omni-1-2-flash`, `minimax-h3-fast`, `minimax-h3-max-turbo`, `hailuo-2-3-fast`, `happyhorse-1-1` / `1-5`, `pollo-dance-2-0` / `-fast`. To enable one: run `audit_pollo_models.py --write`, keep only that model's hunk (`ref_mode` + `HAS_REFS`), then try it once by hand: the refs payload can't be verified without a billed job (needs explicit consent).
-- [ ] Deferred Pollo gaps: Sora-2 extend (uses `generationId`, not a video URL), Runway extend (takes `images`), video-edit extras (images, seed, audio).
-- [ ] Watch file size: `chat/routes_media_items.py` (522), `media/routes.py` (319), and `components/chat/ChatMediaCard.vue` (519 after its "made with" line moved to `MediaMadeWith.vue`; the pending / error states would split out next).
-- [ ] Our own HTTP code is all `httpx2` (the Pollo API, upload hosts, the VPN control server, net_guard and the providers); keep it behind the existing wrappers (`core/net_guard`, `providers/*/client`). Redirects are off by default in `httpx2` (they were on in `requests`); the one script that needs them (`audit_pollo_models.py`) asks for them.
-- [ ] **Hover-only explanations.** Done for the chips (`InfoTip.vue`) and for about 130 buttons and labels (`v-tip`, `src/directives/tip.ts`: same bubble, opens on hover and keyboard focus, icon-only buttons also get an `aria-label`; tests find the text in `data-tip`). Left on `title` on purpose: dialog titles, the prev/next steppers whose buttons can be `disabled` (a disabled button gets no hover or focus events, but a native `title` still shows), and a few passed to components as props (`RefStrip`, `CharacterEditor`, `StudioComposer`'s Enhance, `MediaGrid`). Touch users still get no popover on a button, because a tap does the button's own action; the `aria-label` is what names it for them.
-- [ ] Idea: a per-user disk quota with periodic cleanup of old import zips and orphaned files. (The scheduled SQLite backup is done: `core/backup.py`; a restored database is still unusable without the original `KEYS_SECRET` and `PASSWORD_PEPPER`.)
-- [ ] One vitest failure on the first run after a fresh `npm ci` (2026-11-16), not reproduced in 5 later runs; probably a cold-start timeout. Re-open if it recurs.
-
-## Notes worth keeping
+## Notes
 
 - **Complexity:** `max-complexity` is 7 for Python (ruff) and for the frontend (ESLint, tests exempt); `max-lines` is 600 for frontend source. Stricter ruff rules enforced: `A`, `PLW`, `PLR0911/0912/0913/0915`, `PLR2004`, `FBT`. Test-only ignores for `PLR0913`, `PLR2004`, `FBT` are approved (see `pyproject.toml`). `EM` and `CPY` are noise here: not recommended.
 - **Typed API:** `make gen-api` writes `src/js/src/api/schema.d.ts` (committed; CI fails when stale). Every endpoint has a Pydantic response model; `api/paths.ts` maps endpoint strings to routes so `api.get/put/...` are typed. Turn streams publish `TurnEvent` models as `text/event-stream` (`core/openapi.event_stream_only`). Server JSON is trusted from the schema at runtime (`readJson<T>`); if that bites, generate validators from the schema. Persisted browser state is read through `utils/storage.ts` / `readShape`, never trusted.

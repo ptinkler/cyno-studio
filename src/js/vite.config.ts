@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
@@ -25,5 +25,6 @@ export default defineConfig({
     environmentOptions: { jsdom: { url: 'http://localhost/' } },
     globals: true,
     setupFiles: ['./src/__tests__/setup.ts'],
+    exclude: [...configDefaults.exclude, 'e2e/**'], // Playwright's, run by `npm run e2e`
   },
 })

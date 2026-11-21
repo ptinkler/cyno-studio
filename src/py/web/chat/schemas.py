@@ -1,7 +1,7 @@
 """Response models for the chat settings API: status, defaults, instructions and spaces.
 
-The frontend's generated types come from these (see TODO.md, TypeScript migration). Timestamps are
-ISO 8601 strings, as `core.metadata.models.iso` writes them.
+The frontend's generated types come from these (see docs/DEVELOPMENT.md, Typed API).
+Timestamps are ISO 8601 strings, as `core.metadata.models.iso` writes them.
 """
 
 import logging

@@ -219,7 +219,32 @@ make test       # pytest + vitest
 make lint       # what CI checks
 make format     # fix what can be fixed automatically
 make hooks      # check (and fix) staged files on every commit
+make e2e        # end-to-end: Playwright against the real app and mock providers (see below)
 ```
+
+### End-to-end tests
+
+`src/js/e2e/` drives the real app (built frontend + API on a throwaway data folder) in headless Chromium
+against **mock providers** (`tests/mock_providers/`), so no test ever reaches, or bills, a real provider.
+Playwright starts both servers itself.
+
+```bash
+cd src/js && npx playwright install --only-shell chromium   # once
+make e2e                       # build + run everything
+make e2e ARGS="uploads"        # one spec file
+cd src/js && npm run e2e:ui    # Playwright's UI mode, to watch and debug
+```
+
+The mock is a small FastAPI app. Each mock model behaves one way on purpose, so a test picks a behaviour by
+picking a model: `Mock Image (drops)` cuts the connection like the VPN's 60 s idle cut, `(filtered)` trips the
+content filter, `(rejected)` answers HTTP 400, `Mock Broken Video` fails its render, `Mock Artist` asks for an
+image through a tool call. Its control API (`/__mock/requests`, `/__mock/settings`, `/__mock/reset`) lets a test
+check exactly what the app sent (prompts, reference images, options) and turn knobs (delays, balances). Venice is
+mocked today; add a provider as another router next to `tests/mock_providers/venice.py`. To try the app by hand
+against it, run `make mock-providers` and start the API with `VENICE_BASE_URL=http://127.0.0.1:5056/venice/api/v1`.
+
+When a provider misbehaves in a new way, add a mock model that does the same, and a spec that shows what the
+user should see.
 
 Code standards, enforced in CI:
 

@@ -13,17 +13,20 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "vue-tsc --noEmit -p . && vue-tsc --noEmit -p tsconfig.node.json",
+    "typecheck": "vue-tsc --noEmit -p . && vue-tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p e2e",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui",
     "gen:api": "openapi-typescript --default-non-nullable false --output src/api/schema.d.ts"
   },
   "dependencies": {
     "dompurify": "^3.4.16",
-    "marked": "^16.4.2",
+    "marked": "^18.2.1",
     "vue": "^3.5.45",
-    "vue-router": "^4.3.0"
+    "vue-router": "^5.5.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.65.1",
     "@types/node": "^26.6.6",
     "@vitejs/plugin-vue": "^6.0.11",
     "@vue/test-utils": "^2.5.1",
@@ -38,7 +41,7 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.72.2",
     "vite": "^8.3.8",
-    "vitest": "^5.1.0",
+    "vitest": "^5.1.1",
     "vue-eslint-parser": "^10.4.2",
     "vue-tsc": "^3.3.14"
   }

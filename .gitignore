@@ -42,3 +42,7 @@ dist/
 vite.config.*.timestamp-*
 /src/js/coverage/
 /.env.bak
+
+# Playwright output
+src/js/playwright-report/
+src/js/test-results/
