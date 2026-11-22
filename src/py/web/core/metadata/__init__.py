@@ -11,6 +11,7 @@ Public surface is unchanged: import Base, MetadataDB, get_db, iso, set_tenant,
 reset_tenant and current_tenant straight from `web.core.metadata` as before.
 """
 
+from web.core.metadata._base import write_count
 from web.core.metadata.manager import MetadataDB, get_db
 from web.core.metadata.models import (
     Base,
@@ -51,4 +52,5 @@ __all__ = [
     "iso",
     "reset_tenant",
     "set_tenant",
+    "write_count",
 ]

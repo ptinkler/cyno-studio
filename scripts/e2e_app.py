@@ -34,8 +34,6 @@ def main() -> None:
             "DEV_EMAIL": "e2e@local",
             "POLLO_API_KEY": "",
             "CYNO_VIDEO_POLL_SECONDS": "0.5",
-            # Tests delete and create threads back to back: the media list must never be a stale copy
-            "MEDIA_LIST_TTL": "0",
             "VENICE_BASE_URL": f"{args.mock}/venice/api/v1",
             "OPENROUTER_BASE_URL": f"{args.mock}/openrouter/api/v1",
         }

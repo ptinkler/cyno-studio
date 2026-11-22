@@ -207,6 +207,50 @@ class TestListing:
         assert integer(found, "total") == len(rows(found, "items"))
 
 
+class TestListFreshness:
+    """The cached list follows the database: what a chat makes or loses shows up at once, not after the TTL."""
+
+    def test_an_image_added_to_a_chat_is_listed_straight_away(
+        self, client: TestClient, db: MetadataDB, conv: ChatConversation
+    ) -> None:
+        """Test that an image added to a chat is listed straight away."""
+        new_id = f"chat:{conv.id}:img_2.png"
+        assert new_id not in _items(client)  # the first request builds and caches the list
+        (config.ROOT_DIR / "chat" / conv.id / "img_2.png").write_bytes(_png("blue"))
+        db.add_chat_message(
+            conv.id,
+            "assistant",
+            "new",
+            media=[{"id": "n", "kind": "image", "source": "generated", "status": "done", "file": "img_2.png"}],
+        )
+        assert new_id in _items(client)
+
+    def test_a_deleted_chats_images_leave_the_list_straight_away(
+        self, client: TestClient, conv: ChatConversation
+    ) -> None:
+        """Test that a deleted chat's images leave the list straight away."""
+        gen_id = f"chat:{conv.id}:img_1.png"
+        assert gen_id in _items(client)
+        assert client.delete(f"/api/chat/conversations/{conv.id}").status_code == 200
+        assert gen_id not in _items(client)
+
+    def test_a_renamed_chat_is_renamed_in_the_list(
+        self, client: TestClient, db: MetadataDB, conv: ChatConversation
+    ) -> None:
+        """Test that a renamed chat is renamed in the list."""
+        before = _items(client)[f"chat:{conv.id}:img_1.png"]
+        db.update_conversation(conv.id, title="Wolf chat")
+        after = _items(client)[f"chat:{conv.id}:img_1.png"]
+        assert before["conversation_title"] == "Fox chat"
+        assert after["conversation_title"] == "Wolf chat"
+
+    def test_reading_the_list_does_not_rebuild_it(self, client: TestClient, conv: ChatConversation) -> None:
+        """Test that reading the list does not rebuild it (building must not write, or nothing would stay cached)."""
+        first = index_mod.all_items()
+        client.get("/api/media")
+        assert index_mod.all_items() is first
+
+
 class TestOrphans:
     """Tests for orphans."""
 
