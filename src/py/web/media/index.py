@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from web.core import config
+from web.core.env import number_env
 from web.core.metadata import ChatLibraryItem, ChatMessage, MetadataDB, current_tenant, get_db, iso
 from web.jsonutil import as_list, as_number, as_object, as_objects, as_str
 from web.media.durations import known_duration
@@ -176,8 +177,8 @@ def build_items(db: MetadataDB) -> list[LibraryEntry]:
 # (scanning the user's chat folders and the chat DB is slow on network or slow storage). Keyed on
 # (ROOT_DIR, tenant) so one user never sees another's list, and tests (each with
 # their own ROOT_DIR) stay isolated. Writes invalidate it; a short TTL catches
-# creations made elsewhere.
-_LIST_TTL = 30.0
+# creations made elsewhere (env MEDIA_LIST_TTL, seconds; 0 turns the cache off, as the end-to-end tests want).
+_LIST_TTL = number_env("MEDIA_LIST_TTL", 30.0)
 
 
 @dataclass
@@ -196,7 +197,7 @@ def all_items() -> list[LibraryEntry]:
     key = (config.ROOT_DIR, current_tenant())
     now = time.monotonic()
     entry = _list_cache.get(key)
-    if entry is None or now - entry.at > _LIST_TTL:
+    if entry is None or now - entry.at >= _LIST_TTL:
         entry = _ListCacheEntry(at=now, items=build_items(get_db()))
         _list_cache[key] = entry
     return entry.items

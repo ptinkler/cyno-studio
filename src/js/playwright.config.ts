@@ -15,19 +15,43 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: !!process.env['CI'],
   retries: process.env['CI'] ? 1 : 0,
+  snapshotPathTemplate: '{testDir}/visual/__screenshots__/{testFileName}/{arg}{ext}',
+  expect: { toHaveScreenshot: { maxDiffPixelRatio: 0.002 } },
   reporter: process.env['CI'] ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: APP,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } }],
+  projects: [
+    {
+      name: 'chromium',
+      testIgnore: 'visual/**',
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+    },
+    {
+      // Screenshot comparisons: the browser runs in Docker (scripts/visual-browser.sh) so every machine renders alike
+      name: 'visual',
+      testMatch: 'visual/**/*.spec.ts',
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1440, height: 900 },
+        connectOptions: { wsEndpoint: 'ws://127.0.0.1:3100/' },
+      },
+    },
+  ],
   webServer: [
-    { command: python('tests.mock_providers', '--port 5056'), cwd: repoRoot, url: `${MOCK}/__mock/settings` },
+    {
+      command: python('tests.mock_providers', '--port 5056'),
+      cwd: repoRoot,
+      url: `${MOCK}/__mock/settings`,
+      reuseExistingServer: !process.env['CI'], // locally, servers you started yourself are used as they are
+    },
     {
       command: python('scripts.e2e_app', `--port 5057 --mock ${MOCK}`),
       cwd: repoRoot,
       url: `${APP}/api/auth/status`,
+      reuseExistingServer: !process.env['CI'],
       timeout: 60_000,
     },
   ],
