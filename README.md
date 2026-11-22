@@ -220,6 +220,7 @@ make lint       # what CI checks
 make format     # fix what can be fixed automatically
 make hooks      # check (and fix) staged files on every commit
 make e2e        # end-to-end: Playwright against the real app and mock providers (see below)
+make e2e-visual # screenshot comparisons of the main screens (see below)
 ```
 
 ### End-to-end tests
@@ -244,7 +245,25 @@ mocked today; add a provider as another router next to `tests/mock_providers/ven
 against it, run `make mock-providers` and start the API with `VENICE_BASE_URL=http://127.0.0.1:5056/venice/api/v1`.
 
 When a provider misbehaves in a new way, add a mock model that does the same, and a spec that shows what the
-user should see.
+user should see. Every test starts signed in with no threads, spaces, characters, snippets or presets. Servers you
+started yourself on :5056 and :5057 (`make mock-providers`, `python -m scripts.e2e_app`) are reused outside CI, which
+saves their start-up on every run.
+
+#### Screenshot comparisons
+
+`src/js/e2e/visual/` takes screenshots of the main screens in the light and dark themes and compares them with the
+committed baselines (`e2e/visual/__screenshots__/`). They catch what the behaviour tests cannot: a moved layout, a
+lost colour, text that no longer fits. The browser runs in Playwright's Docker image
+(`scripts/visual-browser.sh`), so fonts and rendering are the same on every machine and in CI.
+
+```bash
+make e2e-visual                    # compare (needs Docker; sharing the host network, so Linux)
+make e2e-visual-update             # a change is meant: rewrite the baselines, then look at the images in the diff
+make e2e-visual ARGS="-g small"    # only the tests whose name contains "small"
+```
+
+A failing run leaves the expected, actual and difference images in `src/js/test-results/` (CI keeps them as the
+`screenshot-differences` artifact).
 
 Code standards, enforced in CI:
 

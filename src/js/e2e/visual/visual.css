@@ -1,0 +1,7 @@
+/* Applied to every screenshot: what changes from run to run must not reach the picture. */
+.toaster {
+  display: none !important;
+}
+* {
+  caret-color: transparent !important;
+}

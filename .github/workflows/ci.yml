@@ -132,6 +132,49 @@ jobs:
             src/js/test-results
           retention-days: 14
 
+  # Screenshots of the main screens against the committed baselines. The browser runs in Playwright's Docker image
+  # (scripts/visual-browser.sh), the same one `make e2e-visual` uses, so the pictures match.
+  visual:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Install deps
+        run: |
+          pip install uv
+          uv sync --frozen
+          cd src/js
+          npm ci
+
+      - name: Build the frontend
+        working-directory: src/js
+        run: npm run build
+
+      - name: Start the browser
+        run: scripts/visual-browser.sh start
+
+      - name: Compare screenshots
+        working-directory: src/js
+        run: npm run e2e:visual
+
+      - name: Keep the differences of a failed run
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: screenshot-differences
+          path: |
+            src/js/playwright-report
+            src/js/test-results
+          retention-days: 14
+
   # Known vulnerabilities in what ships. The production frontend dependencies must be clean. The Python
   # packages are reported, but don't fail the build yet: Starlette 1.0.0 has open advisories whose fix needs
   # a new test-client package (see the open-items file); make this blocking once that is settled.

@@ -52,7 +52,17 @@ test:
 # End-to-end: build the frontend, then run Playwright against the app + mock providers (tests/mock_providers).
 # First time: cd src/js && npx playwright install --only-shell chromium. ARGS passes through, e.g. ARGS="uploads"
 e2e:
-	cd src/js && npm run build && npx playwright test $(ARGS)
+	cd src/js && npm run build && npx playwright test --project=chromium $(ARGS)
+
+# Screenshot comparisons, rendered by a Chromium in Docker (scripts/visual-browser.sh) so they match in CI.
+# visual-update rewrites the baselines (src/js/e2e/visual/__screenshots__): look at the images before committing them.
+e2e-visual:
+	cd src/js && npm run build
+	scripts/visual-browser.sh start
+	cd src/js && npx playwright test --project=visual $(ARGS); status=$$?; ../../scripts/visual-browser.sh stop; exit $$status
+
+e2e-visual-update:
+	$(MAKE) e2e-visual ARGS="--update-snapshots $(ARGS)"
 
 # The mock providers on their own (http://127.0.0.1:5056/docs), e.g. to point a dev server at them
 mock-providers:
