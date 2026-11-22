@@ -10,6 +10,7 @@ import { ref, reactive, computed, provide, inject, onMounted, onUnmounted } from
 import { showToastKey, noToast, composerSettingsKey, chatModelsKey } from '../injection'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
+import { useNarrowScreen } from '../composables/useNarrowScreen'
 import { isVideoModel } from '../composables/chatModelsApi'
 import type { Catalogues } from '../composables/useComposerSettings'
 import { useComposerSettings } from '../composables/useComposerSettings'
@@ -179,6 +180,11 @@ function openQueueItem(entry: Generation): void {
 }
 const leftCollapsed = ref(false)
 const rightCollapsed = ref(false)
+function collapsePanels(): void {
+  leftCollapsed.value = true
+  rightCollapsed.value = true
+}
+if (useNarrowScreen(collapsePanels).value) collapsePanels()
 const search = ref('')
 const spaceSettings = ref<Space | 'new' | 'global' | null>(null) // a space | 'new' | 'global' | null (closed)
 const importOpen = ref(false)

@@ -110,6 +110,11 @@ const byModel = computed(() => {
   white-space: nowrap;
   cursor: pointer;
 }
+@media (max-width: 900px) {
+  .bseg {
+    padding: 0.2rem 0.4rem;
+  }
+}
 /* Each pill sits in an InfoTip's span, so the ends are found through it */
 .bals > :first-child.bseg,
 .bals > :first-child > .bseg {
