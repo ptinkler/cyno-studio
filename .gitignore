@@ -25,10 +25,6 @@ data/
 projects/
 assets/
 
-# Claude Code local overrides
-.claude
-.claude/settings.local.json
-
 # Virtualenv
 .venv/
 
