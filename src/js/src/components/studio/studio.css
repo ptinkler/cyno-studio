@@ -60,6 +60,26 @@
   flex-direction: column;
   height: 100%;
 }
+/* On a narrow window an open panel floats over the chat instead of squeezing it; its place stays a rail wide. */
+@media (max-width: 900px) {
+  .studio .side:not(.collapsed) {
+    width: 3.6rem;
+    background: var(--srail);
+  }
+  .studio .side:not(.collapsed) > .panel {
+    position: absolute;
+    z-index: 20;
+    top: 0;
+    left: 0;
+    width: min(20rem, 85vw);
+    background: var(--sbg);
+    box-shadow: 0 0 2rem rgb(0 0 0 / 0.35);
+  }
+  .studio .side.right:not(.collapsed) > .panel {
+    left: auto;
+    right: 0;
+  }
+}
 .studio .side > .panel > .panelhead {
   display: flex;
   align-items: center;

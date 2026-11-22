@@ -45,7 +45,7 @@ defineEmits<{
 </script>
 
 <template>
-  <aside class="side" :class="{ collapsed }">
+  <aside class="side right" :class="{ collapsed }">
     <!-- The collapsed rail expands on click. -->
     <button
       v-tip="'Expand inspector'"
@@ -58,7 +58,13 @@ defineEmits<{
       <span class="rail-label">Inspector</span>
     </button>
     <div class="panel">
-      <button v-tip="'Collapse inspector'" class="panelhead" type="button" @click="$emit('update:collapsed', true)">
+      <button
+        v-tip="'Collapse inspector'"
+        class="panelhead"
+        type="button"
+        aria-label="Collapse inspector"
+        @click="$emit('update:collapsed', true)"
+      >
         <span class="brand">Inspector</span>
         <svg class="ic"><use href="#s-chev" /></svg>
       </button>

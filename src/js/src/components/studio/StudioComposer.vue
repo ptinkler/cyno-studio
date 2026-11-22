@@ -237,8 +237,13 @@ defineExpose({ focusPrompt })
 
 .modes {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.4rem;
-  flex: 0 0 auto;
+}
+@media (max-width: 900px) {
+  .compose {
+    padding: 0.5333rem 0.6667rem 0.8rem;
+  }
 }
 .ed {
   width: 100%;
@@ -294,8 +299,9 @@ defineExpose({ focusPrompt })
 }
 .cbar {
   display: flex;
+  flex-wrap: wrap; /* on a narrow window the buttons go on to a second line instead of off the edge */
   align-items: center;
-  gap: 0.6667rem;
+  gap: 0.4rem 0.6667rem;
   padding-top: 0.4rem;
 }
 .atwrap {

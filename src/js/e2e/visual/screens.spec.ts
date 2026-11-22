@@ -141,3 +141,20 @@ test.describe('a small laptop', () => {
     await shoot(page, 'small-chat')
   })
 })
+
+test.describe('a phone-sized window', () => {
+  test.use({ viewport: { width: 390, height: 844 } })
+
+  test('home, and the sidebar opened over it', async ({ page }) => {
+    await newThread(page)
+    await shoot(page, 'phone-home')
+    await page.locator('.side:not(.right) .rail').click()
+    await shoot(page, 'phone-sidebar')
+  })
+
+  test('the inspector opened over the chat', async ({ page }) => {
+    await newThread(page)
+    await page.locator('.side.right .rail').click()
+    await shoot(page, 'phone-inspector')
+  })
+})

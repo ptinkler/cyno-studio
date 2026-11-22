@@ -330,7 +330,7 @@ const bySpace = computed(() => {
 
 <style scoped>
 .side {
-  width: clamp(15rem, 19vw, 20rem);
+  width: clamp(16rem, 19vw, 20rem);
   background: var(--sbg);
   border-right: 1px solid var(--sborder);
 }
