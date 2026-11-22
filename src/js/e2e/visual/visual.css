@@ -5,3 +5,7 @@
 * {
   caret-color: transparent !important;
 }
+/* Tooltips show wherever the pointer last was */
+.tip-bubble {
+  display: none !important;
+}
