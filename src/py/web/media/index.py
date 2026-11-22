@@ -7,8 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from web.core import config
-from web.core.env import number_env
-from web.core.metadata import ChatLibraryItem, ChatMessage, MetadataDB, current_tenant, get_db, iso
+from web.core.metadata import ChatLibraryItem, ChatMessage, MetadataDB, current_tenant, get_db, iso, write_count
 from web.jsonutil import as_list, as_number, as_object, as_objects, as_str
 from web.media.durations import known_duration
 from web.media.paths import LibraryEntry, MediaItem, chat_dir, library_dir, library_kind, media_thumb_url, mtime_iso
@@ -176,9 +175,9 @@ def build_items(db: MetadataDB) -> list[LibraryEntry]:
 # The built list, cached so paging through it doesn't rebuild it each request
 # (scanning the user's chat folders and the chat DB is slow on network or slow storage). Keyed on
 # (ROOT_DIR, tenant) so one user never sees another's list, and tests (each with
-# their own ROOT_DIR) stay isolated. Writes invalidate it; a short TTL catches
-# creations made elsewhere (env MEDIA_LIST_TTL, seconds; 0 turns the cache off, as the end-to-end tests want).
-_LIST_TTL = number_env("MEDIA_LIST_TTL", 30.0)
+# their own ROOT_DIR) stay isolated. Library writes invalidate it, and so does any database write since it was
+# built (a generated image, a deleted chat, a rename). A short TTL catches files that changed with no write.
+_LIST_TTL = 30.0
 
 
 @dataclass
@@ -186,6 +185,7 @@ class _ListCacheEntry:
     """A built media list and when (monotonic seconds) it was built."""
 
     at: float
+    writes: int  # write_count() when the build began: a write during the build leaves it stale
     items: list[LibraryEntry]
 
 
@@ -196,9 +196,10 @@ def all_items() -> list[LibraryEntry]:
     """The complete media list for the current user, newest first, cached briefly."""
     key = (config.ROOT_DIR, current_tenant())
     now = time.monotonic()
+    writes = write_count()
     entry = _list_cache.get(key)
-    if entry is None or now - entry.at >= _LIST_TTL:
-        entry = _ListCacheEntry(at=now, items=build_items(get_db()))
+    if entry is None or entry.writes != writes or now - entry.at > _LIST_TTL:
+        entry = _ListCacheEntry(at=now, writes=writes, items=build_items(get_db()))
         _list_cache[key] = entry
     return entry.items
 

@@ -1,4 +1,4 @@
-import type { Locator, Page } from '@playwright/test'
+import type { Page } from '@playwright/test'
 import { expect, test } from '../fixtures'
 import { newThread, pickModel, replies, send, setMode } from '../studio'
 
@@ -41,9 +41,13 @@ async function imageReply(page: Page, prompt: string): Promise<void> {
   await expect(page.locator('.compose .sendbtn')).toHaveText('Send')
 }
 
-async function shoot(page: Page, name: string, mask: Locator[] = []): Promise<void> {
+// Nothing about an account or a key may reach a committed picture, even the throwaway e2e ones: they are covered
+const PRIVATE = ['.who', '.krow', '.kset']
+
+async function shoot(page: Page, name: string): Promise<void> {
   await settled(page)
-  await expect(page).toHaveScreenshot(`${name}.png`, { ...SHOT, mask })
+  const mask = PRIVATE.map(selector => page.locator(selector))
+  await expect(page).toHaveScreenshot(`${name}.png`, { ...SHOT, mask, maskColor: '#888888' })
 }
 
 for (const choice of THEMES) {

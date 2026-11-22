@@ -72,6 +72,9 @@ export const test = base.extend<{ mock: Mock }>({
   ],
   page: async ({ page }, use) => {
     expect((await page.request.post('/api/auth/dev-login')).ok()).toBe(true)
+    // Only ever the throwaway e2e app: never write keys to, or photograph, a server holding someone's real data
+    const me = (await (await page.request.get('/api/auth/me')).json()) as { user: { email: string } | null }
+    expect(me.user?.email).toBe('e2e@local')
     expect((await page.request.put('/api/keys', { data: { keys: { venice: 'mock-key' } } })).ok()).toBe(true)
     await clearUserContent(page)
     await use(page)

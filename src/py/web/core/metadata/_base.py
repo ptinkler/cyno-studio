@@ -16,6 +16,7 @@ fails at once instead of racing.
 import inspect
 import logging
 import sqlite3
+import threading
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from datetime import datetime
@@ -35,6 +36,29 @@ from web.types import JsonValue
 log = logging.getLogger(__name__)
 
 ModelT = TypeVar("ModelT", bound=Base)
+
+
+class _WriteCounter:
+    """Counts the write sessions that have ended in this process."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self.value = 0
+
+    def bump(self) -> None:
+        with self._lock:
+            self.value += 1
+
+
+_writes = _WriteCounter()
+
+
+def write_count() -> int:
+    """How many write sessions have ended in this process: it changes whenever any data may have.
+
+    Caches built from the database compare it to the value they were built at.
+    """
+    return _writes.value
 
 
 class UnknownFieldError(AttributeError):
@@ -142,8 +166,11 @@ class DBBase:
         Use it for anything that writes, and for read-modify-write: other writers wait (up to 30 s) until it ends, so
         nothing it read can change underneath it. Readers are not blocked.
         """
-        with Session(self.engine) as session:
-            yield session
+        try:
+            with Session(self.engine) as session:
+                yield session
+        finally:
+            _writes.bump()
 
     @contextmanager
     def read_session(self) -> Generator[Session]:
