@@ -31,11 +31,12 @@ describe('planRefs (mirrors plan_refs in web/chat/generation.py)', () => {
     expect(plan.off).toEqual(['p1', a(0)])
   })
 
-  it('caps chat images at the image slider, not character images', () => {
-    const plan = planRefs({ chat: ['p0', 'p1', 'p2'], characters: [A], imageLimit: 1 })
-    expect(plan.sent).toEqual([a(0), 'p0', a(1), a(2)])
+  it('caps the whole list at the image slider, characters included', () => {
+    const plan = planRefs({ chat: ['p0', 'p1', 'p2'], characters: [A, B], imageLimit: 4 })
+    expect(plan.sent).toEqual([a(0), b(0), 'p0', 'p1'])
+    expect(plan.capped).toEqual(['p2', a(1), b(1), a(2), b(2)])
     const forced = planRefs({ chat: ['p0', 'p1'], characters: [A], imageLimit: 1, choices: { on: ['p1'] } })
-    expect(forced.sent).toEqual(['p1', a(0), 'p0', a(1), a(2)])
+    expect(forced.sent).toEqual(['p1'])
   })
 
   it('keeps attachments ahead even when one is switched off', () => {
