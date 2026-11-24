@@ -613,15 +613,15 @@ def _pin_media(n: int) -> list[dict[str, JsonValue]]:
 
 
 class TestReferenceCaps:
-    """Chat images are capped by the image slider (default 6); character images never are."""
+    """The image slider (default 6) caps every reference sent, characters' images included."""
 
-    def test_every_character_image_is_sent_beyond_the_chat_cap(
+    def test_slider_caps_character_and_chat_images_together(
         self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that every character image is sent beyond the chat cap."""
+        """Test that the slider caps characters and chat images together, mains first."""
         linh, bao = _make(client, images=5), _make(client, name="Bao", images=4)
         client.patch(f"/api/chat/conversations/{conv['id']}", json={"character_ids": [linh["id"], bao["id"]]})
-        # 8 pinned chat images: only the slider's number of them go
+        # 8 pinned chat images and 9 character images: the slider's number go in all
         db.add_chat_message(conv["id"], "user", "pics")
         for i in range(8):
             (chat_pkg.conversation_dir(conv["id"]) / f"p{i}.png").write_bytes(png_bytes())
@@ -630,10 +630,10 @@ class TestReferenceCaps:
         ev = sse_events(_post(client, conv, "both", mode="image"))
         refs = [text(r) for r in seq(_params(ev), "refs")]
         char_refs = [r for r in refs if r.startswith("char:")]
-        assert len(char_refs) == 9  # all 5 + 4
-        assert char_refs[:2] == [f"char:{linh['id']}/{linh['images'][0]}", f"char:{bao['id']}/{bao['images'][0]}"]
-        assert len(refs) - len(char_refs) == chat_constants.DEFAULT_IMAGE_LIMIT
-        assert len(must(got.input_images)) == 9 + chat_constants.DEFAULT_IMAGE_LIMIT
+        assert len(refs) == chat_constants.DEFAULT_IMAGE_LIMIT
+        assert refs[:2] == [f"char:{linh['id']}/{linh['images'][0]}", f"char:{bao['id']}/{bao['images'][0]}"]
+        assert len(char_refs) == 2  # the mains; the other four slots go to chat images
+        assert len(must(got.input_images)) == chat_constants.DEFAULT_IMAGE_LIMIT
 
     def test_slider_raises_the_chat_image_cap(
         self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
@@ -678,17 +678,17 @@ class TestReferenceCaps:
     def test_a_model_maximum_keeps_room_for_chat_images(
         self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Each character's main image first, then pins, then the characters' other images."""
+        """Each character's main image first, then pins, then the characters' other images (within the slider)."""
         a, b = _make(client, name="A", images=3), _make(client, name="B", images=3)
         client.patch(f"/api/chat/conversations/{conv['id']}", json={"character_ids": [a["id"], b["id"]]})
         self._pins(chat, db, conv, 2)
-        params = self._send_image(client, conv, chat, monkeypatch, max_refs=6)
+        params = self._send_image(client, conv, chat, monkeypatch, max_refs=4)
 
         def ref(c: CharacterOut, i: int) -> str:
             return f"char:{c['id']}/{c['images'][i]}"
 
-        assert params["refs"] == [ref(a, 0), ref(b, 0), "p0.png", "p1.png", ref(a, 1), ref(b, 1)]
-        assert params["refs_dropped"] == [ref(a, 2), ref(b, 2)]
+        assert params["refs"] == [ref(a, 0), ref(b, 0), "p0.png", "p1.png"]
+        assert params["refs_dropped"] == [ref(a, 1), ref(b, 1)]  # the slider (6) already cut the rest
 
     def test_composer_picks_switch_references_on_and_off(
         self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
