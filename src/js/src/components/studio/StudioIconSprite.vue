@@ -4,6 +4,8 @@
   <svg width="0" height="0" class="sprite" aria-hidden="true">
     <symbol id="s-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
     <symbol id="s-chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></symbol>
+    <symbol id="s-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol>
+    <symbol id="s-up" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6" /></symbol>
     <symbol id="s-chevL" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6" /></symbol>
     <symbol id="s-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" /></symbol>
     <symbol id="s-selectall" viewBox="0 0 24 24">
