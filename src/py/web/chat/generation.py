@@ -137,7 +137,7 @@ class RefLimits:
 def plan_refs(chat_refs: list[str], chars: list[Character], limits: RefLimits) -> tuple[list[str], list[str]]:
     """The reference images to send, and those left out because the model takes fewer (`limits.max_refs`).
 
-    Chat images are capped at `limits.image_limit`; character images aren't.
+    `limits.image_limit` caps the whole list, characters' images included.
 
     They're sent in priority order, so a model that trims the list itself
     keeps the important ones too: the first `after` chat images (attachments,
@@ -150,12 +150,12 @@ def plan_refs(chat_refs: list[str], chars: list[Character], limits: RefLimits) -
     off: set[str] = set(choices.off) if choices else set()
     kept = [r for r in dedupe(chat_refs) if r not in off]
     lead = kept if after is None else [r for r in dedupe(chat_refs[:after]) if r not in off]
-    chat_refs = kept[:image_limit]
-    split = min(len(lead), len(chat_refs))
+    split = min(len(lead), len(kept))
     every = characters.reference_refs(chars, skip=off)
     mains = characters.reference_refs(chars, per_character=1, skip=off)
-    candidates = set(kept) | set(every)  # a switched-on chat image goes even over the slider
-    ordered = dedupe(chat_refs[:split] + [r for r in on if r in candidates] + mains + chat_refs[split:] + every)
+    candidates = set(kept) | set(every)
+    ordered = dedupe(kept[:split] + [r for r in on if r in candidates] + mains + kept[split:] + every)
+    ordered = ordered[:image_limit]  # the slider is a hard cap; the priority order decides what survives
     if max_refs is None:
         return ordered, []
     return ordered[:max_refs], ordered[max_refs:]

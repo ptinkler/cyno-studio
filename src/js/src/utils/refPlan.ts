@@ -1,7 +1,8 @@
 // Which reference images the next image will be sent with, and which won't
 // fit the image model (mirrors plan_refs in web/chat/generation.py). The priority:
 // `lead` (attachments), the ones switched on, each character's main image,
-// the other chat images (pins), then the characters' other images.
+// the other chat images (pins), then the characters' other images. The
+// image slider caps the whole list; what it cuts is `capped`.
 
 export const charRef = (id: number, file: string): string => `char:${String(id)}/${file}`
 
@@ -44,7 +45,7 @@ export interface RefPlanInput {
   /** The other chat image refs (pins). */
   chat?: readonly string[]
   characters?: readonly RefCharacter[]
-  /** Cap on chat images (null = all). */
+  /** Cap on all references sent (null = all). */
   imageLimit?: number | null
   /** The model's maximum number of refs (null = unknown). */
   maxRefs?: number | null
@@ -55,7 +56,10 @@ export interface RefPlanInput {
 export interface RefPlan {
   /** In send order. */
   sent: string[]
+  /** Left out because the model takes fewer. */
   dropped: string[]
+  /** Left out because of the image slider. */
+  capped: string[]
   off: string[]
 }
 
@@ -69,29 +73,29 @@ export function planRefs({
   maxRefs = null,
   choices,
 }: RefPlanInput): RefPlan {
-  const { ordered, off } = orderRefs({ lead, chat, characters, imageLimit }, choices)
+  const { ordered: all, off } = orderRefs({ lead, chat, characters }, choices)
+  const ordered = take(all, imageLimit)
   const sent = take(ordered, maxRefs)
-  return { sent, dropped: ordered.slice(sent.length), off }
+  return { sent, dropped: ordered.slice(sent.length), capped: all.slice(ordered.length), off }
 }
 
 /** Every ref in send order (before the model's maximum cuts it), and the ones the user switched off. */
 function orderRefs(
-  { lead, chat, characters, imageLimit }: Required<Pick<RefPlanInput, 'lead' | 'chat' | 'characters' | 'imageLimit'>>,
+  { lead, chat, characters }: Required<Pick<RefPlanInput, 'lead' | 'chat' | 'characters'>>,
   { on = [], off: offList = [] }: Choices = {},
 ): { ordered: string[]; off: string[] } {
   const off = new Set(offList)
   const offChat = dedupe([...lead, ...chat]).filter(r => off.has(r))
   const kept = dedupe([...lead, ...chat]).filter(r => !off.has(r))
-  const chatRefs = take(kept, imageLimit)
-  const split = Math.min(dedupe(lead).filter(r => !off.has(r)).length, chatRefs.length)
+  const split = Math.min(dedupe(lead).filter(r => !off.has(r)).length, kept.length)
   const every = characterRefs(characters, off)
   const mains = characterRefs(characters, off, 1)
-  const candidates = new Set([...kept, ...every]) // a switched-on chat image goes even over the slider
+  const candidates = new Set([...kept, ...every])
   const ordered = dedupe([
-    ...chatRefs.slice(0, split),
+    ...kept.slice(0, split),
     ...on.filter(r => candidates.has(r)),
     ...mains,
-    ...chatRefs.slice(split),
+    ...kept.slice(split),
     ...every,
   ])
   return { ordered, off: [...offChat, ...switchedOffCharacterRefs(characters, off)] }

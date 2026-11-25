@@ -24,6 +24,8 @@ import { useStudioRoutes } from '../composables/useStudioRoutes'
 import StudioSidebar from '../components/studio/StudioSidebar.vue'
 import StudioInspector from '../components/studio/StudioInspector.vue'
 import StudioComposer from '../components/studio/StudioComposer.vue'
+import RefPlanStrip from '../components/studio/RefPlanStrip.vue'
+import { useRefPlan } from '../composables/useRefPlan'
 import StudioFeed from '../components/studio/StudioFeed.vue'
 import StudioGenerations from '../components/studio/StudioGenerations.vue'
 import GenerationGrid from '../components/studio/GenerationGrid.vue'
@@ -145,6 +147,7 @@ const {
   characterIds,
   charEditor,
   characterNames,
+  attachedCharacters,
   characterSupport,
   loadCharacters,
   setCharacters,
@@ -155,6 +158,13 @@ const {
   spend,
   balances,
 } = studio
+const refPlan = useRefPlan({
+  convId: active,
+  messages,
+  characters: computed(() => (characterSupport.value.ok ? attachedCharacters.value : [])),
+  attached: computed(() => attachments.value.flatMap(a => a.file ?? [])),
+  settings,
+})
 
 const { theme, dataTheme, setTheme } = useStudioTheme()
 const { threadView, chatMessages, composerModes } = useThreadView({ route, activeKind, draft, lane, messages, mode })
@@ -384,6 +394,7 @@ onMounted(() => {
           @deleted="active && openThread(active)"
         />
 
+        <RefPlanStrip :refs="refPlan.planned.value" @toggle="refPlan.toggle" />
         <StudioComposer
           ref="composerRef"
           v-model:draft="draft"
