@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+# Every job only reads the repo; build-and-push asks for more on its own
+permissions:
+  contents: read
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   UV_FROZEN: 1
