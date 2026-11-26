@@ -488,7 +488,7 @@ def api_delete_conversation(conv_id: str, *, delete_media: bool = True) -> Delet
     # Its files go in the background: hundreds of images take a while on slow storage
     folder = chat_dir(conv_id)
     if delete_media and folder.exists():
-        folder.rename(folder.with_name(f".deleting-{conv_id}"))  # out of the way at once
+        folder.rename(inside(chat_root(), f".deleting-{conv_id}"))  # out of the way at once
         threading.Thread(target=_empty_trash, daemon=True).start()
     return DeletedConversation(deleted=conv_id)
 

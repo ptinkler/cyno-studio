@@ -22,7 +22,6 @@ from web.chat.generation import (
     enhance_prompt,
 )
 from web.chat.helpers import (
-    conversation_dir,
     remember_settings,
     require_conv,
     require_idle,
@@ -48,10 +47,10 @@ from web.chat.workers import ctx_thread
 from web.core.metadata import get_db
 from web.core.metadata.models import ChatMessage
 from web.media.kinds import kind_of
+from web.media.paths import chat_file
 from web.providers import openrouter, pollo
 from web.providers.specs import CostQuery
 from web.types import JsonValue
-from web.uploads.files import safe_filename
 
 log = logging.getLogger(__name__)
 
@@ -140,10 +139,9 @@ def api_send_message(conv_id: str, data: SendMessage) -> StreamingResponse:
     if not content and not data.attachments and not _prompt_optional(data):
         raise HTTPException(400, "Message is empty")
 
-    conv_dir = conversation_dir(conv_id)
     media: list[dict[str, JsonValue]] = []
     for name in data.attachments[:8]:
-        if not (conv_dir / safe_filename(name)).is_file():
+        if not chat_file(conv_id, name).is_file():
             raise HTTPException(400, f"Attachment not found: {name}")
         # audio here is a lip-sync track, driven onto a portrait
         media.append(saved_media(kind_of(name) or "image", "upload", name))

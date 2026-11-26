@@ -35,7 +35,7 @@ def thumb_path(path: Path, size: int = THUMB_SIZE) -> Path:
     except OSError:
         mtime = 0
     key = f"{path}:{mtime}" + (f":{size}" if size != THUMB_SIZE else "")
-    return thumb_dir() / f"{hashlib.md5(key.encode(), usedforsecurity=False).hexdigest()}.jpg"
+    return thumb_dir() / f"{hashlib.sha256(key.encode()).hexdigest()}.jpg"
 
 
 def make_thumb(path: Path, size: int = THUMB_SIZE) -> Path | None:
