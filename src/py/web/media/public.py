@@ -24,6 +24,7 @@ from fastapi.responses import FileResponse
 
 from web.auth.session import signing_key
 from web.core import config
+from web.safepath import inside
 
 _TOKEN_PARTS = 3  # a signed token is <payload>.<expiry>.<signature>
 
@@ -38,17 +39,17 @@ def _unb64(s: str) -> bytes:
     return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
 
 
-def _media_roots() -> list[Path]:
-    """Return resolved roots that a self-hosted media link may serve.
-
-    These cover chat files, character images and the per-user library.
-    """
-    return [(config.ROOT_DIR / d).resolve() for d in ("chat", "characters", "library")]
+MEDIA_FOLDERS = ("chat", "characters", "library")  # what a self-hosted media link may serve
 
 
-def _under_media_root(path: Path) -> bool:
-    resolved = path.resolve()
-    return any(resolved.is_relative_to(root) for root in _media_roots())
+def _media_file(relative: str) -> Path | None:
+    """The file a token names, if it is under the chat, character or library folders (else None)."""
+    for folder in MEDIA_FOLDERS:
+        try:
+            return inside(config.ROOT_DIR / folder, Path(relative).relative_to(folder).as_posix())
+        except (ValueError, HTTPException):
+            continue
+    return None
 
 
 def sign_media_token(filepath: Path, ttl_seconds: int) -> str:
@@ -74,12 +75,10 @@ def _resolve_token(token: str) -> Path | None:
             return None
         if time.time() > int(exp_s):
             return None
-        path = config.ROOT_DIR / _unb64(b64path).decode()
+        path = _media_file(_unb64(b64path).decode())
     except (ValueError, TypeError):
         return None
-    if not _under_media_root(path) or not path.is_file():
-        return None
-    return path
+    return path if path and path.is_file() else None
 
 
 class SelfhostBaseUrlError(ValueError):
