@@ -5,8 +5,7 @@ import { confirmDialog } from '../../composables/useDialog'
 import MediaGrid from '../media/MediaGrid.vue'
 import SelectionBar from './SelectionBar.vue'
 import type { LibraryEntry, MediaFilters } from '../../composables/mediaApi'
-import { fetchMediaPage, deleteMediaMany, downloadMediaMany, mergeDuplicateFiles } from '../../composables/useMedia'
-import { vTip } from '../../directives/tip'
+import { fetchMediaPage, deleteMediaMany, downloadMediaMany } from '../../composables/useMedia'
 import { messageOf } from '../../utils/errors'
 
 defineEmits<{ close: [] }>()
@@ -65,20 +64,6 @@ const clearPicked = (): void => {
   picked.value = new Set()
   lastPicked = null
 }
-async function mergeDuplicates(): Promise<void> {
-  busy.value = true
-  try {
-    const { files, bytes } = await mergeDuplicateFiles()
-    const size = bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${String(Math.round(bytes / 1e3))} KB`
-    showToast(
-      files ? `Merged ${String(files)} duplicate file${files === 1 ? '' : 's'}, freed ${size}` : 'No duplicate files',
-    )
-  } catch (e) {
-    showToast(messageOf(e), 'error')
-  } finally {
-    busy.value = false
-  }
-}
 async function bulkDownload(): Promise<void> {
   busy.value = true
   try {
@@ -100,9 +85,14 @@ async function bulkDelete(): Promise<void> {
   if (!ok) return
   busy.value = true
   try {
-    await deleteMediaMany([...picked.value])
+    const { kept } = await deleteMediaMany([...picked.value])
     clearPicked()
     await load()
+    if (kept) {
+      showToast(
+        `${String(kept)} file${kept === 1 ? ' was' : 's were'} kept: other pictures in the chat use ${kept === 1 ? 'it' : 'them'} as references`,
+      )
+    }
   } catch (e) {
     showToast(messageOf(e), 'error')
   } finally {
@@ -137,14 +127,6 @@ onMounted(load)
       <h1>Media library</h1>
       <span v-if="total" class="gcount">{{ total }} item{{ total === 1 ? '' : 's' }}</span>
       <span class="spacer"></span>
-      <button
-        v-tip="'Files with the same content (a picture used in a chat, or uploaded twice) share one copy on disk'"
-        class="btn"
-        :disabled="busy"
-        @click="mergeDuplicates"
-      >
-        Merge duplicate files
-      </button>
       <button class="btn" @click="$emit('close')">
         <svg class="ic"><use href="#s-chevL" /></svg> Back
       </button>

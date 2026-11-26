@@ -10,7 +10,6 @@ export {
   deleteMediaMany,
   downloadMediaMany,
   deleteMedia,
-  mergeDuplicateFiles,
   fetchBlockedCounts,
   clearBlocked,
   importMediaToChat,

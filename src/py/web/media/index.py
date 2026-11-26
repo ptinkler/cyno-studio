@@ -102,6 +102,25 @@ def referenced_files(item: MediaItem) -> list[str]:
     return [f for f in files if isinstance(f, str) and f]
 
 
+def file_in_use(db: MetadataDB, conv_id: str, name: str) -> bool:
+    """Whether a message or detached library entry of this chat still uses the file (picture, reference, frame)."""
+    return any(name in referenced_files(i) for m in db.get_chat_messages(conv_id) for i in m.media) or any(
+        lib.conversation_id == conv_id and name in referenced_files(lib.item) for lib in db.list_chat_library()
+    )
+
+
+def remove_unused_file(db: MetadataDB, conv_id: str, path: Path) -> bool:
+    """Delete a chat's file unless something in the chat still uses it; True when it was deleted.
+
+    Call it after the record that held the file is gone. Another picture of the chat that took this one as its
+    reference keeps it: the reference would break (redo, "use settings") if the file went.
+    """
+    if file_in_use(db, conv_id, path.name):
+        return False
+    path.unlink(missing_ok=True)
+    return True
+
+
 def _used_files(msgs: list[ChatMessage], lib_items: list[ChatLibraryItem]) -> set[tuple[str, str]]:
     """Every (conversation id, file name) that a message or library entry records."""
     used: set[tuple[str, str]] = set()

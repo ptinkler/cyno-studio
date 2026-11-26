@@ -237,20 +237,69 @@ class TestListing:
         lib = _upload(client, "b.png", _png("pink"))
         assert os.path.samestat(in_chat.stat(), (paths_mod.library_dir() / text(lib, "name")).stat())
 
-    def test_merging_turns_existing_copies_into_one_file(self, client: TestClient, db: MetadataDB) -> None:
-        """Copies made before links were used share their bytes after a merge; different files are left alone."""
-        a, b = db.create_conversation(title="A"), db.create_conversation(title="B")
-        paths: list[Path] = []
-        for conv_id, name, colour in ((a.id, "x.png", "navy"), (b.id, "y.png", "navy"), (b.id, "z.png", "lime")):
-            d = config.ROOT_DIR / "chat" / conv_id
-            d.mkdir(parents=True, exist_ok=True)
-            (d / name).write_bytes(_png(colour))
-            paths.append(d / name)
-        merged = obj(client.post("/api/media/merge-duplicates"))
-        assert merged == {"files": 1, "bytes": paths[0].stat().st_size}
-        assert os.path.samestat(paths[0].stat(), paths[1].stat())
-        assert not os.path.samestat(paths[0].stat(), paths[2].stat())
-        assert obj(client.post("/api/media/merge-duplicates")) == {"files": 0, "bytes": 0}  # nothing left to merge
+    def test_deleting_a_picture_another_card_used_as_a_reference_keeps_its_file(
+        self, client: TestClient, db: MetadataDB, conv: ChatConversation
+    ) -> None:
+        """Only the card goes: the file stays for the card that took it as a reference (redo would break otherwise)."""
+        db.add_chat_message(
+            conv.id,
+            "assistant",
+            "edited",
+            media=[
+                {
+                    "id": "e",
+                    "kind": "image",
+                    "source": "generated",
+                    "status": "done",
+                    "file": "img_edit.png",
+                    "prompt": "p",
+                    "params": {"refs": ["img_1.png"]},
+                }
+            ],
+        )
+        folder = config.ROOT_DIR / "chat" / conv.id
+        (folder / "img_edit.png").write_bytes(_png("gray"))
+        used = obj(client.delete(f"/api/media/chat:{conv.id}:img_1.png"))
+        assert used == {"deleted": f"chat:{conv.id}:img_1.png", "file_kept": True}
+        assert (folder / "img_1.png").is_file()
+        free = obj(client.delete(f"/api/media/chat:{conv.id}:up_1.png"))
+        assert free["file_kept"] is False
+        assert not (folder / "up_1.png").exists()
+
+    def test_bulk_delete_says_how_many_files_stayed(
+        self, client: TestClient, db: MetadataDB, conv: ChatConversation
+    ) -> None:
+        """The Media page can tell the user that some files were kept."""
+        db.add_chat_message(
+            conv.id,
+            "assistant",
+            "edited",
+            media=[
+                {
+                    "id": "e",
+                    "kind": "image",
+                    "source": "generated",
+                    "status": "done",
+                    "file": "img_edit.png",
+                    "prompt": "p",
+                    "params": {"refs": ["img_1.png"]},
+                }
+            ],
+        )
+        (config.ROOT_DIR / "chat" / conv.id / "img_edit.png").write_bytes(_png("gray"))
+        ids = [f"chat:{conv.id}:img_1.png", f"chat:{conv.id}:up_1.png"]
+        done = obj(client.post("/api/media/bulk-delete", json={"ids": ids}))
+        assert done == {"deleted": ids, "failed": [], "kept": 1}
+
+    def test_deleting_a_library_picture_leaves_the_chats_copy(self, client: TestClient, conv: ChatConversation) -> None:
+        """The library file and the chat's copy are separate names: deleting one never touches the other."""
+        lib = _upload(client, "z.png", _png("magenta"))
+        copy = client.post(
+            "/api/media/import", json={"media_id": text(lib, "id"), "target": "chat", "conversation_id": conv.id}
+        )
+        mine = config.ROOT_DIR / "chat" / conv.id / text(copy, "file")
+        assert client.delete(f"/api/media/{text(lib, 'id')}").status_code == 200
+        assert mine.read_bytes() == _png("magenta")
 
     def test_pictures_that_only_look_alike_are_kept(self, client: TestClient) -> None:
         """Same size, different bytes: both stay."""

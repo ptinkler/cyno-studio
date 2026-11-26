@@ -47,6 +47,7 @@ from web.chat.routes_settings import (
 )
 from web.chat.schemas import (
     Conversation,
+    ConversationDeleteInfo,
     ConversationList,
     ConversationSummary,
     ConversationThumbs,
@@ -62,6 +63,7 @@ from web.chat.schemas import (
 from web.core import config
 from web.core.metadata import MetadataDB, get_db
 from web.jsonutil import as_list, as_object, as_str
+from web.media.index import remove_unused_file
 from web.types import JsonValue
 from web.uploads.files import safe_filename
 
@@ -460,6 +462,18 @@ def api_update_conversation(conv_id: str, data: ConversationUpdate) -> Conversat
     return Conversation.model_validate(conversation.to_dict())
 
 
+@router.get("/conversations/{conv_id}/delete-info")
+def api_delete_conversation_info(conv_id: str) -> ConversationDeleteInfo:
+    """What deleting this chat takes with it besides its messages, for the confirmation.
+
+    Characters made in the chat and never saved go with it; saved characters (and their images) stay.
+    """
+    require_conv(conv_id)
+    return ConversationDeleteInfo(
+        characters=[c.name for c in get_db().list_characters() if c.conversation_id == conv_id]
+    )
+
+
 @router.delete("/conversations/{conv_id}")
 def api_delete_conversation(conv_id: str, *, delete_media: bool = True) -> DeletedConversation:
     """Delete a chat.
@@ -509,13 +523,13 @@ def api_delete_exchange_info(message_id: int) -> DeleteInfo:
 def _delete_detached_media(db: MetadataDB, conv_id: str, detached: list[dict[str, JsonValue]]) -> None:
     """Delete the files and library rows of media detached from a deleted prompt turn."""
     for item in detached:
-        file = item.get("file")
-        if isinstance(file, str):
-            (conversation_dir(conv_id) / safe_filename(file)).unlink(missing_ok=True)
         media_id = item.get("id")
         if not isinstance(media_id, str):
             raise TypeError(media_id)
         db.delete_chat_library_item(media_id)
+        file = item.get("file")
+        if isinstance(file, str):
+            remove_unused_file(db, conv_id, conversation_dir(conv_id) / safe_filename(file))
 
 
 @router.delete("/messages/{message_id}")

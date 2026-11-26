@@ -25,7 +25,7 @@ from web.chat.schemas import (
 )
 from web.core import request_log
 from web.core.metadata import get_db, iso
-from web.media.index import referenced_files
+from web.media.index import remove_unused_file
 from web.media.kinds import VIDEO_SUFFIXES
 from web.media.places import media_dirs
 from web.media.thumbs import thumb_response
@@ -78,14 +78,8 @@ def api_discard_attachment(conv_id: str, filename: str) -> Discarded:
     if not name.startswith(("up_", "upv_", "upa_")):
         return Discarded(deleted=False)
     db = get_db()
-    in_use = any(name in referenced_files(i) for m in db.get_chat_messages(conv_id) for i in m.media) or any(
-        lib.conversation_id == conv_id and name in referenced_files(lib.item) for lib in db.list_chat_library()
-    )
     path = conversation_dir(conv_id) / name
-    if in_use or not path.is_file():
-        return Discarded(deleted=False)
-    path.unlink()
-    return Discarded(deleted=True)
+    return Discarded(deleted=path.is_file() and remove_unused_file(db, conv_id, path))
 
 
 @router.get("/media/{conv_id}/{filename}")
@@ -183,5 +177,5 @@ def api_delete_library_item(media_id: str) -> DeletedLibraryItem:
     db.delete_chat_library_item(media_id)
     file = lib.item.get("file")
     if isinstance(file, str):
-        (chat_root() / lib.conversation_id / safe_filename(file)).unlink(missing_ok=True)
+        remove_unused_file(db, lib.conversation_id, chat_root() / lib.conversation_id / safe_filename(file))
     return DeletedLibraryItem(deleted=media_id)
