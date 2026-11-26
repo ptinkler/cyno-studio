@@ -35,7 +35,7 @@ from web.jsonutil import as_str
 from web.media.blank import blocked_generations
 from web.media.durations import fill_durations
 from web.media.index import all_items, invalidate_list, item_matches, library_items, remove_unused_file
-from web.media.paths import LibraryEntry, chat_dir, library_dir, library_kind, resolve
+from web.media.paths import LibraryEntry, chat_dir, library_dir, library_file, library_kind, resolve
 from web.media.places import media_dirs
 from web.media.thumbs import forget_file, thumb_response
 from web.uploads.files import (
@@ -108,7 +108,7 @@ def api_list_media(
 @router.get("/library/{filename}")
 def api_library_file(filename: str) -> FileResponse:
     """Return a library file as a downloadable media response."""
-    path = library_dir() / safe_filename(filename)
+    path = library_file(filename)
     if not path.is_file():
         raise HTTPException(404, "Not found")
     return FileResponse(path, headers={"Cache-Control": "private, max-age=31536000, immutable"})

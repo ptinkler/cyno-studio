@@ -25,7 +25,7 @@ def _own_image(character_id: int, file: str) -> Path | None:
     character = get_db().get_character(character_id)
     if character is None or file not in character.images:
         return None
-    path = characters.char_dir(character_id) / file
+    path = characters.char_file(character_id, file)
     return path if path.is_file() else None
 
 

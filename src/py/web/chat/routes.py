@@ -64,6 +64,8 @@ from web.core import config
 from web.core.metadata import MetadataDB, get_db
 from web.jsonutil import as_list, as_object, as_str
 from web.media.index import remove_unused_file
+from web.media.paths import chat_dir, chat_file
+from web.safepath import inside
 from web.types import JsonValue
 from web.uploads.files import safe_filename
 
@@ -311,7 +313,7 @@ def api_fork_conversation(conv_id: str, data: ForkConversation) -> Conversation:
     }
     db.update_conversation(new.id, character_ids=[char_map.get(i, i) for i in conv.character_ids])
 
-    fork = _Fork(chat_root() / conv_id, conversation_dir(new.id), char_map)
+    fork = _Fork(chat_dir(conv_id), conversation_dir(new.id), char_map)
     db.add_chat_branch(
         new.id,
         [
@@ -401,17 +403,16 @@ class _Fork:
         return ref
 
     def _link(self, name: str) -> None:
-        if (
-            Path(name).name != name
-            or name.startswith(".")
-            or not (self.src / name).is_file()
-            or (self.dst / name).exists()
-        ):
+        try:
+            src, dst = inside(self.src, safe_filename(name)), inside(self.dst, safe_filename(name))
+        except HTTPException:  # a name with directories in it, or a dotfile
+            return
+        if not src.is_file() or dst.exists():
             return
         try:
-            (self.dst / name).hardlink_to(self.src / name)
+            dst.hardlink_to(src)
         except OSError:
-            shutil.copy2(self.src / name, self.dst / name)
+            shutil.copy2(src, dst)
 
 
 def _validate_conv_references(data: ConversationUpdate, fields: dict[str, JsonValue]) -> None:
@@ -485,7 +486,7 @@ def api_delete_conversation(conv_id: str, *, delete_media: bool = True) -> Delet
     characters.delete_for_conversation(conv_id, get_db())
     get_db().delete_conversation(conv_id)
     # Its files go in the background: hundreds of images take a while on slow storage
-    folder = chat_root() / conv_id
+    folder = chat_dir(conv_id)
     if delete_media and folder.exists():
         folder.rename(folder.with_name(f".deleting-{conv_id}"))  # out of the way at once
         threading.Thread(target=_empty_trash, daemon=True).start()
@@ -529,7 +530,7 @@ def _delete_detached_media(db: MetadataDB, conv_id: str, detached: list[dict[str
         db.delete_chat_library_item(media_id)
         file = item.get("file")
         if isinstance(file, str):
-            remove_unused_file(db, conv_id, conversation_dir(conv_id) / safe_filename(file))
+            remove_unused_file(db, conv_id, chat_file(conv_id, file))
 
 
 @router.delete("/messages/{message_id}")

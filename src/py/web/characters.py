@@ -29,6 +29,8 @@ from pydantic import BaseModel, Field
 from web.auth.users import require_user
 from web.core import config
 from web.core.metadata import Character, MetadataDB, get_db
+from web.media.paths import chat_file
+from web.safepath import inside
 from web.types import JsonValue
 from web.uploads.files import image_media_type, link_or_copy, read_image_upload, safe_filename
 
@@ -43,7 +45,12 @@ REF_PREFIX = "char:"
 def char_dir(character_id: int) -> Path:
     """Return the directory holding a character's reference images."""
     # Read config at call time so tests can redirect ROOT_DIR
-    return config.ROOT_DIR / "characters" / str(character_id)
+    return inside(config.ROOT_DIR / "characters", str(int(character_id)))
+
+
+def char_file(character_id: int, name: str) -> Path:
+    """A file in a character's folder (400 for a name with directories in it)."""
+    return inside(char_dir(character_id), safe_filename(name))
 
 
 def image_ref(character_id: int, file: str) -> str:
@@ -58,7 +65,7 @@ def ref_path(ref: str) -> Path | None:
     cid, _, file = ref[len(REF_PREFIX) :].partition("/")
     if not cid.isdigit() or not file or Path(file).name != file or file.startswith("."):
         return None
-    return char_dir(int(cid)) / file
+    return char_file(int(cid), file)
 
 
 def load(ids: list[int] | None, db: MetadataDB | None = None) -> list[Character]:
@@ -362,7 +369,7 @@ def api_update_character(character_id: int, data: CharacterUpdate) -> CharacterI
         if set(keep) != set(data.images):
             raise HTTPException(400, "Unknown image")
         for f in set(char.images) - set(keep):
-            (char_dir(character_id) / f).unlink(missing_ok=True)
+            char_file(character_id, f).unlink(missing_ok=True)
         fields["images"] = keep
     return CharacterInfo.of(_updated(get_db(), character_id, **fields))
 
@@ -420,15 +427,13 @@ async def api_upload_character_image(character_id: int, file: Annotated[UploadFi
 def api_character_image_from_chat(character_id: int, data: CopyFromChat) -> CharacterInfo:
     """Copy an image from a chat (uploaded or generated) into the character."""
     char = _require_char(character_id)
-    return add_image_from_file(
-        char, config.ROOT_DIR / "chat" / safe_filename(data.conversation_id) / safe_filename(data.file)
-    )
+    return add_image_from_file(char, chat_file(data.conversation_id, data.file))
 
 
 @router.get("/{character_id}/images/{filename}")
 def api_character_image(character_id: int, filename: str) -> FileResponse:
     """Serve a character reference image."""
-    path = char_dir(character_id) / safe_filename(filename)  # rejects traversal (400)
+    path = char_file(character_id, filename)  # rejects traversal (400)
     if not get_db().get_character(character_id):  # tenant-scoped: another user's id → not found
         raise HTTPException(404, "Not found")
     if not path.is_file():
