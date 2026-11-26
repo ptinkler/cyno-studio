@@ -27,6 +27,7 @@ from web.core import request_log
 from web.core.metadata import get_db, iso
 from web.media.index import referenced_files
 from web.media.kinds import VIDEO_SUFFIXES
+from web.media.places import media_dirs
 from web.media.thumbs import thumb_response
 from web.uploads.files import read_audio_upload, read_image_upload, read_video_upload, safe_filename, store_deduped
 
@@ -39,7 +40,7 @@ async def api_upload_attachment(conv_id: str, file: UploadFile = File(...)) -> A
     """Save an image attachment for a conversation."""
     require_conv(conv_id)
     content, ext = await read_image_upload(file)
-    return AttachedFile(file=store_deduped(conversation_dir(conv_id), "up_", content, ext))
+    return AttachedFile(file=store_deduped(conversation_dir(conv_id), "up_", content, ext, media_dirs()))
 
 
 @router.post("/conversations/{conv_id}/attachments/video")
@@ -51,7 +52,7 @@ async def api_upload_video_attachment(conv_id: str, file: UploadFile = File(...)
     """
     require_conv(conv_id)
     content, ext = await read_video_upload(file)
-    return AttachedFile(file=store_deduped(conversation_dir(conv_id), "upv_", content, ext))
+    return AttachedFile(file=store_deduped(conversation_dir(conv_id), "upv_", content, ext, media_dirs()))
 
 
 @router.post("/conversations/{conv_id}/attachments/audio")
@@ -63,7 +64,7 @@ async def api_upload_audio_attachment(conv_id: str, file: UploadFile = File(...)
     """
     require_conv(conv_id)
     content, ext = await read_audio_upload(file)
-    return AttachedFile(file=store_deduped(conversation_dir(conv_id), "upa_", content, ext))
+    return AttachedFile(file=store_deduped(conversation_dir(conv_id), "upa_", content, ext, media_dirs()))
 
 
 @router.delete("/conversations/{conv_id}/attachments/{filename}")

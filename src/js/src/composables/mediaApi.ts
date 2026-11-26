@@ -45,6 +45,8 @@ export const uploadMedia = (file: Blob) => api.upload('/api/media/upload', file)
 export const deleteMediaMany = (ids: readonly string[]) => api.post('/api/media/bulk-delete', { ids: [...ids] })
 export const downloadMediaMany = (ids: readonly string[]) =>
   apiDownload('/api/media/bulk-download', { ids: [...ids] }, 'media.zip')
+// Identical files (the same picture in the library, a chat or a character) share one copy on disk
+export const mergeDuplicateFiles = () => api.post('/api/media/merge-duplicates')
 export const deleteMedia = (mediaId: string) => api.delete(`/api/media/${enc(mediaId)}`)
 
 /** Chat generations a content filter blocked: { moderated, black } counts, and clearing them all. */

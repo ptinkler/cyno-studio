@@ -213,6 +213,45 @@ class TestListing:
         same = [i for i in _items(client).values() if i["name"] == "up_same.png"]
         assert len(same) == 1
 
+    def test_using_a_library_picture_in_a_chat_stores_no_second_copy(
+        self, client: TestClient, conv: ChatConversation
+    ) -> None:
+        """The chat's file is a link to the library's: one set of bytes on disk."""
+        lib = _upload(client, "z.png", _png("magenta"))
+        copy = client.post(
+            "/api/media/import", json={"media_id": text(lib, "id"), "target": "chat", "conversation_id": conv.id}
+        )
+        mine = config.ROOT_DIR / "chat" / conv.id / text(copy, "file")
+        theirs = paths_mod.library_dir() / text(lib, "name")
+        assert mine.is_file()
+        assert os.path.samestat(mine.stat(), theirs.stat())
+
+    def test_uploading_what_a_chat_already_has_stores_no_second_copy(
+        self, client: TestClient, conv: ChatConversation
+    ) -> None:
+        """A chat upload, then the same file uploaded to the library (and to a second chat): links, not copies."""
+        first = client.post(
+            f"/api/chat/conversations/{conv.id}/attachments", files={"file": ("a.png", _png("pink"), "image/png")}
+        )
+        in_chat = config.ROOT_DIR / "chat" / conv.id / text(first, "file")
+        lib = _upload(client, "b.png", _png("pink"))
+        assert os.path.samestat(in_chat.stat(), (paths_mod.library_dir() / text(lib, "name")).stat())
+
+    def test_merging_turns_existing_copies_into_one_file(self, client: TestClient, db: MetadataDB) -> None:
+        """Copies made before links were used share their bytes after a merge; different files are left alone."""
+        a, b = db.create_conversation(title="A"), db.create_conversation(title="B")
+        paths: list[Path] = []
+        for conv_id, name, colour in ((a.id, "x.png", "navy"), (b.id, "y.png", "navy"), (b.id, "z.png", "lime")):
+            d = config.ROOT_DIR / "chat" / conv_id
+            d.mkdir(parents=True, exist_ok=True)
+            (d / name).write_bytes(_png(colour))
+            paths.append(d / name)
+        merged = obj(client.post("/api/media/merge-duplicates"))
+        assert merged == {"files": 1, "bytes": paths[0].stat().st_size}
+        assert os.path.samestat(paths[0].stat(), paths[1].stat())
+        assert not os.path.samestat(paths[0].stat(), paths[2].stat())
+        assert obj(client.post("/api/media/merge-duplicates")) == {"files": 0, "bytes": 0}  # nothing left to merge
+
     def test_pictures_that_only_look_alike_are_kept(self, client: TestClient) -> None:
         """Same size, different bytes: both stay."""
         _upload(client, "a.png", _png((1, 2, 3)))

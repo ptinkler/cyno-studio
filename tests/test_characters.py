@@ -708,3 +708,17 @@ class TestReferenceCaps:
         assert params["refs_dropped"] == ["p0.png"]
         settings = dig(client.get(f"/api/chat/conversations/{conv['id']}"), "conversation", "settings", "ref_choices")
         assert settings == choices  # remembered with the chat
+
+
+class TestNoDuplicateImages:
+    """A character keeps one copy of a picture, and a picture taken from a chat is linked, not copied."""
+
+    def test_the_same_picture_twice_is_added_once(self, client: TestClient, chat: None) -> None:
+        """Uploading a reference image the character already has changes nothing."""
+        linh = _make(client)
+        files = {"file": ("a.png", png_bytes(color="rgb(1,1,1)"), "image/png")}
+        first = client.post(f"/api/characters/{linh['id']}/images", files=files)
+        assert len(seq(first, "images")) == 2
+        files = {"file": ("b.png", png_bytes(color="rgb(1,1,1)"), "image/png")}
+        same = client.post(f"/api/characters/{linh['id']}/images", files=files)
+        assert len(seq(same, "images")) == 2  # the second upload was the same picture

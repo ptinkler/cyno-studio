@@ -1665,6 +1665,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/media/merge-duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Api Merge Duplicates
+         * @description Share the disk space of identical files (the same picture in the library, a chat or a character).
+         *
+         *     Every file keeps its name and keeps working; copies become links to one file.
+         */
+        post: operations["api_merge_duplicates_api_media_merge_duplicates_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/media/thumb/{media_id}": {
         parameters: {
             query?: never;
@@ -3391,6 +3413,16 @@ export interface components {
             prompt?: string | null;
             request?: components["schemas"]["JsonObject"] | null;
             response?: components["schemas"]["JsonObject"] | null;
+        };
+        /**
+         * MergedFiles
+         * @description What merging identical files did.
+         */
+        MergedFiles: {
+            /** Bytes */
+            bytes: number;
+            /** Files */
+            files: number;
         };
         /**
          * ModelCatalogue
@@ -7470,6 +7502,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_merge_duplicates_api_media_merge_duplicates_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                user_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MergedFiles"];
                 };
             };
             /** @description Validation Error */

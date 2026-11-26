@@ -33,11 +33,14 @@ from web.auth.users import require_user
 from web.core.metadata import ChatLibraryItem, get_db
 from web.jsonutil import as_str
 from web.media.blank import blocked_generations
+from web.media.dedupe import merge_duplicates
 from web.media.durations import fill_durations
 from web.media.index import all_items, invalidate_list, item_matches, library_items
 from web.media.paths import LibraryEntry, chat_dir, library_dir, library_kind, resolve
+from web.media.places import media_dirs
 from web.media.thumbs import forget_file, thumb_response
 from web.uploads.files import (
+    adopt_deduped,
     read_image_upload,
     read_video_upload,
     safe_filename,
@@ -120,9 +123,27 @@ async def api_upload_media(file: Annotated[UploadFile, File()]) -> LibraryEntry:
     """
     ct = file.content_type or ""
     content, ext = await (read_video_upload(file) if ct.startswith("video/") else read_image_upload(file))
-    name = store_deduped(library_dir(), "up_", content, ext)
+    name = store_deduped(library_dir(), "up_", content, ext, media_dirs())
     invalidate_list()
     return next(i for i in library_items() if i["name"] == name)
+
+
+class MergedFiles(BaseModel):
+    """What merging identical files did."""
+
+    files: int
+    bytes: int
+
+
+@router.post("/merge-duplicates")
+def api_merge_duplicates() -> MergedFiles:
+    """Share the disk space of identical files (the same picture in the library, a chat or a character).
+
+    Every file keeps its name and keeps working; copies become links to one file.
+    """
+    merged = merge_duplicates()
+    invalidate_list()
+    return MergedFiles(files=merged.files, bytes=merged.bytes)
 
 
 class MediaIds(BaseModel):
@@ -307,7 +328,7 @@ def api_import_media(data: ImportMedia) -> ImportedFile | characters.CharacterIn
             raise HTTPException(404, "Conversation not found")
         if origin == "chat" and parts["conversation_id"] == conv_id:
             return ImportedFile(file=path.name)  # already in this chat
-        name = store_deduped(chat_dir(conv_id), "up_", path.read_bytes(), ext)
+        name = adopt_deduped(chat_dir(conv_id), "up_", path, ext)
         invalidate_list()
         return ImportedFile(file=name)
 
