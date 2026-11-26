@@ -24,7 +24,6 @@ import { useStudioRoutes } from '../composables/useStudioRoutes'
 import StudioSidebar from '../components/studio/StudioSidebar.vue'
 import StudioInspector from '../components/studio/StudioInspector.vue'
 import StudioComposer from '../components/studio/StudioComposer.vue'
-import RefPlanStrip from '../components/studio/RefPlanStrip.vue'
 import { useRefPlan } from '../composables/useRefPlan'
 import StudioFeed from '../components/studio/StudioFeed.vue'
 import StudioGenerations from '../components/studio/StudioGenerations.vue'
@@ -394,7 +393,6 @@ onMounted(() => {
           @deleted="active && openThread(active)"
         />
 
-        <RefPlanStrip :refs="refPlan.planned.value" @toggle="refPlan.toggle" />
         <StudioComposer
           ref="composerRef"
           v-model:draft="draft"
@@ -403,6 +401,7 @@ onMounted(() => {
           :sending="sending"
           :can-send="canSend"
           :attachments="attachments"
+          :planned="refPlan.planned.value"
           :uploading="uploading"
           :enhancing="enhancing"
           :estimate="estimate"

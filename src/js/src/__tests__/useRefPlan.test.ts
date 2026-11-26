@@ -60,4 +60,13 @@ describe('useRefPlan', () => {
     p.toggle('char:1/a0')
     expect(p.settings.refChoices.off).toEqual([])
   })
+
+  it('keeps every reference in place when some are switched off', () => {
+    const two = chars({ id: 1, images: ['a0', 'a1'] }, { id: 2, images: ['b0'] })
+    const p = plan('auto', 6, two)
+    const before = p.planned.value.map(r => r.ref)
+    p.toggle('char:1/a0')
+    p.toggle('pin.png')
+    expect(p.planned.value.map(r => r.ref)).toEqual(before)
+  })
 })

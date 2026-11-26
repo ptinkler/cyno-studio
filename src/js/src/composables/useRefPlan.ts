@@ -82,7 +82,11 @@ export function useRefPlan({ convId, messages, characters, attached, settings }:
     }
     const sourceOf = (ref: string): PlannedRef['source'] =>
       ref.startsWith('char:') ? 'character' : pins.includes(ref) ? 'pin' : 'recent'
-    const all = [...plan.sent, ...plan.dropped, ...plan.capped, ...plan.off]
+    // A fixed order, so switching one off or on never moves the others
+    const first = planRefs({ lead: attached.value, chat, characters: characters.value })
+    const order = first.sent
+    const rank = (ref: string): number => order.indexOf(ref)
+    const all = [...plan.sent, ...plan.dropped, ...plan.capped, ...plan.off].sort((a, b) => rank(a) - rank(b))
     return all
       .filter(r => !attached.value.includes(r))
       .map(ref => ({ ref, url: urlOf(ref), state: stateOf(ref), source: sourceOf(ref) }))

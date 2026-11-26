@@ -2,6 +2,7 @@
 import { vTip } from '../../directives/tip'
 import type { Attachment } from '../../composables/useChatAttachments'
 import type { RefItem } from '../../utils/refItems'
+import type { PlannedRef, RefState } from '../../composables/useRefPlan'
 
 const props = withDefaults(
   defineProps<{
@@ -14,6 +15,8 @@ const props = withDefaults(
     mediaMode?: boolean | undefined
     /** Audio mode with a voice-clone model: one reference clip. */
     audioClip?: boolean | undefined
+    /** Pins, recent images and character images the next message may carry; click to switch one off. */
+    planned?: readonly PlannedRef[] | undefined
   }>(),
   {
     attachments: () => [],
@@ -21,6 +24,7 @@ const props = withDefaults(
     insertable: () => ({}),
     mediaMode: false,
     audioClip: false,
+    planned: () => [],
   },
 )
 defineEmits<{
@@ -30,14 +34,23 @@ defineEmits<{
   remove: [attachment: Attachment]
   clear: []
   'remove-unused': []
+  'toggle-plan': [ref: string]
 }>()
+
+const SOURCES = { pin: 'Pinned image', recent: 'Recent chat image', character: 'Character image' }
+const NOTES: Record<RefState, string> = {
+  sent: 'Will be sent. Click to leave it out.',
+  off: 'Left out. Click to send it.',
+  capped: 'Over the Images sent limit, so it is not sent. Click to leave it out for good.',
+  dropped: 'The image model takes fewer references, so it is not sent. Click to leave out another instead.',
+}
 
 const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, RefItem>>): boolean =>
   !attachment.uploading && !!insertable[attachment.key]
 </script>
 
 <template>
-  <div v-if="props.attachments.length || mediaMode || audioClip" class="atts">
+  <div v-if="props.attachments.length || props.planned.length || mediaMode || audioClip" class="atts">
     <div v-if="mediaMode || audioClip" class="plus">
       <button
         v-tip="audioClip ? 'Upload an audio clip' : 'Add references — pick from your media or upload'"
@@ -89,6 +102,17 @@ const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, R
         <img v-else :src="a.preview ?? undefined" alt="" />
       </div>
     </div>
+    <button
+      v-for="r in props.planned"
+      :key="r.ref"
+      v-tip="`${SOURCES[r.source]}. ${NOTES[r.state]}`"
+      class="att plan"
+      :class="r.state"
+      :aria-pressed="r.state === 'sent'"
+      @click="$emit('toggle-plan', r.ref)"
+    >
+      <div class="att-media"><img :src="r.url" alt="" /></div>
+    </button>
   </div>
   <div v-if="props.unused.size" class="unused-note">
     {{ props.unused.size }} attachment{{ props.unused.size === 1 ? '' : 's' }} won't be sent — this model can't use
@@ -131,6 +155,21 @@ const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, R
   position: relative;
   width: 3.4667rem;
   height: 3.4667rem;
+}
+.att.plan {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+.att.plan.sent .att-media {
+  border: 2px solid var(--saccent);
+}
+.att.plan.off,
+.att.plan.capped,
+.att.plan.dropped {
+  opacity: 0.4;
+  filter: grayscale(1);
 }
 .att.unused {
   opacity: 0.4;

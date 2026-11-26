@@ -6,6 +6,7 @@ import type { Attachment } from '../../composables/useChatAttachments'
 import type { Mode } from '../../composables/composerPrefs'
 import { fmtCost, creditsToUsd } from '../../utils/format'
 import { takeFiles } from '../../utils/files'
+import type { PlannedRef } from '../../composables/useRefPlan'
 import { buildRefItems } from '../../utils/refItems'
 import type { RefItem, RefMode } from '../../utils/refItems'
 import { useMentionEditor } from '../../composables/useMentionEditor'
@@ -31,6 +32,8 @@ const props = withDefaults(
     audioInput?: boolean | undefined
     /** The selected video model's reference-to-video config (image/video/audio refs the prompt mentions as [@name]), or null. */
     refMode?: RefMode | null | undefined
+    /** Other references the next message may carry (pins, recent chat images, characters). */
+    planned?: readonly PlannedRef[] | undefined
   }>(),
   {
     modes: () => [],
@@ -46,6 +49,7 @@ const props = withDefaults(
     videoInput: false,
     audioInput: false,
     refMode: null,
+    planned: () => [],
   },
 )
 const emit = defineEmits<{
@@ -57,6 +61,7 @@ const emit = defineEmits<{
   clear: []
   library: []
   enhance: []
+  'toggle-plan': [ref: string]
 }>()
 
 const drag = ref(false)
@@ -64,6 +69,8 @@ const aud = ref<HTMLInputElement | null>(null) // hidden audio-clip file input (
 // Audio mode with a voice-clone model: the only attachment is the reference clip
 const audioClip = computed(() => props.mode === 'audio' && props.audioInput)
 const mediaMode = computed(() => props.mode === 'image' || props.mode === 'video')
+// Where references can be added with the + tile (Auto can make images too)
+const canAdd = computed(() => mediaMode.value || props.mode === 'auto')
 const refsActive = computed(() => !!props.refMode && props.mode === 'video')
 const refItems = computed(() =>
   refsActive.value && props.refMode ? buildRefItems(props.attachments, props.refMode) : [],
@@ -120,7 +127,8 @@ defineExpose({ focusPrompt })
         :attachments="attachments"
         :unused="unused"
         :insertable="refByKey"
-        :media-mode="mediaMode"
+        :media-mode="canAdd"
+        :planned="planned"
         :audio-clip="audioClip"
         @add-clip="aud?.click()"
         @library="emit('library')"
@@ -128,6 +136,7 @@ defineExpose({ focusPrompt })
         @remove="a => emit('remove', a)"
         @clear="emit('clear')"
         @remove-unused="removeUnused"
+        @toggle-plan="ref => emit('toggle-plan', ref)"
       />
 
       <div
@@ -174,7 +183,7 @@ defineExpose({ focusPrompt })
           </div>
         </div>
         <button
-          v-if="!mediaMode && mode !== 'audio'"
+          v-if="!canAdd && mode !== 'audio'"
           v-tip="'Add images'"
           class="clip"
           aria-label="Add images"
