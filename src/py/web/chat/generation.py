@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from http import HTTPStatus
 from pathlib import Path
 
+from fastapi import HTTPException
+
 from web import characters, providers
 from web.chat.catalogue import auto_ratio, model_info
 from web.chat.constants import DEFAULT_IMAGE_LIMIT, IMAGE_EXTS, TITLE_SECONDS
@@ -24,6 +26,7 @@ from web.core.metadata import get_db
 from web.core.metadata.models import Character, ChatMessage
 from web.jsonutil import as_list, as_object
 from web.media.digest import file_digest
+from web.media.paths import chat_file
 from web.providers import ImageRequest, StreamOptions, VideoRequest, openrouter, pollo, stream_chat
 from web.types import JsonValue, VideoJob
 from web.uploads.files import file_to_data_url, is_blank_image
@@ -180,9 +183,11 @@ def ref_key(conv_id: str) -> Callable[[str], str]:
     """A reference's content key: one picture has one key, in a chat or in a character."""
 
     def key(ref: str) -> str:
-        plain = characters.ref_path(ref) is None and Path(ref).name == ref and not ref.startswith(".")
-        path = characters.ref_path(ref) or (conversation_dir(conv_id) / ref if plain else None)
-        return (path and file_digest(path)) or ref
+        try:
+            path = characters.ref_path(ref) or chat_file(conv_id, ref)
+        except HTTPException:  # not a file name: it stands for itself
+            return ref
+        return file_digest(path) or ref
 
     return key
 

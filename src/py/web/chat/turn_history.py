@@ -3,6 +3,8 @@
 import logging
 from datetime import datetime
 
+from fastapi import HTTPException
+
 from web import characters
 from web.characters import CharacterInfo
 from web.chat.catalogue import RefMode
@@ -16,13 +18,14 @@ from web.chat.generation import (
     plan_refs,
     ref_key,
 )
-from web.chat.helpers import conversation_dir, effective_ids
+from web.chat.helpers import effective_ids
 from web.chat.schemas import CharactersEvent
 from web.chat.tools import (
     SYSTEM_PROMPT,
 )
 from web.chat.turn_base import TurnBase
 from web.core.metadata.models import Character, ChatInstruction, ChatMessage
+from web.media.paths import chat_file
 from web.types import JsonValue
 
 log = logging.getLogger(__name__)
@@ -57,11 +60,14 @@ class HistoryTurn(TurnBase):
 
     def _chosen_images(self) -> list[str]:
         """The chat's images the user switched on in the composer's References bar."""
-        return [
-            f
-            for f in self.s.ref_choices.on
-            if not f.startswith(characters.REF_PREFIX) and (conversation_dir(self.conv_id) / f).is_file()
-        ]
+        return [f for f in self.s.ref_choices.on if not f.startswith(characters.REF_PREFIX) and self._in_chat(f)]
+
+    def _in_chat(self, file: str) -> bool:
+        """Whether this chat's folder has the file (a name with directories in it never does)."""
+        try:
+            return chat_file(self.conv_id, file).is_file()
+        except HTTPException:
+            return False
 
     def _latest_video(self) -> str | None:
         """The most recent finished video (this turn first, then history)."""
