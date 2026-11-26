@@ -32,6 +32,9 @@ export const patchConversation = (convId: string, data: Schemas['ConversationUpd
   api.patch(`/api/chat/conversations/${enc(convId)}`, data)
 export const deleteConversation = (convId: string, { deleteMedia = true }: { deleteMedia?: boolean } = {}) =>
   api.delete(`/api/chat/conversations/${enc(convId)}?delete_media=${String(deleteMedia)}`)
+// What deleting the chat also removes: { characters } made in it and never saved
+export const fetchConversationDeleteInfo = (convId: string) =>
+  api.get(`/api/chat/conversations/${enc(convId)}/delete-info`)
 export const fetchChatMessage = (messageId: number) => api.get(`/api/chat/messages/${id(messageId)}`)
 // Show the branch through this message (edits/retries are kept as sibling branches)
 export const switchChatBranch = (convId: string, messageId: number) =>

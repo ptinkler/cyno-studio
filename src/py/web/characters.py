@@ -32,7 +32,7 @@ from web.core.metadata import Character, MetadataDB, get_db
 from web.media.paths import chat_file
 from web.safepath import inside
 from web.types import JsonValue
-from web.uploads.files import image_media_type, read_image_upload, safe_filename
+from web.uploads.files import image_media_type, link_or_copy, read_image_upload, safe_filename
 
 _MIN_WORDS_FOR_SHORT_NAME = 2  # a first name only stands in for a name with more than one word
 
@@ -392,21 +392,27 @@ def api_promote_character(character_id: int) -> CharacterInfo:
     return CharacterInfo.of(_updated(get_db(), character_id, conversation_id=None))
 
 
-def _add_image(char: Character, content: bytes, ext: str) -> CharacterInfo:
+def _add_image(char: Character, content: bytes, ext: str, source: Path | None = None) -> CharacterInfo:
+    """Add a picture to a character, unless it already has this very picture; `source` is linked, not copied."""
+    if any((path := char_dir(char.id) / f).is_file() and path.read_bytes() == content for f in char.images):
+        return CharacterInfo.of(char)
     if len(char.images) >= MAX_IMAGES:
         raise HTTPException(400, f"A character can have up to {MAX_IMAGES} images")
     name = f"img_{uuid.uuid4().hex[:12]}{ext}"
     d = char_dir(char.id)
     d.mkdir(parents=True, exist_ok=True)
-    (d / name).write_bytes(content)
+    if source:
+        link_or_copy(source, d / name)
+    else:
+        (d / name).write_bytes(content)
     return CharacterInfo.of(_updated(get_db(), char.id, images=[*char.images, name]))
 
 
 def add_image_from_file(char: Character, source: Path) -> CharacterInfo:
-    """Copy an image file into the character (used by the media library too)."""
+    """Add an image file to the character, linked to the original rather than copied (used by the media library too)."""
     if not source.is_file() or not image_media_type(source):
         raise HTTPException(404, "Image not found")
-    return _add_image(char, source.read_bytes(), source.suffix.lower())
+    return _add_image(char, source.read_bytes(), source.suffix.lower(), source)
 
 
 @router.post("/{character_id}/images")

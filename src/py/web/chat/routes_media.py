@@ -24,11 +24,12 @@ from web.chat.schemas import (
 )
 from web.core import request_log
 from web.core.metadata import get_db, iso
-from web.media.index import referenced_files
+from web.media.index import remove_unused_file
 from web.media.kinds import VIDEO_SUFFIXES
 from web.media.paths import chat_file
+from web.media.places import media_dirs
 from web.media.thumbs import thumb_response
-from web.uploads.files import read_audio_upload, read_image_upload, read_video_upload, safe_filename, store_deduped
+from web.uploads.files import read_audio_upload, read_image_upload, read_video_upload, store_deduped
 
 if TYPE_CHECKING:
     from web.types import JsonValue
@@ -39,7 +40,7 @@ async def api_upload_attachment(conv_id: str, file: UploadFile = File(...)) -> A
     """Save an image attachment for a conversation."""
     require_conv(conv_id)
     content, ext = await read_image_upload(file)
-    return AttachedFile(file=store_deduped(conversation_dir(conv_id), "up_", content, ext))
+    return AttachedFile(file=store_deduped(conversation_dir(conv_id), "up_", content, ext, media_dirs()))
 
 
 @router.post("/conversations/{conv_id}/attachments/video")
@@ -51,7 +52,7 @@ async def api_upload_video_attachment(conv_id: str, file: UploadFile = File(...)
     """
     require_conv(conv_id)
     content, ext = await read_video_upload(file)
-    return AttachedFile(file=store_deduped(conversation_dir(conv_id), "upv_", content, ext))
+    return AttachedFile(file=store_deduped(conversation_dir(conv_id), "upv_", content, ext, media_dirs()))
 
 
 @router.post("/conversations/{conv_id}/attachments/audio")
@@ -63,7 +64,7 @@ async def api_upload_audio_attachment(conv_id: str, file: UploadFile = File(...)
     """
     require_conv(conv_id)
     content, ext = await read_audio_upload(file)
-    return AttachedFile(file=store_deduped(conversation_dir(conv_id), "upa_", content, ext))
+    return AttachedFile(file=store_deduped(conversation_dir(conv_id), "upa_", content, ext, media_dirs()))
 
 
 @router.delete("/conversations/{conv_id}/attachments/{filename}")
@@ -73,18 +74,11 @@ def api_discard_attachment(conv_id: str, filename: str) -> Discarded:
     Files any message or library entry still uses are kept.
     """
     require_conv(conv_id)
-    name = safe_filename(filename)
-    if not name.startswith(("up_", "upv_", "upa_")):
+    if not filename.startswith(("up_", "upv_", "upa_")):
         return Discarded(deleted=False)
     db = get_db()
-    in_use = any(name in referenced_files(i) for m in db.get_chat_messages(conv_id) for i in m.media) or any(
-        lib.conversation_id == conv_id and name in referenced_files(lib.item) for lib in db.list_chat_library()
-    )
-    path = conversation_dir(conv_id) / name
-    if in_use or not path.is_file():
-        return Discarded(deleted=False)
-    path.unlink()
-    return Discarded(deleted=True)
+    path = chat_file(conv_id, filename)
+    return Discarded(deleted=path.is_file() and remove_unused_file(db, conv_id, path))
 
 
 @router.get("/media/{conv_id}/{filename}")
@@ -182,5 +176,5 @@ def api_delete_library_item(media_id: str) -> DeletedLibraryItem:
     db.delete_chat_library_item(media_id)
     file = lib.item.get("file")
     if isinstance(file, str):
-        chat_file(lib.conversation_id, file).unlink(missing_ok=True)
+        remove_unused_file(db, lib.conversation_id, chat_file(lib.conversation_id, file))
     return DeletedLibraryItem(deleted=media_id)
