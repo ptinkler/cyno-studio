@@ -132,7 +132,6 @@ class MediaCard(BaseModel):
     credits: int | None = None  # Pollo bills in credits instead
     request: JsonObject | None = None
     response: JsonObject | None = None
-    pinned: bool | None = None  # sent as a reference with every new image on the branch
     favourite: bool | None = None
     versions: list[MediaVersion] | None = None  # pictures this card replaced
     version_shown: int | None = None  # where the live one sits among them (missing = last)

@@ -18,9 +18,10 @@ export const showChatTextVersion = (messageId: number, index: number) =>
 // Make one of a card's pictures the real one (0 = first): the chat uses it from then on
 export const showChatMediaVersion = (messageId: number, mediaId: string, index: number) =>
   api.post(`/api/chat/messages/${id(messageId)}/media/${enc(mediaId)}/version`, { index })
-// Pinned images go to the image model as references with every new image on this branch
-export const pinChatMedia = (messageId: number, mediaId: string, pinned: boolean) =>
-  api.post(`/api/chat/messages/${id(messageId)}/media/${enc(mediaId)}/pin`, { pinned })
 // Favourite (★) a generation: a bookmark that surfaces it in the Favourites gallery (images + videos)
 export const favouriteChatMedia = (messageId: number, mediaId: string, favourite: boolean) =>
   api.post(`/api/chat/messages/${id(messageId)}/media/${enc(mediaId)}/favourite`, { favourite })
+
+// Which of these references are one picture (a character's image that is also in the chat): same key, same picture
+export const fetchRefKeys = (convId: string, refs: string[]) =>
+  api.post(`/api/chat/conversations/${enc(convId)}/ref-keys`, { refs })

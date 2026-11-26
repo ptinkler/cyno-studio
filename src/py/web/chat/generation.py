@@ -23,6 +23,7 @@ from web.core import request_log
 from web.core.metadata import get_db
 from web.core.metadata.models import Character, ChatMessage
 from web.jsonutil import as_list, as_object
+from web.media.digest import file_digest
 from web.providers import ImageRequest, StreamOptions, VideoRequest, openrouter, pollo, stream_chat
 from web.types import JsonValue, VideoJob
 from web.uploads.files import file_to_data_url, is_blank_image
@@ -132,6 +133,8 @@ class RefLimits:
     after: int | None = None
     max_refs: int | None = None
     choices: RefChoices | None = None
+    # A ref's content key: refs with the same key are the same picture and only the first goes (None = by name)
+    key: Callable[[str], str] | None = None
 
 
 def plan_refs(chat_refs: list[str], chars: list[Character], limits: RefLimits) -> tuple[list[str], list[str]]:
@@ -146,15 +149,18 @@ def plan_refs(chat_refs: list[str], chars: list[Character], limits: RefLimits) -
     characters' other images. Images the user switched off never go.
     """
     image_limit, after, max_refs, choices = limits.image_limit, limits.after, limits.max_refs, limits.choices
+    key: Callable[[str], str] = limits.key or str
     on: list[str] = choices.on if choices else []
-    off: set[str] = set(choices.off) if choices else set()
+    # Switching one off switches off every copy of the same picture
+    off_keys: set[str] = {key(r) for r in choices.off} if choices else set()
+    off = {r for r in [*chat_refs, *characters.reference_refs(chars)] if key(r) in off_keys}
     kept = [r for r in dedupe(chat_refs) if r not in off]
     lead = kept if after is None else [r for r in dedupe(chat_refs[:after]) if r not in off]
     split = min(len(lead), len(kept))
     every = characters.reference_refs(chars, skip=off)
     mains = characters.reference_refs(chars, per_character=1, skip=off)
     candidates = set(kept) | set(every)
-    ordered = dedupe(kept[:split] + [r for r in on if r in candidates] + mains + kept[split:] + every)
+    ordered = dedupe_by(kept[:split] + [r for r in on if r in candidates] + mains + kept[split:] + every, key)
     ordered = ordered[:image_limit]  # the slider is a hard cap; the priority order decides what survives
     if max_refs is None:
         return ordered, []
@@ -168,6 +174,17 @@ def param_characters(params: Mapping[str, JsonValue]) -> list[Character]:
     if not ids or len(wanted) != len(ids):  # anything but whole-number ids means the params are not ours
         return []
     return characters.load(wanted, get_db())
+
+
+def ref_key(conv_id: str) -> Callable[[str], str]:
+    """A reference's content key: one picture has one key, in a chat or in a character."""
+
+    def key(ref: str) -> str:
+        plain = characters.ref_path(ref) is None and Path(ref).name == ref and not ref.startswith(".")
+        path = characters.ref_path(ref) or (conversation_dir(conv_id) / ref if plain else None)
+        return (path and file_digest(path)) or ref
+
+    return key
 
 
 def _ref_file(conv_id: str, ref: str) -> Path:
@@ -380,6 +397,18 @@ def is_conversational(image_model: str | None) -> bool:
 def dedupe(files: list[str]) -> list[str]:
     """Remove duplicate filenames while preserving their original order."""
     return list(dict.fromkeys(files))
+
+
+def dedupe_by(refs: list[str], key: Callable[[str], str]) -> list[str]:
+    """Keep the first of each picture: refs with the same `key` (content) are one."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for ref in refs:
+        k = key(ref)
+        if k not in seen:
+            seen.add(k)
+            out.append(ref)
+    return out
 
 
 def _history_tool_call(item: dict[str, JsonValue]) -> dict[str, JsonValue]:

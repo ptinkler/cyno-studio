@@ -209,55 +209,77 @@ class TestConsistencyReferences:
         _got, item = self._run(client, conv, chat, monkeypatch, {"prompt": "make it night", "source_image": "latest"})
         assert jp.dig(item, "params", "refs") == ["g1.png", "g0.png"]
 
-    def _pin(
-        self, client: TestClient, db: MetadataDB, conv: ConversationOut, media_id: str, pinned: bool = True
-    ) -> JsonValue:
-        msg = next(m for m in db.get_chat_messages(conv["id"]) if any(i["id"] == media_id for i in m.media))
-        r = client.post(f"/api/chat/messages/{msg.id}/media/{media_id}/pin", json={"pinned": pinned})
-        assert r.status_code == 200
-        return jp.dig(r)
-
-    def test_pinned_images_go_ahead_of_the_recent_ones(
+    def test_chosen_images_go_ahead_of_the_recent_ones(
         self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Pins keep their place even when they are old."""
+        """An image switched on in the References bar keeps its place even when it is old."""
         self._prior_images(chat, db, conv, 3)
-        out = self._pin(client, db, conv, "g0")
-        assert jp.dig(out, "media", 0, "pinned") is True
-        got, item = self._run(client, conv, chat, monkeypatch, {"prompt": "next scene"})
+        got, item = self._run(
+            client, conv, chat, monkeypatch, {"prompt": "next scene"}, ref_choices={"on": ["g0.png"], "off": []}
+        )
         assert jp.dig(item, "params", "refs") == ["g0.png", "g2.png", "g1.png"]
         assert len(jp.must(got.input_images)) == 3
 
-    def test_order_is_edit_source_then_pins_then_recent_picks(
+    def test_order_is_edit_source_then_chosen_then_recent_picks(
         self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Also the priority when a model takes fewer images (Venice edit models keep the first N)."""
         self._prior_images(chat, db, conv, 3)
-        self._pin(client, db, conv, "g0")
         _got, item = self._run(
             client,
             conv,
             chat,
             monkeypatch,
             {"prompt": "make it night", "source_image": "latest"},
+            ref_choices={"on": ["g0.png"], "off": []},
         )
         assert jp.dig(item, "params", "refs") == ["g2.png", "g0.png", "g1.png"]
         assert jp.dig(item, "params", "ref_args") == {"source_image": "latest"}
 
-    def test_an_unpinned_image_loses_its_place(
+    def test_a_switched_off_image_never_goes(
         self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """With room for one, the newest wins once the old pin is gone."""
+        """With room for one, the newest wins; switching it off hands the place to the next."""
         self._prior_images(chat, db, conv, 3)
-        self._pin(client, db, conv, "g0")
-        self._pin(client, db, conv, "g0", pinned=False)
-        _got, item = self._run(client, conv, chat, monkeypatch, {"prompt": "next"}, image_limit=1)
-        assert jp.dig(item, "params", "refs") == ["g2.png"]
+        _got, item = self._run(
+            client,
+            conv,
+            chat,
+            monkeypatch,
+            {"prompt": "next"},
+            image_limit=1,
+            ref_choices={"on": [], "off": ["g2.png"]},
+        )
+        assert jp.dig(item, "params", "refs") == ["g1.png"]
 
-    def test_pinned_upload_is_a_reference_in_image_mode(
+    def test_the_same_picture_under_two_names_goes_once(
         self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that pinned upload is a reference in image mode."""
+        """A copy of an image (same bytes, another file) is not sent twice."""
+        self._prior_images(chat, db, conv, 2)
+        folder = chat_pkg.conversation_dir(conv["id"])
+        (folder / "g1.png").write_bytes((folder / "g0.png").read_bytes())
+        _got, item = self._run(client, conv, chat, monkeypatch, {"prompt": "next"})
+        assert jp.dig(item, "params", "refs") == ["g1.png"]
+
+    def test_ref_keys_match_for_the_same_picture_only(
+        self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB
+    ) -> None:
+        """The References bar asks which refs are one picture; a path that leaves the chat's folder is no file."""
+        self._prior_images(chat, db, conv, 2)
+        folder = chat_pkg.conversation_dir(conv["id"])
+        (folder / "copy.png").write_bytes((folder / "g0.png").read_bytes())
+        refs = ["g0.png", "copy.png", "g1.png", "../../etc/passwd", "missing.png"]
+        r = client.post(f"/api/chat/conversations/{conv['id']}/ref-keys", json={"refs": refs})
+        keys = jp.obj(r, "keys")
+        assert keys["g0.png"] == keys["copy.png"] != keys["g1.png"]
+        assert keys["../../etc/passwd"] == "../../etc/passwd"
+        assert keys["missing.png"] == "missing.png"
+
+    def test_chosen_upload_is_a_reference_in_image_mode(
+        self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Image mode sends no chat images of its own; the ones switched on go."""
         (chat_pkg.conversation_dir(conv["id"]) / "u.png").write_bytes(png_bytes())
         db.add_chat_message(
             conv["id"],
@@ -266,44 +288,30 @@ class TestConsistencyReferences:
             media=[{"id": "u1", "kind": "image", "source": "upload", "status": "done", "file": "u.png"}],
         )
         db.add_chat_message(conv["id"], "assistant", "Nice photo.")
-        self._pin(client, db, conv, "u1")
         monkeypatch.setattr(openrouter, "generate_image", ImageApiSpy())
         ev = sse_events(
             client.post(
                 f"/api/chat/conversations/{conv['id']}/messages",
-                json={"content": "Linh at the beach", **SETTINGS, "mode": "image"},
+                json={
+                    "content": "Linh at the beach",
+                    **SETTINGS,
+                    "mode": "image",
+                    "ref_choices": {"on": ["u.png", "nope.png"], "off": []},
+                },
             )
         )
         assert jp.dig(ev[-1], "message", "media", 0, "params", "refs") == ["u.png"]
 
-    def test_pins_ignored_for_image_models_without_reference_support(
+    def test_chosen_images_ignored_for_image_models_without_reference_support(
         self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that pins ignored for image models without reference support."""
+        """A model that takes no references gets none, chosen or not."""
         chat_catalogue.seed_models(
             {"text": [], "video": [], "image": [{"id": "i/model", "input_modalities": ["text"]}]}
         )
         self._prior_images(chat, db, conv, 1)
-        self._pin(client, db, conv, "g0")
-        got, _item = self._run(client, conv, chat, monkeypatch, {"prompt": "next"})
+        got, _item = self._run(client, conv, chat, monkeypatch, {"prompt": "next"}, ref_choices={"on": ["g0.png"]})
         assert got.input_images is None
-
-    def test_only_finished_images_can_be_pinned(
-        self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB
-    ) -> None:
-        """Test that only finished images can be pinned."""
-        db.add_chat_message(conv["id"], "user", "go")
-        msg = db.add_chat_message(
-            conv["id"],
-            "assistant",
-            "",
-            media=[
-                {"id": "v", "kind": "video", "source": "generated", "status": "done", "file": "v.mp4", "prompt": "p"},
-                {"id": "e", "kind": "image", "source": "generated", "status": "error", "prompt": "p"},
-            ],
-        )
-        for mid in ("v", "e", "nope"):
-            assert client.post(f"/api/chat/messages/{msg.id}/media/{mid}/pin", json={"pinned": True}).status_code == 404
 
     def test_history_replays_reference_choices(
         self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch

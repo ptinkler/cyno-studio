@@ -13,7 +13,7 @@ describe('planRefs (mirrors plan_refs in web/chat/generation.py)', () => {
     expect(plan.dropped).toEqual([])
   })
 
-  it("keeps room for chat images: each character's main image, then pins, then the rest", () => {
+  it("keeps room for chat images: each character's main image, then the chat images, then the rest", () => {
     const plan = planRefs({ chat: ['p0', 'p1'], characters: [A, B], maxRefs: 6 })
     expect(plan.sent).toEqual([a(0), b(0), 'p0', 'p1', a(1), b(1)])
     expect(plan.dropped).toEqual([a(2), b(2)])
@@ -42,5 +42,14 @@ describe('planRefs (mirrors plan_refs in web/chat/generation.py)', () => {
   it('keeps attachments ahead even when one is switched off', () => {
     const plan = planRefs({ lead: ['x', 'y'], chat: ['p0'], characters: [A], choices: { off: ['x'] } })
     expect(plan.sent.slice(0, 2)).toEqual(['y', a(0)])
+  })
+
+  it('sends a picture kept under two names once, and switching one off switches both off', () => {
+    const key = (r: string): string => (r === 'p0' || r === a(0) ? 'same' : r)
+    const plan = planRefs({ chat: ['p0', 'p1'], characters: [A], key })
+    expect(plan.sent).toEqual([a(0), 'p1', a(1), a(2)])
+    const off = planRefs({ chat: ['p0', 'p1'], characters: [A], key, choices: { off: ['p0'] } })
+    expect(off.sent).toEqual([a(1), 'p1', a(2)])
+    expect(off.off).toEqual(['p0', a(0)])
   })
 })

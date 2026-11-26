@@ -24,7 +24,7 @@ from web.chat.errors import (
     ToolImageRequiredError,
     VideoInputRequiredError,
 )
-from web.chat.generation import RefLimits, plan_refs
+from web.chat.generation import RefLimits, plan_refs, ref_key
 from web.chat.helpers import shown_message
 from web.chat.schemas import DoneEvent, ErrorEvent, TitleEvent
 from web.chat.turn_generation import ImageSpec, VideoSpec
@@ -101,9 +101,13 @@ class Turn(ToolsTurn):
         ]
         if self._accepts_refs():
             limits = RefLimits(
-                self.s.image_limit, after=len(refs), max_refs=self._max_refs(), choices=self.s.ref_choices
+                self.s.image_limit,
+                after=len(refs),
+                max_refs=self._max_refs(),
+                choices=self.s.ref_choices,
+                key=ref_key(self.conv_id),
             )
-            refs, dropped = plan_refs(refs + self._pinned_images(), chars, limits)
+            refs, dropped = plan_refs(refs + self._chosen_images(), chars, limits)
         self._generate_image(ImageSpec(prompt, self.s.image_options.aspect_ratio, refs, chars=chars, dropped=dropped))
         return None
 

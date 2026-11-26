@@ -40,14 +40,8 @@ export {
   fetchDeleteInfo,
 } from './chatConversationsApi'
 
-// Media-card actions: pin, favourite, regenerate, versions
-export {
-  regenerateChatMedia,
-  showChatTextVersion,
-  showChatMediaVersion,
-  pinChatMedia,
-  favouriteChatMedia,
-} from './chatMediaApi'
+// Media-card actions: favourite, regenerate, versions
+export { regenerateChatMedia, showChatTextVersion, showChatMediaVersion, favouriteChatMedia } from './chatMediaApi'
 
 // The model catalogue is typed in chatModelsApi.ts
 export { fetchChatModels } from './chatModelsApi'

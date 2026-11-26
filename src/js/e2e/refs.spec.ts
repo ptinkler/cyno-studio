@@ -1,8 +1,8 @@
 import { expect, test } from './fixtures'
 import { dropImages, newThread, pickModel, replies, send, setMode } from './studio'
 
-test('Images sent at 0 keeps pinned images out of a reference video; attachments still go', async ({ page, mock }) => {
-  // Regression: reference-to-video models got every pinned image, whatever the slider said
+test('Images sent at 0 keeps chosen images out of a reference video; attachments still go', async ({ page, mock }) => {
+  // Regression: reference-to-video models got every chosen image, whatever the slider said
   await newThread(page)
   await pickModel(page, 'Image', 'Venice: Mock Image')
   await pickModel(page, 'Video', 'Venice: Mock Ref Video (refs→video)')
@@ -10,9 +10,9 @@ test('Images sent at 0 keeps pinned images out of a reference video; attachments
   await send(page, 'a castle')
   const card = replies(page).last().locator('.media-item.image')
   await expect(card.locator('img')).toBeVisible()
-  await card.hover()
-  await card.locator('.pin-btn').click()
-  await expect(card.locator('.pin-btn')).toHaveAttribute('aria-pressed', 'true')
+  const tile = page.locator('.compose .att.plan').first()
+  await tile.click()
+  await expect(tile).toHaveAttribute('aria-pressed', 'true')
 
   await setMode(page, 'Video')
   await page.locator('.isection', { hasText: 'Images sent' }).locator('input[type=range]').last().fill('0')
@@ -23,4 +23,23 @@ test('Images sent at 0 keeps pinned images out of a reference video; attachments
   await expect.poll(async () => (await mock.requests('/video/queue')).length).toBe(1)
   const [queued] = await mock.requests('/video/queue')
   expect((queued?.body as { reference_image_urls?: unknown[] }).reference_image_urls).toHaveLength(1)
+})
+
+test('the References bar: a click picks an image, the chip folds the bar away', async ({ page }) => {
+  await newThread(page)
+  await pickModel(page, 'Image', 'Venice: Mock Image')
+  await setMode(page, 'Image')
+  await send(page, 'a castle')
+  await expect(replies(page).last().locator('.media-item.image img')).toBeVisible()
+  const tile = page.locator('.compose .att.plan').first()
+  await expect(tile).toHaveAttribute('aria-pressed', 'false')
+  await tile.click()
+  await expect(tile).toHaveAttribute('aria-pressed', 'true')
+  await tile.click()
+  await expect(tile).toHaveAttribute('aria-pressed', 'false')
+  const chip = page.locator('.compose .refchip')
+  await chip.click()
+  await expect(page.locator('.compose .att.plan')).toHaveCount(0)
+  await chip.click()
+  await expect(page.locator('.compose .att.plan')).toHaveCount(1)
 })

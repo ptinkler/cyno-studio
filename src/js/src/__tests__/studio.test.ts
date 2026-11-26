@@ -130,7 +130,6 @@ const SURFACE = [
   'forkFrom',
   'regenerateMedia',
   'applyGenerationSettings',
-  'pinMedia',
   'stop',
   'deleteExchange',
   'useImage',

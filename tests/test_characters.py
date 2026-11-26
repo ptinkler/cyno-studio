@@ -1,5 +1,6 @@
 """Tests for web.characters — characters shared by chat and generations."""
 
+import itertools
 import json
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -61,6 +62,15 @@ class ChatCapture:
     tools: Tools = None
 
 
+_colours = itertools.count()
+
+
+def _next_colour() -> str:
+    """A colour no earlier image had, so no two test pictures are the same bytes."""
+    n = next(_colours) + 1
+    return f"rgb({n % 256},{n // 256 % 256},7)"
+
+
 def _make(
     client: TestClient,
     name: str = "Linh",
@@ -73,7 +83,7 @@ def _make(
     for i in range(images):
         reply = client.post(
             f"/api/characters/{integer(reply, 'id')}/images",
-            files={"file": (f"{i}.png", png_bytes(color=f"rgb({i * 50},0,0)"), "image/png")},
+            files={"file": (f"{i}.png", png_bytes(color=_next_colour()), "image/png")},
         )
     return CharacterOut(
         id=integer(reply, "id"),
@@ -339,15 +349,15 @@ class TestInChat:
         assert "Linh:" in got.prompt
         assert "- Bao" in got.prompt
 
-    def test_main_character_images_come_before_pins_and_recent_picks(
+    def test_chosen_images_come_before_the_character_mains(
         self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The priority when a model takes fewer images than that (see TestReferenceCaps)."""
+        """An image the user switched on leads the characters' mains (see TestReferenceCaps for fewer slots)."""
         linh = _make(client)
         self._attach(client, conv, linh)
-        (chat_pkg.conversation_dir(conv["id"]) / "g.png").write_bytes(png_bytes())
+        (chat_pkg.conversation_dir(conv["id"]) / "g.png").write_bytes(png_bytes(color="blue"))
         db.add_chat_message(conv["id"], "user", "x")
-        msg = db.add_chat_message(
+        db.add_chat_message(
             conv["id"],
             "assistant",
             "",
@@ -355,12 +365,11 @@ class TestInChat:
                 {"id": "g", "kind": "image", "source": "generated", "status": "done", "file": "g.png", "prompt": "p"}
             ],
         )
-        client.post(f"/api/chat/messages/{msg.id}/media/g/pin", json={"pinned": True})
         replies = iter([tool_chunks("generate_image", {"prompt": "Linh", "characters": ["Linh"]}), text_chunks("ok")])
         monkeypatch.setattr(openrouter, "stream_chat", stub(lambda: next(replies)))
         _capture_images(monkeypatch)
-        ev = sse_events(_post(client, conv, "go"))
-        assert _params(ev)["refs"] == [f"char:{linh['id']}/{linh['images'][0]}", "g.png"]
+        ev = sse_events(_post(client, conv, "go", ref_choices={"on": ["g.png"], "off": []}))
+        assert _params(ev)["refs"] == ["g.png", f"char:{linh['id']}/{linh['images'][0]}"]
 
     def test_character_refs_are_shared_round_robin(self, chat: None, client: TestClient) -> None:
         """Test that character refs are shared round robin."""
@@ -528,8 +537,8 @@ class TestUseByName:
         enum = _find_tool(tools_seen[1], "generate_image")
         assert "Mai" in seq(enum, "function", "parameters", "properties", "characters", "items", "enum")
         assert "Freckles" in got.prompt
-        # Her image first, then the chat's latest picture (the one she was made from)
-        assert _params(ev)["refs"] == [f"char:{mai.id}/{mai.images[0]}", "g.png"]
+        # Her image is the chat's latest picture (she was made from it), so it goes once
+        assert _params(ev)["refs"] == [f"char:{mai.id}/{mai.images[0]}"]
 
     def _chat_image(self, chat: None, conv: ConversationOut, db: MetadataDB) -> None:
         (chat_pkg.conversation_dir(conv["id"]) / "g.png").write_bytes(png_bytes())
@@ -597,7 +606,7 @@ class TestUseByName:
 
 
 def _pin_media(n: int) -> list[dict[str, JsonValue]]:
-    """``n`` pinned generated-image media items, p0 to p{n-1}."""
+    """``n`` generated-image media items, p0 to p{n-1}."""
     return [
         {
             "id": f"p{i}",
@@ -606,7 +615,6 @@ def _pin_media(n: int) -> list[dict[str, JsonValue]]:
             "status": "done",
             "file": f"p{i}.png",
             "prompt": "x",
-            "pinned": True,
         }
         for i in range(n)
     ]
@@ -621,18 +629,21 @@ class TestReferenceCaps:
         """Test that the slider caps characters and chat images together, mains first."""
         linh, bao = _make(client, images=5), _make(client, name="Bao", images=4)
         client.patch(f"/api/chat/conversations/{conv['id']}", json={"character_ids": [linh["id"], bao["id"]]})
-        # 8 pinned chat images and 9 character images: the slider's number go in all
+        # 4 chosen chat images and 9 character images: the slider's number go in all
         db.add_chat_message(conv["id"], "user", "pics")
         for i in range(8):
-            (chat_pkg.conversation_dir(conv["id"]) / f"p{i}.png").write_bytes(png_bytes())
+            (chat_pkg.conversation_dir(conv["id"]) / f"p{i}.png").write_bytes(png_bytes(color=f"rgb({i * 20},90,90)"))
         db.add_chat_message(conv["id"], "assistant", "ok", media=_pin_media(8))
         got = _capture_images(monkeypatch)
-        ev = sse_events(_post(client, conv, "both", mode="image"))
+        choices = {"on": [f"p{i}.png" for i in range(4)], "off": []}
+        ev = sse_events(_post(client, conv, "both", mode="image", ref_choices=choices))
         refs = [text(r) for r in seq(_params(ev), "refs")]
-        char_refs = [r for r in refs if r.startswith("char:")]
         assert len(refs) == chat_constants.DEFAULT_IMAGE_LIMIT
-        assert refs[:2] == [f"char:{linh['id']}/{linh['images'][0]}", f"char:{bao['id']}/{bao['images'][0]}"]
-        assert len(char_refs) == 2  # the mains; the other four slots go to chat images
+        assert refs[:4] == ["p0.png", "p1.png", "p2.png", "p3.png"]
+        assert refs[4:] == [
+            f"char:{linh['id']}/{linh['images'][0]}",
+            f"char:{bao['id']}/{bao['images'][0]}",
+        ]  # the mains
         assert len(must(got.input_images)) == chat_constants.DEFAULT_IMAGE_LIMIT
 
     def test_slider_raises_the_chat_image_cap(
@@ -641,16 +652,17 @@ class TestReferenceCaps:
         """Test that slider raises the chat image cap."""
         db.add_chat_message(conv["id"], "user", "pics")
         for i in range(8):
-            (chat_pkg.conversation_dir(conv["id"]) / f"p{i}.png").write_bytes(png_bytes())
+            (chat_pkg.conversation_dir(conv["id"]) / f"p{i}.png").write_bytes(png_bytes(color=f"rgb({i * 20},90,90)"))
         db.add_chat_message(conv["id"], "assistant", "ok", media=_pin_media(8))
         monkeypatch.setattr(openrouter, "generate_image", stub(lambda: ([(png_bytes(), "image/png")], None)))
-        ev = sse_events(_post(client, conv, "go", mode="image", image_limit=None))
+        choices = {"on": [f"p{i}.png" for i in range(8)], "off": []}
+        ev = sse_events(_post(client, conv, "go", mode="image", image_limit=None, ref_choices=choices))
         assert len(seq(_params(ev), "refs")) == 8
 
     def _pins(self, chat: None, db: MetadataDB, conv: ConversationOut, n: int) -> None:
         db.add_chat_message(conv["id"], "user", "pics")
         for i in range(n):
-            (chat_pkg.conversation_dir(conv["id"]) / f"p{i}.png").write_bytes(png_bytes())
+            (chat_pkg.conversation_dir(conv["id"]) / f"p{i}.png").write_bytes(png_bytes(color=f"rgb({i * 20},90,90)"))
         db.add_chat_message(conv["id"], "assistant", "ok", media=_pin_media(n))
 
     def _send_image(
@@ -678,16 +690,17 @@ class TestReferenceCaps:
     def test_a_model_maximum_keeps_room_for_chat_images(
         self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Each character's main image first, then pins, then the characters' other images (within the slider)."""
+        """Chosen chat images first, then each character's main image, then their other images (within the slider)."""
         a, b = _make(client, name="A", images=3), _make(client, name="B", images=3)
         client.patch(f"/api/chat/conversations/{conv['id']}", json={"character_ids": [a["id"], b["id"]]})
         self._pins(chat, db, conv, 2)
-        params = self._send_image(client, conv, chat, monkeypatch, max_refs=4)
+        chosen: dict[str, JsonValue] = {"on": ["p0.png", "p1.png"], "off": []}
+        params = self._send_image(client, conv, chat, monkeypatch, max_refs=4, ref_choices=chosen)
 
         def ref(c: CharacterOut, i: int) -> str:
             return f"char:{c['id']}/{c['images'][i]}"
 
-        assert params["refs"] == [ref(a, 0), ref(b, 0), "p0.png", "p1.png"]
+        assert params["refs"] == ["p0.png", "p1.png", ref(a, 0), ref(b, 0)]
         assert params["refs_dropped"] == [ref(a, 1), ref(b, 1)]  # the slider (6) already cut the rest
 
     def test_composer_picks_switch_references_on_and_off(
@@ -701,10 +714,13 @@ class TestReferenceCaps:
         def ref(i: int) -> str:
             return f"char:{a['id']}/{a['images'][i]}"
 
-        choices: dict[str, JsonValue] = {"on": [ref(2), "not-a-candidate.png"], "off": [ref(0), "p1.png"]}
+        choices: dict[str, JsonValue] = {
+            "on": [ref(2), "p0.png", "p1.png", "not-a-candidate.png"],
+            "off": [ref(0), "p1.png"],
+        }
         params = self._send_image(client, conv, chat, monkeypatch, max_refs=2, ref_choices=choices)
-        # The forced one goes first, then the (new) main image; switched-off ones never go
-        assert params["refs"] == [ref(2), ref(1)]
-        assert params["refs_dropped"] == ["p0.png"]
+        # The ones switched on go first; switched-off ones never go
+        assert params["refs"] == [ref(2), "p0.png"]
+        assert params["refs_dropped"] == [ref(1)]
         settings = dig(client.get(f"/api/chat/conversations/{conv['id']}"), "conversation", "settings", "ref_choices")
         assert settings == choices  # remembered with the chat
