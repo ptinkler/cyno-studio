@@ -290,7 +290,7 @@ An alternative to the root `docker-compose.yml` for hosts that already run a rev
 
 ## Security
 
-Every endpoint requires a login session (an HttpOnly cookie holding a signed, expiring user id). Admin passwords are hashed with argon2id over an HMAC pepper (`PASSWORD_PEPPER`); access is fail-closed (see [Users & access](#users--access)); each user's data is isolated at the database layer; per-user provider keys are encrypted at rest (`KEYS_SECRET`). If you expose the app publicly, serve it over HTTPS and set `PUBLIC_BASE_URL`.
+Every endpoint requires a login session (an HttpOnly cookie holding a signed, expiring user id). Admin passwords are hashed with argon2id (Unicode-normalised first) and the finished hash is encrypted with a server-only pepper (`PASSWORD_PEPPER`), so a copy of the database alone can't be attacked offline; access is fail-closed (see [Users & access](#users--access)); each user's data is isolated at the database layer; per-user provider keys are encrypted at rest (`KEYS_SECRET`). If you expose the app publicly, serve it over HTTPS and set `PUBLIC_BASE_URL`.
 
 ## License
 
