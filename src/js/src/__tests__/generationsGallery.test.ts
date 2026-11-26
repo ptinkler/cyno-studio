@@ -54,20 +54,69 @@ describe('GenerationGrid', () => {
     expect(w.emitted('open')?.[0]).toEqual([expect.objectContaining({ id: 'e1' })])
   })
 
-  it('filters by kind and by favourites-only', async () => {
+  it('has one Filter button that opens the filters, and filters by type and favourites', async () => {
     const w = mount(GenerationGrid, { props: { items: ITEMS } })
-    const seg = w.findAll('.seg button')
+    expect(w.find('.gpop').exists()).toBe(false)
+    await w.find('button[aria-label="Filter"]').trigger('click')
+    const seg = w.findAll('.gpop .seg button')
     await seg[1]?.trigger('click') // Images
     expect(w.findAll('.cell')).toHaveLength(2) // d1 + p1
+    expect(w.find('.gbadge').text()).toBe('1')
     await seg[0]?.trigger('click') // All
-    await w.find('.gfav').trigger('click') // favourites only
+    await w.find('.gcheck').setValue(true) // favourites only
     expect(w.findAll('.cell')).toHaveLength(1) // only d1 is favourite
     expect(w.find('.cell img').attributes('src')).toBe('/p1')
+    await w.find('.gclear').trigger('click')
+    expect(w.findAll('.cell')).toHaveLength(4)
+    expect(w.find('.gbadge').exists()).toBe(false)
   })
 
-  it('hides the favourites filter when favFilter is false', () => {
+  it('filters by model and by video length when those are known', async () => {
+    const items = [
+      generationItem({
+        id: 'a',
+        kind: 'video',
+        status: 'done',
+        url: '/a',
+        file: 'a.mp4',
+        model: 'm/one',
+        params: { duration: 5 },
+      }),
+      generationItem({
+        id: 'b',
+        kind: 'video',
+        status: 'done',
+        url: '/b',
+        file: 'b.mp4',
+        model: 'm/two',
+        params: { duration: 12 },
+      }),
+      generationItem({ id: 'c', kind: 'image', status: 'done', url: '/c', file: 'c.png', model: 'm/two' }),
+    ]
+    const w = mount(GenerationGrid, { props: { items } })
+    await w.find('button[aria-label="Filter"]').trigger('click')
+    const [model, length] = w.findAll('.gpop select')
+    await model?.setValue('m/two')
+    expect(w.findAll('.cell')).toHaveLength(2)
+    await length?.setValue('long')
+    expect(w.findAll('.cell')).toHaveLength(1) // only the 12 s video
+    expect(w.find('.gbadge').text()).toBe('2')
+  })
+
+  it('shows a page-added filter inside the popover and counts it on the badge', async () => {
+    const w = mount(GenerationGrid, {
+      props: { items: ITEMS, extraActive: 1 },
+      slots: { filters: '<span class="extra">Unused</span>' },
+    })
+    expect(w.find('.gbadge').text()).toBe('1')
+    await w.find('button[aria-label="Filter"]').trigger('click')
+    expect(w.find('.gpop .extra').exists()).toBe(true)
+  })
+
+  it('hides the favourites filter when favFilter is false', async () => {
     const w = mount(GenerationGrid, { props: { items: ITEMS, favFilter: false } })
-    expect(w.find('.gfav').exists()).toBe(false)
+    await w.find('button[aria-label="Filter"]').trigger('click')
+    expect(w.find('.gcheck').exists()).toBe(false)
   })
 })
 

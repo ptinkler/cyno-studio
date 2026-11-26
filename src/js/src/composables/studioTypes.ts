@@ -40,6 +40,9 @@ export interface StudioState {
 }
 
 /** What a generated card carries when it is shown in a gallery: the card and where it lives. */
+/** How long a video may be, as a filter: any, up to 5 s, over 5 up to 10 s, over 10 s. */
+export type LengthFilter = 'any' | 'short' | 'medium' | 'long'
+
 export interface GenerationItem {
   id: string
   kind: string | null

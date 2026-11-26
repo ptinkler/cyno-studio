@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { vTip } from '../../directives/tip'
 import { computed, inject, ref, watch } from 'vue'
 import { confirmDialog } from '../../composables/useDialog'
 import { deleteMediaMany, downloadMediaMany } from '../../composables/mediaApi'
@@ -10,6 +9,7 @@ import { fetchMediaPage } from '../../composables/useMedia'
 import { chatMediaUrl, chatMediaPreviewUrl } from '../../composables/useChat'
 import type { GenerationItem, UiMessage } from '../../composables/studioTypes'
 import GenerationGrid from './GenerationGrid.vue'
+import FilterRow from './FilterRow.vue'
 
 const props = withDefaults(
   defineProps<{ messages?: readonly UiMessage[] | undefined; convId?: string | undefined }>(),
@@ -134,6 +134,7 @@ const shownItems = computed(() => (showOrphans.value ? orphans.value : items.val
   <GenerationGrid
     :items="shownItems"
     :selectable="!showOrphans"
+    :extra-active="showOrphans ? 1 : 0"
     :empty="
       showOrphans
         ? loadingOrphans
@@ -146,11 +147,25 @@ const shownItems = computed(() => (showOrphans.value ? orphans.value : items.val
     @delete-many="deleteMany"
     @download-many="downloadMany"
   >
-    <!-- Sits with the grid's own filters rather than floating above them -->
+    <!-- One more line in the grid's Filter popover -->
     <template #filters>
-      <button v-tip="'Unused files'" class="pillbtn" :class="{ on: showOrphans }" @click="toggleOrphans">
-        Orphaned<template v-if="showOrphans && !loadingOrphans"> ({{ orphans.length }})</template>
-      </button>
+      <FilterRow label="Unused files only">
+        <input type="checkbox" class="orphan-check" :checked="showOrphans" @change="toggleOrphans" />
+        <span v-if="showOrphans && !loadingOrphans" class="orphan-n">{{ orphans.length }}</span>
+      </FilterRow>
     </template>
   </GenerationGrid>
 </template>
+
+<style scoped>
+.orphan-check {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--saccent);
+}
+.orphan-n {
+  margin-left: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--smuted);
+}
+</style>
