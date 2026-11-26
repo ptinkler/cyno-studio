@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { vTip } from '../../directives/tip'
 import { computed, ref } from 'vue'
-import type { GenerationItem } from '../../composables/studioTypes'
+import type { GenerationItem, LengthFilter } from '../../composables/studioTypes'
 import { reloadImageLater } from '../../utils/imageRetry'
 import { readText, writeText } from '../../utils/storage'
 import SelectionBar from './SelectionBar.vue'
+import GenerationFilters from './GenerationFilters.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -14,8 +15,10 @@ const props = withDefaults(
     favFilter?: boolean | undefined
     /** Shows Select, for picking several finished files and deleting them together. */
     selectable?: boolean | undefined
+    /** Filters the page adds in the Filter popover that are switched on (they count on its badge). */
+    extraActive?: number | undefined
   }>(),
-  { items: () => [], empty: 'Nothing here yet.', favFilter: true, selectable: false },
+  { items: () => [], empty: 'Nothing here yet.', favFilter: true, selectable: false, extraActive: 0 },
 )
 const emit = defineEmits<{
   open: [item: GenerationItem]
@@ -68,11 +71,28 @@ const minCol = computed(() => `${String(MIN_COLUMN_PX[size.value])}px`)
 
 const kind = ref('all') // all | image | video
 const favOnly = ref(false)
+const model = ref('')
+const length = ref<LengthFilter>('any')
+
+// A video's length in seconds, when its settings say
+const seconds = (it: GenerationItem): number | null => {
+  const value = Number(it.params?.['duration'])
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+const inLength = (it: GenerationItem, wanted: LengthFilter): boolean => {
+  const s = seconds(it)
+  if (wanted === 'any') return true
+  if (s === null) return false
+  return wanted === 'short' ? s <= 5 : wanted === 'medium' ? s > 5 && s <= 10 : s > 10
+}
+const modelNames = computed(() => [...new Set(props.items.flatMap(it => it.model ?? []))].sort())
+const hasLengths = computed(() => props.items.some(it => it.kind === 'video' && seconds(it) !== null))
 const shown = computed(() =>
   props.items.filter(it => {
     if (kind.value !== 'all' && it.kind !== kind.value) return false
     if (favOnly.value && !it.favourite) return false
-    return true
+    if (model.value && it.model !== model.value) return false
+    return inLength(it, length.value)
   }),
 )
 // A preview that fails once falls back to the full file, then retries once
@@ -99,39 +119,37 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
         <div class="gleft">
           <span class="gcount">{{ shown.length }} item{{ shown.length === 1 ? '' : 's' }}</span>
           <span v-if="inProgress" class="ginprog"><span class="dot"></span>{{ inProgress }} generating</span>
-          <div class="seg" role="group" aria-label="Kind">
-            <button v-for="k in ['all', 'image', 'video']" :key="k" :class="{ on: kind === k }" @click="kind = k">
-              {{ k === 'all' ? 'All' : k === 'image' ? 'Images' : 'Videos' }}
+        </div>
+        <div class="gtools">
+          <GenerationFilters
+            v-model:kind="kind"
+            v-model:fav-only="favOnly"
+            v-model:model="model"
+            v-model:length="length"
+            :models="modelNames"
+            :lengths="hasLengths"
+            :fav-filter="favFilter"
+            :extra-active="extraActive"
+          >
+            <!-- Filters the page using the grid adds (e.g. unused files) -->
+            <slot name="filters"></slot>
+          </GenerationFilters>
+          <button
+            v-if="selectable"
+            v-tip="picking ? 'Done selecting' : 'Select several'"
+            class="iconbtn boxed"
+            :class="{ on: picking }"
+            :aria-label="picking ? 'Done selecting' : 'Select several'"
+            :aria-pressed="picking"
+            @click="togglePicking"
+          >
+            <svg class="ic"><use href="#s-selectall" /></svg>
+          </button>
+          <div class="seg" role="group" aria-label="Card size">
+            <button v-for="s in SIZES" :key="s" :class="{ on: size === s }" @click="setSize(s)">
+              {{ s.toUpperCase() }}
             </button>
           </div>
-          <button
-            v-if="favFilter"
-            v-tip="'Favourites only'"
-            class="gfav"
-            :class="{ on: favOnly }"
-            aria-label="Favourites only"
-            @click="favOnly = !favOnly"
-          >
-            <svg class="ic"><use href="#s-star" /></svg>
-          </button>
-          <!-- Extra filters from the page using the grid, in the same toolbar -->
-          <slot name="filters"></slot>
-        </div>
-        <button
-          v-if="selectable"
-          v-tip="picking ? 'Done selecting' : 'Select several'"
-          class="iconbtn boxed"
-          :class="{ on: picking }"
-          :aria-label="picking ? 'Done selecting' : 'Select several'"
-          :aria-pressed="picking"
-          @click="togglePicking"
-        >
-          <svg class="ic"><use href="#s-check" /></svg>
-        </button>
-        <div class="seg" role="group" aria-label="Card size">
-          <button v-for="s in SIZES" :key="s" :class="{ on: size === s }" @click="setSize(s)">
-            {{ s.toUpperCase() }}
-          </button>
         </div>
       </div>
       <div v-if="!props.items.length" class="empty">{{ empty }}</div>
@@ -242,28 +260,11 @@ const inProgress = computed(() => props.items.filter(it => it.status === 'pendin
   background: var(--saccent);
   animation: pulse 1.1s ease-in-out infinite;
 }
-.gfav {
-  display: grid;
-  place-items: center;
-  width: 1.8667rem;
-  height: 1.8667rem;
-  border: 1px solid var(--sborder);
-  border-radius: var(--r);
-  background: transparent;
-  color: var(--smuted);
-  cursor: pointer;
-}
-.gfav:hover {
-  color: var(--sfg);
-  border-color: var(--sfaint);
-}
-.gfav.on {
-  color: var(--sstar);
-  border-color: var(--sstar);
-}
-.gfav .ic {
-  width: 1rem;
-  height: 1rem;
+.gtools {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5333rem;
+  margin-left: auto;
 }
 .empty {
   color: var(--smuted);
