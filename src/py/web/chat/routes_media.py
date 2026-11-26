@@ -29,7 +29,7 @@ from web.media.kinds import VIDEO_SUFFIXES
 from web.media.paths import chat_file
 from web.media.places import media_dirs
 from web.media.thumbs import thumb_response
-from web.uploads.files import read_audio_upload, read_image_upload, read_video_upload, safe_filename, store_deduped
+from web.uploads.files import read_audio_upload, read_image_upload, read_video_upload, store_deduped
 
 if TYPE_CHECKING:
     from web.types import JsonValue
@@ -74,11 +74,10 @@ def api_discard_attachment(conv_id: str, filename: str) -> Discarded:
     Files any message or library entry still uses are kept.
     """
     require_conv(conv_id)
-    name = safe_filename(filename)
-    if not name.startswith(("up_", "upv_", "upa_")):
+    if not filename.startswith(("up_", "upv_", "upa_")):
         return Discarded(deleted=False)
     db = get_db()
-    path = conversation_dir(conv_id) / name
+    path = chat_file(conv_id, filename)
     return Discarded(deleted=path.is_file() and remove_unused_file(db, conv_id, path))
 
 
