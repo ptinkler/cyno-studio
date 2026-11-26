@@ -59,16 +59,29 @@ const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, R
 
 <template>
   <div v-if="props.attachments.length || props.planned.length || mediaMode || audioClip" class="atts">
-    <div v-if="mediaMode || audioClip" class="plus">
-      <button
-        v-tip="audioClip ? 'Upload an audio clip' : 'Add references — pick from your media or upload'"
-        class="addtile"
-        :aria-label="audioClip ? 'Upload an audio clip' : 'Add references — pick from your media or upload'"
-        @click="audioClip ? $emit('add-clip') : $emit('library')"
-      >
-        +
-      </button>
-    </div>
+    <button
+      v-if="mediaMode || audioClip"
+      v-tip="audioClip ? 'Upload an audio clip' : 'Add references — pick from your media or upload'"
+      class="addtile"
+      :aria-label="audioClip ? 'Upload an audio clip' : 'Add references — pick from your media or upload'"
+      @click="audioClip ? $emit('add-clip') : $emit('library')"
+    >
+      <svg class="ic"><use href="#s-plus" /></svg>
+    </button>
+    <button
+      v-if="props.planned.length"
+      v-tip="
+        `References: ${sentCount} of ${props.planned.length} will be sent. ${props.refsHidden ? 'Click to show them' : 'Click to hide them'}`
+      "
+      class="refchip"
+      :class="{ on: !props.refsHidden }"
+      :aria-pressed="!props.refsHidden"
+      aria-label="References"
+      @click="$emit('toggle-refs')"
+    >
+      <svg class="ic"><use href="#s-image" /></svg>
+      <span class="badge">{{ sentCount }}</span>
+    </button>
     <div
       v-for="a in props.attachments"
       :key="a.key"
@@ -111,16 +124,6 @@ const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, R
       </div>
     </div>
     <button
-      v-if="props.planned.length"
-      v-tip="props.refsHidden ? 'Show the images that can go with the next message' : 'Hide these'"
-      class="refchip"
-      :aria-expanded="!props.refsHidden"
-      @click="$emit('toggle-refs')"
-    >
-      <svg class="ic sm" :class="{ shut: props.refsHidden }"><use href="#s-chev" /></svg>
-      References · {{ sentCount }} sent
-    </button>
-    <button
       v-for="r in props.refsHidden ? [] : props.planned"
       :key="r.ref"
       v-tip="`${SOURCES[r.source]}. ${NOTES[r.state]}`"
@@ -138,7 +141,9 @@ const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, R
     <button class="clearall" @click="$emit('remove-unused')">Remove</button>
   </div>
   <div v-if="props.attachments.length" class="clearrow">
-    <button v-tip="'Clear all'" class="clearall" @click="$emit('clear')">Clear all</button>
+    <button v-tip="'Clear all'" class="clearicon" aria-label="Clear all" @click="$emit('clear')">
+      <svg class="ic sm"><use href="#s-trash" /></svg>
+    </button>
   </div>
 </template>
 
@@ -163,16 +168,32 @@ const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, R
   color: var(--sdanger);
   border-color: var(--sdanger);
 }
+.clearicon {
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border: none;
+  border-radius: 0.4rem;
+  background: none;
+  color: var(--sfaint);
+  cursor: pointer;
+}
+.clearicon:hover {
+  background: var(--shover);
+  color: var(--sdanger);
+}
 .atts {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5333rem;
-  padding-bottom: 0.5333rem;
+  align-items: center;
+  gap: 0.4rem;
+  padding-bottom: 0.4rem;
 }
 .att {
   position: relative;
-  width: 3.4667rem;
-  height: 3.4667rem;
+  width: 2.6667rem;
+  height: 2.6667rem;
 }
 .att.plan {
   padding: 0;
@@ -189,32 +210,6 @@ const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, R
 .att.plan.dropped {
   opacity: 0.4;
   filter: grayscale(1);
-}
-.refchip {
-  align-self: center;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  border: 1px solid var(--sborder);
-  border-radius: 66.6rem;
-  background: var(--sbg);
-  color: var(--smuted);
-  font: inherit;
-  font-size: 0.8rem;
-  padding: 2px 0.6rem;
-  cursor: pointer;
-}
-.refchip:hover {
-  color: var(--sfg);
-  border-color: var(--saccent);
-}
-/* The chevron points down while the references show, right once they are folded */
-.refchip .ic {
-  transform: rotate(90deg);
-  transition: transform 0.15s;
-}
-.refchip .ic.shut {
-  transform: none;
 }
 .att.unused {
   opacity: 0.4;
@@ -270,22 +265,49 @@ const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, R
   height: 4.2667rem;
   font-size: 2rem;
 }
-.plus {
+/* The + and the References toggle: small icon buttons, the same size, at the start of the row */
+.addtile,
+.refchip {
   position: relative;
-}
-.addtile {
-  width: 3.4667rem;
-  height: 3.4667rem;
-  border-radius: 0.6rem;
+  display: grid;
+  place-items: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  padding: 0;
+  border-radius: 0.5333rem;
   border: 1px dashed var(--sborder);
-  background: var(--sbg2);
+  background: none;
   color: var(--smuted);
-  font-size: 1.4667rem;
   cursor: pointer;
 }
-.addtile:hover {
+.refchip {
+  border-style: solid;
+}
+.addtile:hover,
+.refchip:hover {
   border-color: var(--saccent);
   color: var(--sfg);
+}
+.refchip.on {
+  border-color: var(--saccent);
+  background: var(--saccent-soft);
+  color: var(--sfg);
+}
+.badge {
+  position: absolute;
+  top: -0.3rem;
+  right: -0.3rem;
+  min-width: 1rem;
+  height: 1rem;
+  padding: 0 0.25rem;
+  display: grid;
+  place-items: center;
+  border-radius: 66.6rem;
+  background: var(--saccent-fill);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 600;
+  line-height: 1;
 }
 .att.uploading {
   opacity: 0.5;
