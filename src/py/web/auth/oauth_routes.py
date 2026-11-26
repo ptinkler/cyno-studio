@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import os
 from typing import Annotated
-from urllib.parse import quote
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Cookie, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -88,8 +88,8 @@ async def callback(provider: str, request: Request) -> RedirectResponse:
     if not allowed:
         db.record_signin_request(identity, provider=provider, email=email, name=profile.get("name"))
         # Without an email the person can't say who they are, so the id is what the admin needs to let them in
-        shown = "" if email else f"&id={quote(identity)}"
-        return RedirectResponse(url=f"/?auth=denied{shown}", status_code=302)
+        query = {"auth": "denied"} if email else {"auth": "denied", "id": identity}
+        return RedirectResponse(url=f"/?{urlencode(query)}", status_code=302)
 
     user = db.upsert_oauth_user(profile, is_admin=is_admin)
     resp = RedirectResponse(url="/", status_code=302)

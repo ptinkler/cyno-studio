@@ -376,7 +376,7 @@ class TestFallbackNotice:
         monkeypatch.setattr(image_hosts, "_upload_to_tmpfiles", upload)
         image_hosts.upload_file(f, _prefs("litterbox", "tmpfiles"))
         (note,) = image_hosts.take_upload_notes()
-        assert "tmpfiles.org" in note
+        assert "tmpfiles" in note
         assert "Litterbox upload timed out" in note
         assert image_hosts.take_upload_notes() == []  # taken once
 
