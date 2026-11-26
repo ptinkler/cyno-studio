@@ -1,7 +1,9 @@
-"""What a turn looks up in the chat so far: latest media, pins, instructions, references, characters."""
+"""What a turn looks up in the chat so far: latest media, chosen images, instructions, references, characters."""
 
 import logging
 from datetime import datetime
+
+from fastapi import HTTPException
 
 from web import characters
 from web.characters import CharacterInfo
@@ -14,6 +16,7 @@ from web.chat.generation import (
     dedupe,
     is_conversational,
     plan_refs,
+    ref_key,
 )
 from web.chat.helpers import effective_ids
 from web.chat.schemas import CharactersEvent
@@ -22,13 +25,14 @@ from web.chat.tools import (
 )
 from web.chat.turn_base import TurnBase
 from web.core.metadata.models import Character, ChatInstruction, ChatMessage
+from web.media.paths import chat_file
 from web.types import JsonValue
 
 log = logging.getLogger(__name__)
 
 
 class HistoryTurn(TurnBase):
-    """What a turn looks up in the chat so far: latest media, pins, instructions, references, characters."""
+    """What a turn looks up in the chat so far: latest media, chosen images, instructions, references, characters."""
 
     def _last_user(self) -> ChatMessage | None:
         return next((m for m in reversed(self.history) if m.role == "user"), None)
@@ -54,17 +58,16 @@ class HistoryTurn(TurnBase):
             found.extend(done_images(msg.media))
         return found if n is None else found[:n]
 
-    def _pinned_images(self) -> list[str]:
-        """Images the user pinned on this branch, oldest first."""
-        return [
-            file
-            for msg in self.history
-            for item in msg.media
-            if item.get("pinned")
-            and item["kind"] == "image"
-            and item.get("status", "done") == "done"
-            and isinstance((file := item.get("file")), str)
-        ]
+    def _chosen_images(self) -> list[str]:
+        """The chat's images the user switched on in the composer's References bar."""
+        return [f for f in self.s.ref_choices.on if not f.startswith(characters.REF_PREFIX) and self._in_chat(f)]
+
+    def _in_chat(self, file: str) -> bool:
+        """Whether this chat's folder has the file (a name with directories in it never does)."""
+        try:
+            return chat_file(self.conv_id, file).is_file()
+        except HTTPException:
+            return False
 
     def _latest_video(self) -> str | None:
         """The most recent finished video (this turn first, then history)."""
@@ -127,20 +130,26 @@ class HistoryTurn(TurnBase):
     def _image_refs(self, source: str | None, chars: list[Character]) -> tuple[list[str], list[str]]:
         """Choose reference images for image generation and report any omitted.
 
-        Priority is the edit source, selected characters, pinned images, then the
-        most recent chat images. The composer's Images slider caps the chat images
+        Priority is the edit source, selected characters, the images chosen in the
+        References bar, then the most recent chat images. The composer's Images slider caps the chat images
         (`plan_refs`), so the model needn't ask for them: leave the slider at 0 or
         switch an image off to keep it out.
         """
         if not self._accepts_refs():
             return [], []  # this image model can't take references
         lead = [source] if source else []
-        pinned = self._pinned_images()
+        chosen = self._chosen_images()
         # A conversational model already has the chat's images in its context, as pixels
-        recent = [] if is_conversational(self.s.image_model) else self._latest_images(self.s.image_limit)
-        recent = [f for f in recent if f not in pinned and f not in lead]
-        chat_refs = dedupe(lead + pinned + recent)
-        limits = RefLimits(self.s.image_limit, after=len(lead), max_refs=self._max_refs(), choices=self.s.ref_choices)
+        recent = [] if is_conversational(self.s.image_model) else self._latest_images(None)
+        recent = [f for f in recent if f not in chosen and f not in lead]
+        chat_refs = dedupe(lead + chosen + recent)
+        limits = RefLimits(
+            self.s.image_limit,
+            after=len(lead),
+            max_refs=self._max_refs(),
+            choices=self.s.ref_choices,
+            key=ref_key(self.conv_id),
+        )
         return plan_refs(chat_refs, chars, limits)
 
     def _pick_characters(self, names: list[str], prompt: str) -> list[Character]:

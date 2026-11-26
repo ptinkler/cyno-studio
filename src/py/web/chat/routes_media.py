@@ -4,11 +4,13 @@ from typing import TYPE_CHECKING
 
 from fastapi import File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel
 
 from web.chat.constants import (
     CHAT_PREVIEW_SIZE,
 )
 from web.chat.deps import router
+from web.chat.generation import ref_key
 from web.chat.helpers import (
     conversation_dir,
     require_conv,
@@ -65,6 +67,26 @@ async def api_upload_audio_attachment(conv_id: str, file: UploadFile = File(...)
     require_conv(conv_id)
     content, ext = await read_audio_upload(file)
     return AttachedFile(file=store_deduped(conversation_dir(conv_id), "upa_", content, ext, media_dirs()))
+
+
+class RefDigestsIn(BaseModel):
+    """Reference images (chat files or "char:" refs) to compare."""
+
+    refs: list[str]
+
+
+class RefDigests(BaseModel):
+    """Each reference's content key: the same picture has the same key wherever it is kept."""
+
+    keys: dict[str, str]
+
+
+@router.post("/conversations/{conv_id}/ref-keys")
+def api_ref_keys(conv_id: str, data: RefDigestsIn) -> RefDigests:
+    """Tell identical reference pictures apart from different ones (a character's image that is also in the chat)."""
+    require_conv(conv_id)
+    key = ref_key(conv_id)
+    return RefDigests(keys={r: key(r) for r in data.refs[:200]})
 
 
 @router.delete("/conversations/{conv_id}/attachments/{filename}")

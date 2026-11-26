@@ -34,6 +34,8 @@ const props = withDefaults(
     refMode?: RefMode | null | undefined
     /** Other references the next message may carry (pins, recent chat images, characters). */
     planned?: readonly PlannedRef[] | undefined
+    /** The References part of the attachment strip is folded away. */
+    refsHidden?: boolean | undefined
   }>(),
   {
     modes: () => [],
@@ -50,6 +52,7 @@ const props = withDefaults(
     audioInput: false,
     refMode: null,
     planned: () => [],
+    refsHidden: false,
   },
 )
 const emit = defineEmits<{
@@ -62,6 +65,7 @@ const emit = defineEmits<{
   library: []
   enhance: []
   'toggle-plan': [ref: string]
+  'toggle-refs': []
 }>()
 
 const drag = ref(false)
@@ -129,6 +133,7 @@ defineExpose({ focusPrompt })
         :insertable="refByKey"
         :media-mode="canAdd"
         :planned="planned"
+        :refs-hidden="refsHidden"
         :audio-clip="audioClip"
         @add-clip="aud?.click()"
         @library="emit('library')"
@@ -137,6 +142,7 @@ defineExpose({ focusPrompt })
         @clear="emit('clear')"
         @remove-unused="removeUnused"
         @toggle-plan="ref => emit('toggle-plan', ref)"
+        @toggle-refs="emit('toggle-refs')"
       />
 
       <div

@@ -107,7 +107,6 @@ const {
   switchBranch,
   forkFrom,
   regenerateMedia,
-  pinMedia,
   stop,
   deleteExchange,
   addFromLibrary,
@@ -377,7 +376,6 @@ onMounted(() => {
           @text-version="showTextVersion"
           @media-version="showMediaVersion"
           @regenerate="regenerateMedia"
-          @pin="pinMedia"
           @delete="deleteExchange"
           @fork="forkFrom"
           @open-chat="openThreadView"
@@ -402,6 +400,7 @@ onMounted(() => {
           :can-send="canSend"
           :attachments="attachments"
           :planned="refPlan.planned.value"
+          :refs-hidden="refPlan.hidden.value"
           :uploading="uploading"
           :enhancing="enhancing"
           :estimate="estimate"
@@ -413,6 +412,8 @@ onMounted(() => {
           @files="addFiles"
           @remove="removeAttachment"
           @clear="[...attachments].forEach(removeAttachment)"
+          @toggle-plan="refPlan.toggle"
+          @toggle-refs="refPlan.hidden.value = !refPlan.hidden.value"
           @library="pickerOpen = true"
           @enhance="enhanceDraft"
         />

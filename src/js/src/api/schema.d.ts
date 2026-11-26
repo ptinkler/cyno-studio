@@ -621,6 +621,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/chat/conversations/{conv_id}/ref-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Api Ref Keys
+         * @description Tell identical reference pictures apart from different ones (a character's image that is also in the chat).
+         */
+        post: operations["api_ref_keys_api_chat_conversations__conv_id__ref_keys_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chat/conversations/{conv_id}/retry": {
         parameters: {
             query?: never;
@@ -1158,28 +1178,6 @@ export interface paths {
          *     and videos.
          */
         post: operations["api_favourite_media_api_chat_messages__message_id__media__media_id__favourite_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/chat/messages/{message_id}/media/{media_id}/pin": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Api Pin Media
-         * @description Pin an image as a reference.
-         *
-         *     It is sent with every image generated later on this branch of the chat, until unpinned.
-         */
-        post: operations["api_pin_media_api_chat_messages__message_id__media__media_id__pin_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3215,8 +3213,6 @@ export interface components {
             /** Moderated */
             moderated?: boolean | null;
             params?: components["schemas"]["JsonObject"] | null;
-            /** Pinned */
-            pinned?: boolean | null;
             /** Prompt */
             prompt?: string | null;
             request?: components["schemas"]["JsonObject"] | null;
@@ -3361,8 +3357,6 @@ export interface components {
             /** Moderated */
             moderated?: boolean | null;
             params?: components["schemas"]["JsonObject"] | null;
-            /** Pinned */
-            pinned?: boolean | null;
             /** Prompt */
             prompt?: string | null;
             request?: components["schemas"]["JsonObject"] | null;
@@ -3549,14 +3543,6 @@ export interface components {
             instruction_group: number[];
         };
         /**
-         * PinMedia
-         * @description Requested pin state for an image.
-         */
-        PinMedia: {
-            /** Pinned */
-            pinned: boolean;
-        };
-        /**
          * PolloBalance
          * @description A Pollo account's credits (fractional: a job can cost 51.74).
          */
@@ -3601,6 +3587,24 @@ export interface components {
              * @default []
              */
             on?: string[];
+        };
+        /**
+         * RefDigests
+         * @description Each reference's content key: the same picture has the same key wherever it is kept.
+         */
+        RefDigests: {
+            /** Keys */
+            keys: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * RefDigestsIn
+         * @description Reference images (chat files or "char:" refs) to compare.
+         */
+        RefDigestsIn: {
+            /** Refs */
+            refs: string[];
         };
         /**
          * RefLimits
@@ -5578,6 +5582,43 @@ export interface operations {
             };
         };
     };
+    api_ref_keys_api_chat_conversations__conv_id__ref_keys_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conv_id: string;
+            };
+            cookie?: {
+                user_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefDigestsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefDigests"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     api_retry_api_chat_conversations__conv_id__retry_post: {
         parameters: {
             query?: never;
@@ -6579,44 +6620,6 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["FavouriteMedia"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ShownMessage"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    api_pin_media_api_chat_messages__message_id__media__media_id__pin_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                message_id: number;
-                media_id: string;
-            };
-            cookie?: {
-                user_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PinMedia"];
             };
         };
         responses: {

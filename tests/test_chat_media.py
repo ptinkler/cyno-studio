@@ -816,7 +816,6 @@ class TestFork:
                     "source": "generated",
                     "status": "done",
                     "file": "fox.png",
-                    "pinned": True,
                 }
             ],
         )
@@ -857,7 +856,6 @@ class TestFork:
         assert msgs[0]["parent_id"] is None
         img = obj(msgs[1], "media", 0)
         assert img["file"] == "fox.png"
-        assert img["pinned"]
         assert img["id"] != "f1"
         assert client.get(f"/api/chat/media/{new_id}/fox.png").status_code == 200
         # The original is untouched

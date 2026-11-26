@@ -42,7 +42,6 @@ const emit = defineEmits<{
   reword: [instruction: string]
   'text-version': [index: number]
   'media-version': [pick: { mediaId: string; index: number }]
-  pin: [pick: { mediaId: string; pinned: boolean }]
   delete: []
   fork: []
   'open-chat': [id: string]
@@ -198,7 +197,6 @@ const { copiedKey, copy } = useCopy()
         :conv-id="convId"
         @open-media="emit('open-media', $event)"
         @use-image="emit('use-image', $event)"
-        @pin="emit('pin', $event)"
       />
 
       <div v-if="isUser && editing" class="edit-box">
@@ -362,7 +360,6 @@ const { copiedKey, copy } = useCopy()
             :can-switch="canSwitch"
             @open-media="emit('open-media', $event)"
             @media-version="emit('media-version', $event)"
-            @pin="emit('pin', $event)"
             @use-image="emit('use-image', $event)"
             @regenerate="emit('regenerate', $event)"
           />

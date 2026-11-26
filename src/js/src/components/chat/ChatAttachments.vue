@@ -3,14 +3,12 @@ import { vTip } from '../../directives/tip'
 import type { MediaCard } from '../../composables/chatConversationsApi'
 import { chatMediaPreviewUrl, chatMediaUrl } from '../../composables/chatFilesApi'
 import type { GenerationItem, UiMessage } from '../../composables/studioTypes'
-import { bigView, canPinMedia } from '../../utils/chatMedia'
-import PinButton from './PinButton.vue'
+import { bigView } from '../../utils/chatMedia'
 
 const props = defineProps<{ message: UiMessage; convId: string }>()
 const emit = defineEmits<{
   'open-media': [item: GenerationItem]
   'use-image': [pick: { file: string | null | undefined; mode: 'image' | 'video' }]
-  pin: [pick: { mediaId: string; pinned: boolean }]
 }>()
 
 // A card with no file yet (still rendering) has nothing to show
@@ -18,18 +16,12 @@ const fileOf = (item: MediaCard): string => item.file ?? ''
 const mediaUrl = (item: MediaCard): string => chatMediaUrl(props.convId, fileOf(item))
 // What's shown in the chat: a scaled-down copy (a big chat's full images add up)
 const mediaPreview = (item: MediaCard): string => chatMediaPreviewUrl(props.convId, fileOf(item))
-const canPin = (item: MediaCard): boolean => canPinMedia(item, props.message)
 const big = (item: MediaCard): GenerationItem => bigView(item, props.message, props.convId)
 </script>
 
 <template>
   <div v-if="message.media?.length" class="attachments">
     <div v-for="item in message.media" :key="item.id" class="attachment">
-      <PinButton
-        v-if="canPin(item)"
-        :pinned="!!item.pinned"
-        @toggle="emit('pin', { mediaId: item.id, pinned: !item.pinned })"
-      />
       <audio v-if="item.kind === 'audio'" :src="mediaUrl(item)" class="attachment-audio" controls></audio>
       <img
         v-else

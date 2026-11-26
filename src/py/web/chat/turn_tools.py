@@ -281,14 +281,14 @@ class ToolsTurn(GenerationTurn):
         result: dict[str, JsonValue] = {"ok": True, "result": IMAGE_TOOL_RESULT}
         if chars:
             result["characters"] = [c.name for c in chars]
-        pinned = self._pinned_images()
+        chosen = self._chosen_images()
         if refs:
             result["reference_images"] = len(refs)
             if dropped:
                 result["references_left_out"] = f"{len(dropped)} (the image model takes at most {len(refs)})"
-            if set(refs) & set(pinned):
-                result["pinned_by_user"] = len(set(refs) & set(pinned))
-        elif (ref_args or pinned) and not self._accepts_refs():
+            if set(refs) & set(chosen):
+                result["chosen_by_user"] = len(set(refs) & set(chosen))
+        elif (ref_args or chosen) and not self._accepts_refs():
             result["note"] = "The selected image model can't take reference images, so none were sent."
         return result
 

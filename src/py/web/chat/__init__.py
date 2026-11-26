@@ -13,7 +13,6 @@ Media item shape (stored in ChatMessage.media_json, sent to the frontend):
       "source": "upload" | "generated",
       "status": "pending" | "done" | "error",
       "file": "img_….png" | None,    # under <data>/chat/<conversation_id>/
-      "pinned": optional bool,        # user pinned this image: sent as a reference with every new image
       "prompt", "model", "job_id", "error", "cost": optional,
       "credits": optional,            # Pollo images bill in credits, not dollars
       "request", "response": optional # what was sent to the provider and what it answered (web/core/request_log.py)

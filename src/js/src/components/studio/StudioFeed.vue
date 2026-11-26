@@ -23,7 +23,6 @@ defineEmits<{
   'text-version': [message: UiMessage, index: number]
   'media-version': [message: UiMessage, pick: { mediaId: string; index: number }]
   regenerate: [message: UiMessage, request: RegenerateRequest]
-  pin: [message: UiMessage, pick: { mediaId: string; pinned: boolean }]
   delete: [message: UiMessage]
   fork: [message: UiMessage]
   'open-chat': [id: string]
@@ -102,7 +101,6 @@ watch(
           @text-version="index => $emit('text-version', m, index)"
           @media-version="payload => $emit('media-version', m, payload)"
           @regenerate="payload => $emit('regenerate', m, payload)"
-          @pin="payload => $emit('pin', m, payload)"
           @delete="$emit('delete', m)"
           @fork="$emit('fork', m)"
           @open-chat="$emit('open-chat', $event)"

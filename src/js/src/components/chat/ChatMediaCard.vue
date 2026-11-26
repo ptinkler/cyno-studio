@@ -7,11 +7,10 @@ import { chatMediaPreviewUrl, chatMediaUrl } from '../../composables/useChat'
 import type { GenerationItem, ImagePick, RegenerateRequest, UiMessage } from '../../composables/studioTypes'
 import { useCopy } from '../../composables/useClipboard'
 import { videoImageLimit } from '../../composables/useStudioAttachments'
-import { bigView, canPinMedia } from '../../utils/chatMedia'
+import { bigView } from '../../utils/chatMedia'
 import { cardParams, cardRefFiles, cardSpecs } from '../../utils/cardSpecs'
 import MediaMadeWith from './MediaMadeWith.vue'
 import ModelPicker from './ModelPicker.vue'
-import PinButton from './PinButton.vue'
 import PromptBox from './PromptBox.vue'
 import RequestDialog from './RequestDialog.vue'
 
@@ -30,7 +29,6 @@ const props = withDefaults(
 const emit = defineEmits<{
   'open-media': [item: GenerationItem]
   'media-version': [pick: { mediaId: string; index: number }]
-  pin: [pick: { mediaId: string; pinned: boolean }]
   'use-image': [pick: ImagePick]
   regenerate: [request: RegenerateRequest]
 }>()
@@ -68,7 +66,6 @@ const mediaUrl = (item: MediaCard): string => chatMediaUrl(props.convId, item.fi
 // What's shown in the chat: a scaled-down copy (a big chat's full images add up)
 const mediaPreview = (item: MediaCard): string => chatMediaPreviewUrl(props.convId, item.file ?? '')
 
-const canPin = (item: MediaCard): boolean => canPinMedia(item, props.message)
 const big = (item: MediaCard): GenerationItem => bigView(item, props.message, props.convId)
 
 const canRemake = (item: MediaCard): boolean =>
@@ -160,11 +157,6 @@ const requestItem = ref<MediaCard | null>(null)
           ›
         </button>
       </div>
-      <PinButton
-        v-if="canPin(item)"
-        :pinned="!!item.pinned"
-        @toggle="emit('pin', { mediaId: item.id, pinned: !item.pinned })"
-      />
       <div class="media-overlay">
         <template v-if="item.kind === 'image'">
           <button

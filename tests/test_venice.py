@@ -832,15 +832,17 @@ class TestVideoFamiliesInChat:
         fake.routes["/video/queue"] = httpx2.Response(200, json={"queue_id": queue_id})
 
     def _image(self, chat: None, conv: ConversationOut, name: str) -> None:
-        (chat_pkg.conversation_dir(conv["id"]) / name).write_bytes(png_bytes())
+        (chat_pkg.conversation_dir(conv["id"]) / name).write_bytes(
+            png_bytes(color=f"rgb({len(name)},{ord(name[0])},9)")
+        )
 
-    def _pinned_and_attached(
+    def _chosen_and_attached(
         self, client: TestClient, conv: ConversationOut, chat: None, db: MetadataDB
     ) -> list[JsonValue]:
         for f in ("pin.png", "a.png", "b.png"):
             self._image(chat, conv, f)
         db.add_chat_message(conv["id"], "user", "x")
-        msg = db.add_chat_message(
+        db.add_chat_message(
             conv["id"],
             "assistant",
             "",
@@ -848,10 +850,9 @@ class TestVideoFamiliesInChat:
                 {"id": "p", "kind": "image", "source": "generated", "status": "done", "file": "pin.png", "prompt": "p"}
             ],
         )
-        client.post(f"/api/chat/messages/{msg.id}/media/p/pin", json={"pinned": True})
         return [_attach(client, conv, "a.png", "red"), _attach(client, conv, "b.png", "blue")]
 
-    def test_images_slider_caps_pins_but_not_attachments(
+    def test_images_slider_caps_chosen_images_but_not_attachments(
         self,
         client: TestClient,
         conv: ConversationOut,
@@ -860,10 +861,10 @@ class TestVideoFamiliesInChat:
         venice: FakeVenice,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """With Images sent at 0, only the attachments go: the pinned image stays out."""
+        """With Images sent at 0, only the attachments go: the chosen image stays out."""
         self._load_catalogue(client, chat, monkeypatch)
         self._queue(venice)
-        ups = self._pinned_and_attached(client, conv, chat, db)
+        ups = self._chosen_and_attached(client, conv, chat, db)
         ev = _send(
             client,
             conv,
@@ -871,12 +872,13 @@ class TestVideoFamiliesInChat:
             attachments=ups,
             mode="video",
             image_limit=0,
+            ref_choices={"on": ["pin.png"], "off": []},
             video_model="venice/wan-3-0-reference-to-video",
         )
         assert len(seq(venice.body("/video/queue"), "reference_image_urls")) == 2
         assert dig(obj(ev[-1], "message", "media", 0), "params", "refs") == ups
 
-    def test_reference_model_gets_attached_pinned_and_character_images(
+    def test_reference_model_gets_attached_chosen_and_character_images(
         self,
         client: TestClient,
         conv: ConversationOut,
@@ -885,16 +887,17 @@ class TestVideoFamiliesInChat:
         venice: FakeVenice,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Test that reference model gets attached pinned and character images."""
+        """Test that reference model gets attached, chosen and character images."""
         self._load_catalogue(client, chat, monkeypatch)
         self._queue(venice)
-        ups = self._pinned_and_attached(client, conv, chat, db)
+        ups = self._chosen_and_attached(client, conv, chat, db)
         ev = _send(
             client,
             conv,
             "they dance",
             attachments=ups,
             mode="video",
+            ref_choices={"on": ["pin.png"], "off": []},
             video_model="venice/wan-3-0-reference-to-video",
         )
         body = venice.body("/video/queue")

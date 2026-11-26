@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { vTip } from '../../directives/tip'
 import type { Attachment } from '../../composables/useChatAttachments'
 import type { RefItem } from '../../utils/refItems'
@@ -17,6 +18,8 @@ const props = withDefaults(
     audioClip?: boolean | undefined
     /** Pins, recent images and character images the next message may carry; click to switch one off. */
     planned?: readonly PlannedRef[] | undefined
+    /** The References part is folded away. */
+    refsHidden?: boolean | undefined
   }>(),
   {
     attachments: () => [],
@@ -25,6 +28,7 @@ const props = withDefaults(
     mediaMode: false,
     audioClip: false,
     planned: () => [],
+    refsHidden: false,
   },
 )
 defineEmits<{
@@ -35,15 +39,19 @@ defineEmits<{
   clear: []
   'remove-unused': []
   'toggle-plan': [ref: string]
+  'toggle-refs': []
 }>()
 
-const SOURCES = { pin: 'Pinned image', recent: 'Recent chat image', character: 'Character image' }
+const SOURCES = { chat: 'Chat image', character: 'Character image' }
 const NOTES: Record<RefState, string> = {
   sent: 'Will be sent. Click to leave it out.',
   off: 'Left out. Click to send it.',
+  idle: 'Not sent. Click to send it with the next message.',
   capped: 'Over the Images sent limit, so it is not sent. Click to leave it out for good.',
   dropped: 'The image model takes fewer references, so it is not sent. Click to leave out another instead.',
 }
+
+const sentCount = computed(() => props.planned.filter(r => r.state === 'sent').length)
 
 const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, RefItem>>): boolean =>
   !attachment.uploading && !!insertable[attachment.key]
@@ -103,7 +111,17 @@ const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, R
       </div>
     </div>
     <button
-      v-for="r in props.planned"
+      v-if="props.planned.length"
+      v-tip="props.refsHidden ? 'Show the images that can go with the next message' : 'Hide these'"
+      class="refchip"
+      :aria-expanded="!props.refsHidden"
+      @click="$emit('toggle-refs')"
+    >
+      <svg class="ic sm" :class="{ shut: props.refsHidden }"><use href="#s-chev" /></svg>
+      References · {{ sentCount }} sent
+    </button>
+    <button
+      v-for="r in props.refsHidden ? [] : props.planned"
       :key="r.ref"
       v-tip="`${SOURCES[r.source]}. ${NOTES[r.state]}`"
       class="att plan"
@@ -165,11 +183,38 @@ const canInsert = (attachment: Attachment, insertable: Readonly<Record<string, R
 .att.plan.sent .att-media {
   border: 2px solid var(--saccent);
 }
+.att.plan.idle,
 .att.plan.off,
 .att.plan.capped,
 .att.plan.dropped {
   opacity: 0.4;
   filter: grayscale(1);
+}
+.refchip {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid var(--sborder);
+  border-radius: 66.6rem;
+  background: var(--sbg);
+  color: var(--smuted);
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 2px 0.6rem;
+  cursor: pointer;
+}
+.refchip:hover {
+  color: var(--sfg);
+  border-color: var(--saccent);
+}
+/* The chevron points down while the references show, right once they are folded */
+.refchip .ic {
+  transform: rotate(90deg);
+  transition: transform 0.15s;
+}
+.refchip .ic.shut {
+  transform: none;
 }
 .att.unused {
   opacity: 0.4;

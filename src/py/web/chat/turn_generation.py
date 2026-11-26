@@ -21,6 +21,7 @@ from web.chat.generation import (
     image_context,
     is_conversational,
     plan_refs,
+    ref_key,
     run_image_generation,
     submit_video_generation,
     take_log,
@@ -169,23 +170,24 @@ class GenerationTurn(HistoryTurn):
     ) -> dict[str, JsonValue]:
         """The extra inputs the video model's family takes (Venice).
 
-        These are reference images (attached ones, the frame, characters' images and pins), a last frame, or the
-        chat's latest video.
+        These are reference images (attached ones, the frame, characters' images and the chosen ones), a last
+        frame, or the chat's latest video.
         """
         info = model_info("video", self.s.video_model) or {}
         out: dict[str, JsonValue] = {}
         if info.get("reference_images") or info.get("family") == "motion":
             lead = dedupe([*attached, *([first_frame] if first_frame else [])])
-            # Attachments always go; the Images slider caps the pinned chat images on top of them
-            pins = [f for f in self._pinned_images() if f not in lead]
+            # Attachments always go; the Images slider caps the chosen chat images on top of them
+            chosen = [f for f in self._chosen_images() if f not in lead]
             limit = self.s.image_limit
             limits = RefLimits(
                 None if limit is None else len(lead) + limit,
                 after=len(lead),
                 max_refs=info.get("max_refs"),
                 choices=self.s.ref_choices,
+                key=ref_key(self.conv_id),
             )
-            out["refs"], _ = plan_refs([*lead, *pins], chars, limits)
+            out["refs"], _ = plan_refs([*lead, *chosen], chars, limits)
         if last_frame and "last_frame" in (info.get("frame_images") or []):
             out["last_frame"] = last_frame
         if info.get("video_input"):

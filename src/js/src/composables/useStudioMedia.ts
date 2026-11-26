@@ -8,7 +8,6 @@ import type { TurnStarter } from './useStudioTurns'
 import {
   fetchChatLibrary,
   favouriteChatMedia,
-  pinChatMedia,
   regenerateChatMedia,
   rewordChatMessage,
   showChatMediaVersion,
@@ -42,7 +41,7 @@ interface MediaHooks {
   favourites: Ref<LibraryCard[]>
 }
 
-// Actions on a reply's media cards and wordings: regenerate, reword, switch version, pin, favourite.
+// Actions on a reply's media cards and wordings: regenerate, reword, switch version, favourite.
 export function useStudioMedia({
   messages,
   messageIndex,
@@ -130,16 +129,6 @@ export function useStudioMedia({
     if (current) replaceMessage({ ...current, id: messageId, media, siblings: current.siblings })
   }
 
-  async function pinMedia(msg: UiMessage, { mediaId, pinned }: { mediaId: string; pinned: boolean }): Promise<void> {
-    const id = savedId(msg)
-    if (id === null) return
-    try {
-      withMedia(id, (await pinChatMedia(id, mediaId, pinned)).media)
-    } catch (e) {
-      fail(e)
-    }
-  }
-
   // Star/un-star a generation (bookmark for the Favourites gallery). `msg` may
   // be a real message (in-thread) or a library row carrying { message_id }.
   async function favouriteMedia(
@@ -168,5 +157,5 @@ export function useStudioMedia({
     }
   }
 
-  return { regenerateMedia, reword, showMediaVersion, showTextVersion, pinMedia, favouriteMedia, loadFavourites }
+  return { regenerateMedia, reword, showMediaVersion, showTextVersion, favouriteMedia, loadFavourites }
 }

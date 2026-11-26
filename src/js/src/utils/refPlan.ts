@@ -1,8 +1,9 @@
 // Which reference images the next image will be sent with, and which won't
 // fit the image model (mirrors plan_refs in web/chat/generation.py). The priority:
 // `lead` (attachments), the ones switched on, each character's main image,
-// the other chat images (pins), then the characters' other images. The
-// image slider caps the whole list; what it cuts is `capped`.
+// the other chat images, then the characters' other images. The image slider
+// caps the whole list; what it cuts is `capped`. The same picture kept under
+// two names (a character's image that is also in the chat) goes once.
 
 export const charRef = (id: number, file: string): string => `char:${String(id)}/${file}`
 
@@ -13,6 +14,17 @@ export interface RefCharacter {
 }
 
 const dedupe = <T>(list: readonly T[]): T[] => [...new Set(list)]
+
+// The first of each picture: refs with one `key` are the same image
+function dedupeBy(list: readonly string[], key: (ref: string) => string): string[] {
+  const seen = new Set<string>()
+  return list.filter(ref => {
+    const k = key(ref)
+    if (seen.has(k)) return false
+    seen.add(k)
+    return true
+  })
+}
 
 // Each character's images, up to `perCharacter` each, taken round-robin
 function characterRefs(
@@ -51,6 +63,8 @@ export interface RefPlanInput {
   maxRefs?: number | null
   /** The composer's switches: refs turned on or off. */
   choices?: { on?: readonly string[]; off?: readonly string[] }
+  /** A ref's content key: refs with the same key are one picture (default: its name). */
+  key?: (ref: string) => string
 }
 
 export interface RefPlan {
@@ -72,8 +86,9 @@ export function planRefs({
   imageLimit = null,
   maxRefs = null,
   choices,
+  key = ref => ref,
 }: RefPlanInput): RefPlan {
-  const { ordered: all, off } = orderRefs({ lead, chat, characters }, choices)
+  const { ordered: all, off } = orderRefs({ lead, chat, characters }, choices, key)
   const ordered = take(all, imageLimit)
   const sent = take(ordered, maxRefs)
   return { sent, dropped: ordered.slice(sent.length), capped: all.slice(ordered.length), off }
@@ -83,20 +98,21 @@ export function planRefs({
 function orderRefs(
   { lead, chat, characters }: Required<Pick<RefPlanInput, 'lead' | 'chat' | 'characters'>>,
   { on = [], off: offList = [] }: Choices = {},
+  key: (ref: string) => string = ref => ref,
 ): { ordered: string[]; off: string[] } {
-  const off = new Set(offList)
+  // Switching one off switches off every copy of the same picture
+  const offKeys = new Set(offList.map(key))
+  const everyRef = [...lead, ...chat, ...characterRefs(characters, new Set())]
+  const off = new Set(everyRef.filter(r => offKeys.has(key(r))))
   const offChat = dedupe([...lead, ...chat]).filter(r => off.has(r))
   const kept = dedupe([...lead, ...chat]).filter(r => !off.has(r))
   const split = Math.min(dedupe(lead).filter(r => !off.has(r)).length, kept.length)
   const every = characterRefs(characters, off)
   const mains = characterRefs(characters, off, 1)
   const candidates = new Set([...kept, ...every])
-  const ordered = dedupe([
-    ...kept.slice(0, split),
-    ...on.filter(r => candidates.has(r)),
-    ...mains,
-    ...kept.slice(split),
-    ...every,
-  ])
+  const ordered = dedupeBy(
+    [...kept.slice(0, split), ...on.filter(r => candidates.has(r)), ...mains, ...kept.slice(split), ...every],
+    key,
+  )
   return { ordered, off: [...offChat, ...switchedOffCharacterRefs(characters, off)] }
 }

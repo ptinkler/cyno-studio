@@ -106,6 +106,11 @@ export function useChatAttachments({
   function settle(attachment: Attachment, sending: Promise<{ file: string }>): void {
     sending
       .then(result => {
+        // The same picture is already attached (the server keeps one copy per picture): don't show it twice
+        if (attachments.value.some(other => other !== attachment && other.file === result.file)) {
+          attachments.value = attachments.value.filter(other => other !== attachment)
+          return
+        }
         attachment.file = result.file
       })
       .catch((e: unknown) => {

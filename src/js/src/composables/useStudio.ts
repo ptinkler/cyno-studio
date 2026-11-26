@@ -219,8 +219,8 @@ export function useStudio({
     settings,
     attachments: { clearAttachments, addChatMedia, addChatImage },
   })
-  const { regenerateMedia, reword, showMediaVersion, showTextVersion, pinMedia, favouriteMedia, loadFavourites } =
-    useStudioMedia({
+  const { regenerateMedia, reword, showMediaVersion, showTextVersion, favouriteMedia, loadFavourites } = useStudioMedia(
+    {
       messages,
       messageIndex,
       replaceMessage,
@@ -232,7 +232,8 @@ export function useStudio({
       turnSettings,
       active,
       favourites,
-    })
+    },
+  )
   const { toggleFav, renameThread, removeThread, moveThread, addSpace, renameSpace, removeSpace } = useStudioSidebar({
     threads,
     spaces,
@@ -353,7 +354,6 @@ export function useStudio({
     forkFrom,
     regenerateMedia,
     applyGenerationSettings,
-    pinMedia,
     stop,
     deleteExchange,
     useImage,

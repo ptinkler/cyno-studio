@@ -48,31 +48,11 @@ from web.types import JsonValue, VideoJob
 log = logging.getLogger(__name__)
 
 
-class PinMedia(BaseModel):
-    """Requested pin state for an image."""
-
-    pinned: bool
-
-
 def _require_message(msg: ChatMessage | None) -> ChatMessage:
     """The message, or 404 when it has gone."""
     if msg is None:
         raise HTTPException(404, "Message not found")
     return msg
-
-
-@router.post("/messages/{message_id}/media/{media_id}/pin")
-def api_pin_media(message_id: int, media_id: str, data: PinMedia) -> ShownMessage:
-    """Pin an image as a reference.
-
-    It is sent with every image generated later on this branch of the chat, until unpinned.
-    """
-    db = get_db()
-    msg = db.get_chat_message(message_id)
-    item = find_media(msg, media_id)
-    if not item or item["kind"] != "image" or not item.get("file") or item.get("status", "done") != "done":
-        raise HTTPException(404, "Image not found")
-    return shown_message(_require_message(db.update_chat_media_item(message_id, media_id, pinned=data.pinned)))
 
 
 class FavouriteMedia(BaseModel):
@@ -170,7 +150,6 @@ _NOT_REROLLED = (
     "error",
     "job_id",
     "favourite",
-    "pinned",
     "log",
     "versions",
     "version_shown",
