@@ -1,20 +1,24 @@
 """Password hashing for local (email + password) admin accounts.
 
-    argon2id( HMAC-SHA256(pepper, password) )   # unique salt is embedded by argon2
+    stored = Fernet(pepper key).encrypt( argon2id( NFKC(password) ) )   # the salt is inside the argon2 string
 
-The pepper (PASSWORD_PEPPER) is a server-only secret, never stored with the
-hash, so a DB leak alone can't verify guesses. Set it once and never change it.
+The password goes straight into argon2id (after Unicode normalisation, so the same password typed on any
+keyboard is the same bytes). The pepper (PASSWORD_PEPPER) is a server-only secret that encrypts the finished
+argon2 string: a copy of the database alone holds only ciphertext, so offline guessing can't even start.
+Set the pepper once and never change it.
 """
 
 from __future__ import annotations
 
+import base64
 import hashlib
-import hmac
 import os
+import unicodedata
 from functools import cache
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
+from cryptography.fernet import Fernet, InvalidToken
 
 _hasher = PasswordHasher()
 
@@ -23,33 +27,46 @@ def _pepper() -> bytes:
     """PASSWORD_PEPPER, else derived from SESSION_SECRET, else a dev fallback."""
     explicit = os.getenv("PASSWORD_PEPPER", "").strip()
     if explicit:
-        return hashlib.sha256(b"pollo-pepper-v1\x00" + explicit.encode()).digest()
+        return explicit.encode()
     session_secret = os.getenv("SESSION_SECRET", "").strip()
-    if session_secret:
-        return hashlib.sha256(b"pollo-pepper-v1\x00" + session_secret.encode()).digest()
-    return hashlib.sha256(b"pollo-pepper-v1-dev").digest()
+    return session_secret.encode() if session_secret else b"dev"
 
 
-def _peppered(password: str) -> bytes:
-    """The password mixed with the server pepper via HMAC, ready for argon2."""
-    return hmac.new(_pepper(), password.encode("utf-8"), hashlib.sha256).digest()
+def _cipher() -> Fernet:
+    """The cipher that wraps a finished argon2 string, keyed from the pepper."""
+    key = hashlib.sha256(b"cyno-password-pepper-v2\x00" + _pepper()).digest()
+    return Fernet(base64.urlsafe_b64encode(key))
+
+
+def _typed(password: str) -> bytes:
+    """The password as it is typed, Unicode-normalised (NFKC) and encoded for argon2."""
+    return unicodedata.normalize("NFKC", password).encode("utf-8")
 
 
 def hash_password(password: str) -> str:
-    """A storable argon2id hash of the peppered password (unique salt inside)."""
-    return _hasher.hash(_peppered(password))
+    """A storable hash: the password's argon2id hash (unique salt inside), encrypted with the pepper."""
+    return _cipher().encrypt(_hasher.hash(_typed(password)).encode()).decode()
+
+
+def _argon2_of(stored_hash: str) -> str | None:
+    """The argon2 string inside a stored hash (None when it isn't ours or the pepper differs)."""
+    try:
+        return _cipher().decrypt(stored_hash.encode()).decode()
+    except (InvalidToken, ValueError):
+        return None
 
 
 def verify_password(stored_hash: str | None, password: str) -> bool:
     """Whether `password` matches the stored hash.
 
-    False (never raises) for a missing hash, a wrong password, or a malformed/foreign hash string.
+    False (never raises) for a missing hash, a wrong password, a wrong pepper, or a malformed/foreign hash string.
     """
-    if not stored_hash:
+    argon2_hash = _argon2_of(stored_hash) if stored_hash else None
+    if argon2_hash is None:
         return False
     try:
-        return _hasher.verify(stored_hash, _peppered(password))
-    except (VerificationError, InvalidHashError):  # malformed/foreign hashes are simply a mismatch
+        return _hasher.verify(argon2_hash, _typed(password))
+    except (VerificationError, InvalidHashError):  # a mismatch
         return False
 
 
@@ -72,7 +89,10 @@ def needs_rehash(stored_hash: str) -> bool:
 
     The caller can then transparently upgrade it on the next successful login.
     """
+    argon2_hash = _argon2_of(stored_hash)
+    if argon2_hash is None:
+        return False
     try:
-        return _hasher.check_needs_rehash(stored_hash)
-    except InvalidHashError:  # malformed/foreign hashes need an upgrade
+        return _hasher.check_needs_rehash(argon2_hash)
+    except InvalidHashError:
         return False

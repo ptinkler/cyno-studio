@@ -42,6 +42,26 @@ class TestHashing:
         monkeypatch.setenv("PASSWORD_PEPPER", "pepper-two")
         assert not passwords.verify_password(h, "correct horse battery")
 
+    def test_the_stored_value_is_ciphertext_not_an_argon2_string(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A copy of the database holds nothing that can be attacked without the pepper."""
+        monkeypatch.setenv("PASSWORD_PEPPER", "pepper-one")
+        h = passwords.hash_password("correct horse battery")
+        assert "argon2" not in h
+        assert not passwords.verify_password(h[:-4] + "AAAA", "correct horse battery")  # tampered
+
+    def test_a_password_is_the_same_however_it_was_typed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Composed and decomposed forms of one character (é) are one password."""
+        monkeypatch.setenv("PASSWORD_PEPPER", "p")
+        h = passwords.hash_password("caf\u00e9 au lait 1")
+        assert passwords.verify_password(h, "cafe\u0301 au lait 1")
+
+    def test_a_bare_argon2_hash_is_a_mismatch_not_an_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Hashes from before the pepper encrypted them no longer verify (the admin sets the password again)."""
+        monkeypatch.setenv("PASSWORD_PEPPER", "p")
+        bare = passwords.PasswordHasher().hash(b"correct horse battery")
+        assert not passwords.verify_password(bare, "correct horse battery")
+        assert not passwords.needs_rehash(bare)
+
     def test_unique_salt(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that unique salt."""
         monkeypatch.setenv("PASSWORD_PEPPER", "p")
