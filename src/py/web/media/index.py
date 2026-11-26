@@ -1,6 +1,7 @@
 """The media index: every library upload, recorded chat media and orphaned file, built and cached per user."""
 
 import time
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -9,6 +10,7 @@ from typing import TYPE_CHECKING
 from web.core import config
 from web.core.metadata import ChatLibraryItem, ChatMessage, MetadataDB, current_tenant, get_db, iso, write_count
 from web.jsonutil import as_list, as_number, as_object, as_objects, as_str
+from web.media.digest import file_digest
 from web.media.durations import known_duration
 from web.media.paths import LibraryEntry, MediaItem, chat_dir, library_dir, library_kind, media_thumb_url, mtime_iso
 
@@ -100,6 +102,25 @@ def referenced_files(item: MediaItem) -> list[str]:
     return [f for f in files if isinstance(f, str) and f]
 
 
+def file_in_use(db: MetadataDB, conv_id: str, name: str) -> bool:
+    """Whether a message or detached library entry of this chat still uses the file (picture, reference, frame)."""
+    return any(name in referenced_files(i) for m in db.get_chat_messages(conv_id) for i in m.media) or any(
+        lib.conversation_id == conv_id and name in referenced_files(lib.item) for lib in db.list_chat_library()
+    )
+
+
+def remove_unused_file(db: MetadataDB, conv_id: str, path: Path) -> bool:
+    """Delete a chat's file unless something in the chat still uses it; True when it was deleted.
+
+    Call it after the record that held the file is gone. Another picture of the chat that took this one as its
+    reference keeps it: the reference would break (redo, "use settings") if the file went.
+    """
+    if file_in_use(db, conv_id, path.name):
+        return False
+    path.unlink(missing_ok=True)
+    return True
+
+
 def _used_files(msgs: list[ChatMessage], lib_items: list[ChatLibraryItem]) -> set[tuple[str, str]]:
     """Every (conversation id, file name) that a message or library entry records."""
     used: set[tuple[str, str]] = set()
@@ -158,18 +179,68 @@ def _chat_orphans(
     return items
 
 
+_ORIGIN_RANK = {"library": 0, "chat": 1, "orphan": 2}
+
+
+def _item_path(item: LibraryEntry) -> Path | None:
+    """The file a row shows."""
+    if item["origin"] == "library":
+        return library_dir() / item["name"]
+    conv_id = item.get("conversation_id")
+    return chat_dir(conv_id) / item["name"] if conv_id else None
+
+
+def _by_size(items: list[LibraryEntry]) -> list[list[tuple[LibraryEntry, Path]]]:
+    """Rows grouped by their file's size; only groups of several can hold a duplicate."""
+    sizes: dict[int, list[tuple[LibraryEntry, Path]]] = defaultdict(list)
+    for item in items:
+        path = _item_path(item)
+        try:
+            if path:
+                sizes[path.stat().st_size].append((item, path))
+        except OSError:
+            continue  # gone since it was listed: it stays as it is
+    return [g for g in sizes.values() if len(g) > 1]
+
+
+def _same_picture_groups(items: list[LibraryEntry]) -> list[list[LibraryEntry]]:
+    """Rows whose files hold the same bytes (only files of one size are read)."""
+    groups: list[list[LibraryEntry]] = []
+    for same_size in _by_size(items):
+        by_digest: dict[str, list[LibraryEntry]] = defaultdict(list)
+        for item, path in same_size:
+            if digest := file_digest(path):
+                by_digest[digest].append(item)
+        groups.extend(g for g in by_digest.values() if len(g) > 1)
+    return groups
+
+
+def without_duplicates(items: list[LibraryEntry]) -> list[LibraryEntry]:
+    """The list with each picture once, however many times it was uploaded or copied into a chat.
+
+    An upload is stored under its content hash, so using a library picture in a chat, or uploading it
+    to several chats, leaves identical files in different folders. The library's own copy stays; failing
+    that the oldest recorded one.
+    """
+    hidden: set[str] = set()
+    for group in _same_picture_groups(items):
+        keep = min(group, key=lambda i: (_ORIGIN_RANK[i["origin"]], as_str(i.get("created_at")) or ""))
+        hidden.update(i["id"] for i in group if i is not keep)
+    return [i for i in items if i["id"] not in hidden]
+
+
 def build_items(db: MetadataDB) -> list[LibraryEntry]:
     """Build the complete library, newest first.
 
     Fetches chat messages and detached library entries once for both the
-    recorded-media and orphan passes.
+    recorded-media and orphan passes. A picture kept in several places is listed once.
     """
     msgs = db.get_chat_messages_with_media()  # newest first (id desc)
     lib_items = db.list_chat_library()
     titles = db.conversation_titles()
     items = [*library_items(), *chat_records(msgs, lib_items, titles), *_chat_orphans(msgs, lib_items, titles)]
     items.sort(key=lambda i: as_str(i.get("created_at")) or "", reverse=True)
-    return items
+    return without_duplicates(items)
 
 
 # The built list, cached so paging through it doesn't rebuild it each request

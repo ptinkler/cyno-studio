@@ -34,10 +34,12 @@ from web.core.metadata import ChatLibraryItem, get_db
 from web.jsonutil import as_str
 from web.media.blank import blocked_generations
 from web.media.durations import fill_durations
-from web.media.index import all_items, invalidate_list, item_matches, library_items
+from web.media.index import all_items, invalidate_list, item_matches, library_items, remove_unused_file
 from web.media.paths import LibraryEntry, chat_dir, library_dir, library_file, library_kind, resolve
+from web.media.places import media_dirs
 from web.media.thumbs import forget_file, thumb_response
 from web.uploads.files import (
+    adopt_deduped,
     read_image_upload,
     read_video_upload,
     safe_filename,
@@ -120,7 +122,7 @@ async def api_upload_media(file: Annotated[UploadFile, File()]) -> LibraryEntry:
     """
     ct = file.content_type or ""
     content, ext = await (read_video_upload(file) if ct.startswith("video/") else read_image_upload(file))
-    name = store_deduped(library_dir(), "up_", content, ext)
+    name = store_deduped(library_dir(), "up_", content, ext, media_dirs())
     invalidate_list()
     return next(i for i in library_items() if i["name"] == name)
 
@@ -139,12 +141,14 @@ class BulkDeleted(BaseModel):
 
     deleted: list[str]
     failed: list[str]
+    kept: int = 0  # deleted items whose files stayed: another picture of the chat still uses them
 
 
 class DeletedMedia(BaseModel):
-    """The id of the item a delete removed."""
+    """The id of the item a delete removed, and whether its file stayed because another picture still uses it."""
 
     deleted: str
+    file_kept: bool = False
 
 
 class BlockedCounts(BaseModel):
@@ -165,13 +169,14 @@ def api_bulk_delete_media(data: MediaIds) -> BulkDeleted:
     """Delete several items (see api_delete_media). Ones already gone are skipped."""
     deleted: list[str] = []
     failed: list[str] = []
+    kept = 0
     for media_id in data.ids[:BULK_MAX]:
         try:
-            _delete_item(media_id)
+            kept += _delete_item(media_id).file_kept
             deleted.append(media_id)
         except HTTPException:
             failed.append(media_id)
-    return BulkDeleted(deleted=deleted, failed=failed)
+    return BulkDeleted(deleted=deleted, failed=failed, kept=kept)
 
 
 @router.post("/bulk-download")
@@ -210,12 +215,13 @@ def api_delete_media(media_id: str) -> DeletedMedia:
 def _delete_item(media_id: str) -> DeletedMedia:
     """Delete an item's file and the record that indexes it.
 
-    Existing copies used as character images, attachments, or generation
-    sources are separate files and remain intact.
+    Copies used as character images, attachments, or generation sources are separate files and remain
+    intact. A picture another card of the same chat took as its reference keeps its file (only the card goes).
     """
     origin, path, parts = resolve(media_id)
     forget_file(path)
     db = get_db()
+    kept = False
     if origin == "lib":
         path.unlink()
     else:
@@ -226,9 +232,9 @@ def _delete_item(media_id: str) -> DeletedMedia:
         for lib in db.list_chat_library():
             if lib.conversation_id == conv_id and lib.item.get("file") == file:
                 db.delete_chat_library_item(lib.media_id)
-        path.unlink()
+        kept = not remove_unused_file(db, conv_id, path)
     invalidate_list()
-    return DeletedMedia(deleted=media_id)
+    return DeletedMedia(deleted=media_id, file_kept=kept)
 
 
 @router.get("/blocked")
@@ -307,7 +313,7 @@ def api_import_media(data: ImportMedia) -> ImportedFile | characters.CharacterIn
             raise HTTPException(404, "Conversation not found")
         if origin == "chat" and parts["conversation_id"] == conv_id:
             return ImportedFile(file=path.name)  # already in this chat
-        name = store_deduped(chat_dir(conv_id), "up_", path.read_bytes(), ext)
+        name = adopt_deduped(chat_dir(conv_id), "up_", path, ext)
         invalidate_list()
         return ImportedFile(file=name)
 

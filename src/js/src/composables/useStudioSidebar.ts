@@ -1,7 +1,14 @@
 import type { Ref } from 'vue'
 import type { ConversationSummary } from './chatConversationsApi'
 import { confirmDialog, promptDialog } from './useDialog'
-import { patchConversation, deleteConversation, createSpace, updateSpace, deleteSpace } from './useChat'
+import {
+  patchConversation,
+  deleteConversation,
+  fetchConversationDeleteInfo,
+  createSpace,
+  updateSpace,
+  deleteSpace,
+} from './useChat'
 import type { Space } from './studioTypes'
 import type { ShowToast } from './useToast'
 import { messageOf } from '../utils/errors'
@@ -54,9 +61,14 @@ export function useStudioSidebar({
   }
 
   async function removeThread(thread: ConversationSummary): Promise<void> {
+    // Characters made in this chat and never saved go with it; saved ones (and their images) stay
+    const { characters } = await fetchConversationDeleteInfo(thread.id).catch(() => ({ characters: [] as string[] }))
+    const withIt = characters.length
+      ? ` Also deleted: ${characters.join(', ')} (made in this chat, not saved as ${characters.length === 1 ? 'a character' : 'characters'}).`
+      : ''
     const result = await confirmDialog({
       title: `Delete “${thread.title || 'Untitled'}”?`,
-      message: "The conversation is removed. This can't be undone.",
+      message: `The conversation is removed. This can't be undone.${withIt}`,
       confirmLabel: 'Delete',
       danger: true,
       checkbox: { label: 'Also delete all its media (images, videos, uploads)', checked: true },

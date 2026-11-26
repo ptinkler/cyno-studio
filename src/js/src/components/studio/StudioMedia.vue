@@ -85,9 +85,14 @@ async function bulkDelete(): Promise<void> {
   if (!ok) return
   busy.value = true
   try {
-    await deleteMediaMany([...picked.value])
+    const { kept } = await deleteMediaMany([...picked.value])
     clearPicked()
     await load()
+    if (kept) {
+      showToast(
+        `${String(kept)} file${kept === 1 ? ' was' : 's were'} kept: other pictures in the chat use ${kept === 1 ? 'it' : 'them'} as references`,
+      )
+    }
   } catch (e) {
     showToast(messageOf(e), 'error')
   } finally {

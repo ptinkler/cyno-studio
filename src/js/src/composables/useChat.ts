@@ -38,6 +38,7 @@ export {
   forkConversation,
   deleteChatExchange,
   fetchDeleteInfo,
+  fetchConversationDeleteInfo,
 } from './chatConversationsApi'
 
 // Media-card actions: favourite, regenerate, versions

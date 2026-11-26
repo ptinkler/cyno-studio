@@ -2,6 +2,7 @@
 
 import itertools
 import json
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import TypedDict, cast
@@ -12,6 +13,7 @@ from httpx2 import Response
 
 import web.characters as characters_mod
 import web.chat as chat_pkg
+import web.core.config as config
 from tests.chat_fixtures import SETTINGS, ConversationOut, png_bytes, sse_events, text_chunks, tool_chunks
 from tests.jsonpath import dig, flag, integer, must, obj, seq, text
 from tests.stubs import stub
@@ -724,3 +726,44 @@ class TestReferenceCaps:
         assert params["refs_dropped"] == [ref(1)]
         settings = dig(client.get(f"/api/chat/conversations/{conv['id']}"), "conversation", "settings", "ref_choices")
         assert settings == choices  # remembered with the chat
+
+
+class TestNoDuplicateImages:
+    """A character keeps one copy of a picture, and a picture taken from a chat is linked, not copied."""
+
+    def test_the_same_picture_twice_is_added_once(self, client: TestClient, chat: None) -> None:
+        """Uploading a reference image the character already has changes nothing."""
+        linh = _make(client)
+        files = {"file": ("a.png", png_bytes(color="rgb(1,1,1)"), "image/png")}
+        first = client.post(f"/api/characters/{linh['id']}/images", files=files)
+        assert len(seq(first, "images")) == 2
+        files = {"file": ("b.png", png_bytes(color="rgb(1,1,1)"), "image/png")}
+        same = client.post(f"/api/characters/{linh['id']}/images", files=files)
+        assert len(seq(same, "images")) == 2  # the second upload was the same picture
+
+    def test_deleting_a_chat_keeps_the_image_a_saved_character_took_from_it(
+        self, client: TestClient, conv: ConversationOut, chat: None
+    ) -> None:
+        """The character has its own name for the picture, so the chat's files going leaves it."""
+        linh = _make(client, images=0)
+        (chat_pkg.conversation_dir(conv["id"]) / "g.png").write_bytes(png_bytes(color="rgb(9,9,9)"))
+        taken = client.post(
+            f"/api/characters/{linh['id']}/images/from-chat", json={"conversation_id": conv["id"], "file": "g.png"}
+        )
+        kept = characters_mod.char_dir(linh["id"]) / text(seq(taken, "images")[0])
+        assert client.delete(f"/api/chat/conversations/{conv['id']}?delete_media=true").status_code == 200
+        gone = config.ROOT_DIR / "chat" / f".deleting-{conv['id']}"
+        deadline = time.monotonic() + 5
+        while gone.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert not (config.ROOT_DIR / "chat" / conv["id"]).exists()
+        assert kept.read_bytes() == png_bytes(color="rgb(9,9,9)")
+
+    def test_the_delete_dialog_names_the_characters_that_go_with_the_chat(
+        self, client: TestClient, conv: ConversationOut, db: MetadataDB, chat: None
+    ) -> None:
+        """Characters made in the chat and not saved are listed; a saved one is not."""
+        db.create_character("Throwaway", conversation_id=conv["id"])
+        db.create_character("Saved")
+        info = client.get(f"/api/chat/conversations/{conv['id']}/delete-info")
+        assert dig(info, "characters") == ["Throwaway"]

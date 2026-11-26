@@ -352,6 +352,12 @@ class LibraryList(BaseModel):
     items: list[LibraryCard]
 
 
+class ConversationDeleteInfo(BaseModel):
+    """What deleting a chat also removes."""
+
+    characters: list[str]  # made in this chat and never saved: they go with it
+
+
 class DeletedLibraryItem(BaseModel):
     """The id of the library item a delete removed."""
 

@@ -7,7 +7,9 @@ import base64
 import hashlib
 import io
 import mimetypes
-from collections.abc import Callable
+import os
+import shutil
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -151,14 +153,41 @@ def file_to_data_url(path: Path) -> str:
     return f"data:{mime};base64,{base64.b64encode(raw).decode()}"
 
 
-def store_deduped(directory: Path, prefix: str, content: bytes, ext: str) -> str:
+def link_or_copy(src: Path, dst: Path) -> None:
+    """Make `dst` another name for `src`'s bytes: a hard link (no second copy on disk), else a copy."""
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.link(src, dst)
+    except OSError:  # another filesystem, or one without links
+        shutil.copy2(src, dst)
+
+
+def _stored_name(prefix: str, content: bytes, ext: str) -> str:
+    return f"{prefix}{hashlib.sha256(content).hexdigest()[:16]}{ext}"
+
+
+def store_deduped(directory: Path, prefix: str, content: bytes, ext: str, elsewhere: Iterable[Path] = ()) -> str:
     """Save content under a hash-derived name and return that name.
 
-    Identical content reuses the same file instead of storing another copy.
+    Identical content reuses the same file instead of storing another copy: in `directory`, and when
+    another of the `elsewhere` folders already has it, a link to that file.
     """
-    name = f"{prefix}{hashlib.sha256(content).hexdigest()[:16]}{ext}"
+    name = _stored_name(prefix, content, ext)
     path = directory / name
     if not path.is_file():
-        directory.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(content)
+        found = next((d / name for d in elsewhere if (d / name).is_file()), None)
+        if found:
+            link_or_copy(found, path)
+        else:
+            directory.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+    return name
+
+
+def adopt_deduped(directory: Path, prefix: str, source: Path, ext: str) -> str:
+    """Put an existing file into `directory` under its hash-derived name, linking to it rather than copying."""
+    name = _stored_name(prefix, source.read_bytes(), ext)
+    path = directory / name
+    if not path.is_file():
+        link_or_copy(source, path)
     return name

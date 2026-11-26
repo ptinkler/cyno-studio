@@ -48,7 +48,7 @@ def conv(db: MetadataDB, tmp_path: Path) -> ChatConversation:
     c = db.create_conversation(title="Fox chat")
     d = config.ROOT_DIR / "chat" / c.id
     d.mkdir(parents=True)
-    (d / "up_1.png").write_bytes(_png())
+    (d / "up_1.png").write_bytes(_png("orange"))
     (d / "img_1.png").write_bytes(_png("green"))
     db.add_chat_message(
         c.id,
@@ -179,6 +179,134 @@ class TestListing:
         copy = client.post("/api/media/import", json={"media_id": mid, "target": "chat", "conversation_id": mine.id})
         assert copy.status_code == 404  # can't copy it out either
 
+    def test_a_picture_in_the_library_and_a_chat_is_listed_once(
+        self, client: TestClient, db: MetadataDB, conv: ChatConversation
+    ) -> None:
+        """Using a library picture in a chat copies it; the list still shows it once, as the library's."""
+        lib = _upload(client, "z.png", _png("magenta"))
+        copy = client.post(
+            "/api/media/import", json={"media_id": text(lib, "id"), "target": "chat", "conversation_id": conv.id}
+        )
+        file = text(copy, "file")
+        db.add_chat_message(
+            conv.id,
+            "user",
+            "again",
+            media=[{"id": "m", "kind": "image", "source": "upload", "status": "done", "file": file}],
+        )
+        magenta = [i for i in _items(client).values() if i["name"] in (file, lib["name"])]
+        assert [i["origin"] for i in magenta] == ["library"]
+
+    def test_the_same_upload_in_two_chats_is_listed_once(self, client: TestClient, db: MetadataDB) -> None:
+        """Each chat keeps its own file; the list shows one, the oldest."""
+        for title in ("One", "Two"):
+            c = db.create_conversation(title=title)
+            d = config.ROOT_DIR / "chat" / c.id
+            d.mkdir(parents=True)
+            (d / "up_same.png").write_bytes(_png("teal"))
+            db.add_chat_message(
+                c.id,
+                "user",
+                "x",
+                media=[{"id": "u", "kind": "image", "source": "upload", "status": "done", "file": "up_same.png"}],
+            )
+        same = [i for i in _items(client).values() if i["name"] == "up_same.png"]
+        assert len(same) == 1
+
+    def test_using_a_library_picture_in_a_chat_stores_no_second_copy(
+        self, client: TestClient, conv: ChatConversation
+    ) -> None:
+        """The chat's file is a link to the library's: one set of bytes on disk."""
+        lib = _upload(client, "z.png", _png("magenta"))
+        copy = client.post(
+            "/api/media/import", json={"media_id": text(lib, "id"), "target": "chat", "conversation_id": conv.id}
+        )
+        mine = config.ROOT_DIR / "chat" / conv.id / text(copy, "file")
+        theirs = paths_mod.library_dir() / text(lib, "name")
+        assert mine.is_file()
+        assert os.path.samestat(mine.stat(), theirs.stat())
+
+    def test_uploading_what_a_chat_already_has_stores_no_second_copy(
+        self, client: TestClient, conv: ChatConversation
+    ) -> None:
+        """A chat upload, then the same file uploaded to the library (and to a second chat): links, not copies."""
+        first = client.post(
+            f"/api/chat/conversations/{conv.id}/attachments", files={"file": ("a.png", _png("pink"), "image/png")}
+        )
+        in_chat = config.ROOT_DIR / "chat" / conv.id / text(first, "file")
+        lib = _upload(client, "b.png", _png("pink"))
+        assert os.path.samestat(in_chat.stat(), (paths_mod.library_dir() / text(lib, "name")).stat())
+
+    def test_deleting_a_picture_another_card_used_as_a_reference_keeps_its_file(
+        self, client: TestClient, db: MetadataDB, conv: ChatConversation
+    ) -> None:
+        """Only the card goes: the file stays for the card that took it as a reference (redo would break otherwise)."""
+        db.add_chat_message(
+            conv.id,
+            "assistant",
+            "edited",
+            media=[
+                {
+                    "id": "e",
+                    "kind": "image",
+                    "source": "generated",
+                    "status": "done",
+                    "file": "img_edit.png",
+                    "prompt": "p",
+                    "params": {"refs": ["img_1.png"]},
+                }
+            ],
+        )
+        folder = config.ROOT_DIR / "chat" / conv.id
+        (folder / "img_edit.png").write_bytes(_png("gray"))
+        used = obj(client.delete(f"/api/media/chat:{conv.id}:img_1.png"))
+        assert used == {"deleted": f"chat:{conv.id}:img_1.png", "file_kept": True}
+        assert (folder / "img_1.png").is_file()
+        free = obj(client.delete(f"/api/media/chat:{conv.id}:up_1.png"))
+        assert free["file_kept"] is False
+        assert not (folder / "up_1.png").exists()
+
+    def test_bulk_delete_says_how_many_files_stayed(
+        self, client: TestClient, db: MetadataDB, conv: ChatConversation
+    ) -> None:
+        """The Media page can tell the user that some files were kept."""
+        db.add_chat_message(
+            conv.id,
+            "assistant",
+            "edited",
+            media=[
+                {
+                    "id": "e",
+                    "kind": "image",
+                    "source": "generated",
+                    "status": "done",
+                    "file": "img_edit.png",
+                    "prompt": "p",
+                    "params": {"refs": ["img_1.png"]},
+                }
+            ],
+        )
+        (config.ROOT_DIR / "chat" / conv.id / "img_edit.png").write_bytes(_png("gray"))
+        ids = [f"chat:{conv.id}:img_1.png", f"chat:{conv.id}:up_1.png"]
+        done = obj(client.post("/api/media/bulk-delete", json={"ids": ids}))
+        assert done == {"deleted": ids, "failed": [], "kept": 1}
+
+    def test_deleting_a_library_picture_leaves_the_chats_copy(self, client: TestClient, conv: ChatConversation) -> None:
+        """The library file and the chat's copy are separate names: deleting one never touches the other."""
+        lib = _upload(client, "z.png", _png("magenta"))
+        copy = client.post(
+            "/api/media/import", json={"media_id": text(lib, "id"), "target": "chat", "conversation_id": conv.id}
+        )
+        mine = config.ROOT_DIR / "chat" / conv.id / text(copy, "file")
+        assert client.delete(f"/api/media/{text(lib, 'id')}").status_code == 200
+        assert mine.read_bytes() == _png("magenta")
+
+    def test_pictures_that_only_look_alike_are_kept(self, client: TestClient) -> None:
+        """Same size, different bytes: both stay."""
+        _upload(client, "a.png", _png((1, 2, 3)))
+        _upload(client, "b.png", _png((1, 2, 4)))
+        assert len(_items(client)) == 2
+
     def test_paginates_with_total(self, client: TestClient) -> None:
         """Test that paginates with total."""
         for n in range(5):
@@ -263,7 +391,7 @@ class TestOrphans:
         """
         root = config.ROOT_DIR / "chat"
         (root / conv.id / "up_lost.png").write_bytes(_png())
-        (root / conv.id / "up_ref.png").write_bytes(_png())
+        (root / conv.id / "up_ref.png").write_bytes(_png("yellow"))
         db.add_chat_message(
             conv.id,
             "assistant",
@@ -279,10 +407,10 @@ class TestOrphans:
             ],
         )
         (root / "gone").mkdir()
-        (root / "gone" / "img_old.png").write_bytes(_png())
+        (root / "gone" / "img_old.png").write_bytes(_png("purple"))
         for p in root.rglob("*.png"):
             os.utime(p, (0, 0))
-        (root / conv.id / "up_new.png").write_bytes(_png())  # too new — may still be in the composer
+        (root / conv.id / "up_new.png").write_bytes(_png("cyan"))  # too new — may still be in the composer
         return root
 
     def test_lists_unrecorded_chat_files(self, client: TestClient, conv: ChatConversation, orphans: Path) -> None:
@@ -610,7 +738,7 @@ def _seed_clips(db: MetadataDB, conv: ChatConversation) -> None:
     """Add three video clips to ``conv`` and start the media module with a clean duration state."""
     d = config.ROOT_DIR / "chat" / conv.id
     for n in range(3):
-        (d / f"clip_{n}.mp4").write_bytes(b"not really a video")
+        (d / f"clip_{n}.mp4").write_bytes(f"not really a video {n}".encode())
     db.add_chat_message(
         conv.id,
         "assistant",

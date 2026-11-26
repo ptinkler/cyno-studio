@@ -533,6 +533,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/chat/conversations/{conv_id}/delete-info": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Api Delete Conversation Info
+         * @description What deleting this chat takes with it besides its messages, for the confirmation.
+         *
+         *     Characters made in the chat and never saved go with it; saved characters (and their images) stay.
+         */
+        get: operations["api_delete_conversation_info_api_chat_conversations__conv_id__delete_info_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chat/conversations/{conv_id}/edit": {
         parameters: {
             query?: never;
@@ -2099,6 +2121,11 @@ export interface components {
             deleted: string[];
             /** Failed */
             failed: string[];
+            /**
+             * Kept
+             * @default 0
+             */
+            kept?: number;
         };
         /**
          * Cancelled
@@ -2358,6 +2385,14 @@ export interface components {
             video_model?: string | null;
         };
         /**
+         * ConversationDeleteInfo
+         * @description What deleting a chat also removes.
+         */
+        ConversationDeleteInfo: {
+            /** Characters */
+            characters: string[];
+        };
+        /**
          * ConversationList
          * @description Pinned chats, then the most recent.
          */
@@ -2600,11 +2635,16 @@ export interface components {
         };
         /**
          * DeletedMedia
-         * @description The id of the item a delete removed.
+         * @description The id of the item a delete removed, and whether its file stayed because another picture still uses it.
          */
         DeletedMedia: {
             /** Deleted */
             deleted: string;
+            /**
+             * File Kept
+             * @default false
+             */
+            file_kept?: boolean;
         };
         /**
          * DeltaEvent
@@ -5385,6 +5425,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_delete_conversation_info_api_chat_conversations__conv_id__delete_info_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conv_id: string;
+            };
+            cookie?: {
+                user_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationDeleteInfo"];
                 };
             };
             /** @description Validation Error */
