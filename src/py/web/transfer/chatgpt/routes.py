@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from web.auth.users import require_user
 from web.core import config
 from web.core.metadata import current_tenant
+from web.safepath import inside
 from web.transfer import export as chat_export
 from web.transfer.chatgpt.common import NOT_AN_EXPORT
 from web.transfer.chatgpt.importer import run_import
@@ -98,7 +99,7 @@ def api_import_status() -> ImportStatus:
 @router.post("/chatgpt")
 def api_start_import(data: StartImport) -> ImportJob:
     """Start importing an export in the background; progress is in GET."""
-    path = _import_dir() / safe_filename(data.file)
+    path = inside(_import_dir(), safe_filename(data.file))
     if not path.is_file() or not zipfile.is_zipfile(path):
         raise HTTPException(404, "That export isn't in the imports folder")
     key = _job_key()
@@ -142,7 +143,7 @@ def _upload_paths(upload_id: str) -> tuple[Path, Path]:
     if not re.fullmatch(r"[0-9a-f]{32}", upload_id):
         raise HTTPException(404, "Upload not found")
     folder = _import_dir()
-    return folder / f".upload-{upload_id}.part", folder / f".upload-{upload_id}.json"
+    return inside(folder, f".upload-{upload_id}.part"), inside(folder, f".upload-{upload_id}.json")
 
 
 def _clear_stale_uploads(folder: Path) -> None:

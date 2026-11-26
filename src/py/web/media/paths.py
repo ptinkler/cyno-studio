@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from web.core import config
 from web.core.metadata import current_tenant, get_db
 from web.media.kinds import VIDEO_SUFFIXES
+from web.safepath import inside
 from web.types import JsonValue
 from web.uploads.files import (
     image_media_type,
@@ -56,8 +57,18 @@ def thumb_dir() -> Path:
 
 
 def chat_dir(conv_id: str) -> Path:
-    """A chat's media folder."""
-    return config.ROOT_DIR / "chat" / conv_id
+    """A chat's media folder (404 for an id that is not a plain folder name)."""
+    return inside(config.ROOT_DIR / "chat", conv_id)
+
+
+def chat_file(conv_id: str, name: str) -> Path:
+    """A file in a chat's folder (400 for a chat id or name with directories in it)."""
+    return inside(chat_dir(safe_filename(conv_id)), safe_filename(name))
+
+
+def library_file(name: str) -> Path:
+    """A file in the current user's library (400 for a name with directories in it)."""
+    return inside(library_dir(), safe_filename(name))
 
 
 def library_kind(path: Path | str) -> str | None:
@@ -82,7 +93,7 @@ def resolve(media_id: str) -> tuple[str, Path, dict[str, str]]:
     """
     origin, _, rest = media_id.partition(":")
     if origin == "lib":
-        path, parts = library_dir() / safe_filename(rest), {}
+        path, parts = library_file(rest), {}
     elif origin == "chat":
         conv_id, _, file = rest.partition(":")
         # Multi-tenant guard: chat files live under a global <data>/chat/<id>/,
@@ -95,7 +106,7 @@ def resolve(media_id: str) -> tuple[str, Path, dict[str, str]]:
         if not db.get_conversation(conv_id) and db.conversation_exists_any_tenant(conv_id):
             raise HTTPException(404, "Media not found")
         path, parts = (
-            chat_dir(safe_filename(conv_id)) / safe_filename(file),
+            chat_file(conv_id, file),
             {"conversation_id": conv_id, "file": file},
         )
     else:

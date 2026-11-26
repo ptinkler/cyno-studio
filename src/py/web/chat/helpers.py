@@ -17,6 +17,7 @@ from web.chat.schemas import ShownMessage
 from web.core import config
 from web.core.metadata import get_db
 from web.providers import openrouter, venice
+from web.safepath import inside
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -37,7 +38,7 @@ def conversation_dir(conv_id: str) -> Path:
 
     It is made here rather than on upload because every path that writes into it goes through this.
     """
-    d = chat_root() / conv_id
+    d = inside(chat_root(), conv_id)
     d.mkdir(parents=True, exist_ok=True)
     return d
 

@@ -12,7 +12,6 @@ from web.chat.constants import (
 from web.chat.deps import router
 from web.chat.generation import ref_key
 from web.chat.helpers import (
-    chat_root,
     conversation_dir,
     require_conv,
     require_own_conversation,
@@ -29,6 +28,7 @@ from web.core import request_log
 from web.core.metadata import get_db, iso
 from web.media.index import referenced_files
 from web.media.kinds import VIDEO_SUFFIXES
+from web.media.paths import chat_file
 from web.media.thumbs import thumb_response
 from web.uploads.files import read_audio_upload, read_image_upload, read_video_upload, safe_filename, store_deduped
 
@@ -112,7 +112,7 @@ def api_discard_attachment(conv_id: str, filename: str) -> Discarded:
 @router.get("/media/{conv_id}/{filename}")
 def api_chat_media(conv_id: str, filename: str) -> FileResponse:
     """Serve a conversation's original media file."""
-    path = chat_root() / safe_filename(conv_id) / safe_filename(filename)  # rejects traversal (400)
+    path = chat_file(conv_id, filename)  # rejects traversal (400)
     require_own_conversation(conv_id)
     if not path.is_file():
         raise HTTPException(404, "Not found")
@@ -125,7 +125,7 @@ async def api_chat_media_preview(conv_id: str, filename: str) -> Response:
 
     The full file is for the lightbox and downloads.
     """
-    path = chat_root() / safe_filename(conv_id) / safe_filename(filename)  # rejects traversal (400)
+    path = chat_file(conv_id, filename)  # rejects traversal (400)
     require_own_conversation(conv_id)
     if not path.is_file():
         raise HTTPException(404, "Not found")
@@ -204,5 +204,5 @@ def api_delete_library_item(media_id: str) -> DeletedLibraryItem:
     db.delete_chat_library_item(media_id)
     file = lib.item.get("file")
     if isinstance(file, str):
-        (chat_root() / lib.conversation_id / safe_filename(file)).unlink(missing_ok=True)
+        chat_file(lib.conversation_id, file).unlink(missing_ok=True)
     return DeletedLibraryItem(deleted=media_id)
