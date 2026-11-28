@@ -86,7 +86,14 @@ onBeforeUnmount(() => {
     <div v-if="open" class="gpop" role="dialog" aria-label="Filters">
       <FilterRow label="Type">
         <span class="seg" role="group" aria-label="Type">
-          <button v-for="k in KINDS" :key="k.id" :class="{ on: kind === k.id }" @click.prevent="kind = k.id">
+          <button
+            v-for="k in KINDS"
+            :key="k.id"
+            :class="{ on: kind === k.id }"
+            :aria-label="k.label"
+            :aria-pressed="kind === k.id"
+            @click.prevent="kind = k.id"
+          >
             {{ k.label }}
           </button>
         </span>

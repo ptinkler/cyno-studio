@@ -20,13 +20,16 @@ test('a generated image is in the Media library, and its filters narrow it down'
   await expect(page.locator('.mhead .gcount')).toHaveText('1 item')
 
   const bar = page.locator('.mbar')
-  await bar.getByLabel('Type').selectOption('video')
+  await bar.getByRole('button', { name: 'Filter', exact: true }).click()
+  const pop = bar.getByRole('dialog', { name: 'Filters' })
+  await pop.getByRole('button', { name: 'Videos' }).click()
   await expect(tiles).toHaveCount(0)
-  await bar.getByLabel('Type').selectOption('all')
-  await bar.getByLabel('Source').selectOption('upload')
+  await pop.getByRole('button', { name: 'All', exact: true }).click()
+  await pop.getByLabel('Source').selectOption('upload')
   await expect(tiles).toHaveCount(0)
-  await bar.getByLabel('Source').selectOption('generated')
+  await pop.getByLabel('Source').selectOption('generated')
   await expect(tiles).toHaveCount(1)
+  await bar.getByRole('button', { name: 'Filter', exact: true }).click()
 
   // The search runs on Enter
   await bar.getByPlaceholder('Search prompts…').fill('zeppelin')
