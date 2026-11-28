@@ -31,8 +31,7 @@ describe('StudioMedia selecting', () => {
   it('offers Select all from the start, and shows the bar with the count', async () => {
     const w = await mountMedia()
     expect(w.find('.selbar').exists()).toBe(false)
-    const selectAll = w.findAll('button').find(b => b.text() === 'Select all')
-    await selectAll?.trigger('click')
+    await w.find('button[aria-label="Select all"]').trigger('click')
     expect(w.find('.selbar').text()).toContain('4 selected')
   })
 
@@ -68,11 +67,20 @@ describe('StudioMedia selecting', () => {
     expect(toast).toHaveBeenCalledWith(expect.stringContaining('1 file was kept'))
   })
 
-  it('filters from the dropdowns, asking the server again', async () => {
+  it('filters from the Filter popover, asking the server again, and clears them together', async () => {
     const w = await mountMedia()
-    await w.findAll('select')[0]?.setValue('video')
-    await w.findAll('select')[2]?.setValue('orphan')
-    const last = vi.mocked(media.fetchMediaPage).mock.calls.at(-1)?.[0]
-    expect(last).toMatchObject({ kind: 'video', origin: 'orphan' })
+    await w.find('button[aria-label="Filter"]').trigger('click')
+    await w
+      .findAll('.seg button')
+      .find(b => b.text() === 'Videos')
+      ?.trigger('click')
+    await w.findAll('select')[1]?.setValue('orphan')
+    await flushPromises()
+    expect(vi.mocked(media.fetchMediaPage).mock.calls.at(-1)?.[0]).toMatchObject({ kind: 'video', origin: 'orphan' })
+    expect(w.find('.gbadge').text()).toBe('2')
+    await w.find('.gclear').trigger('click')
+    await flushPromises()
+    expect(vi.mocked(media.fetchMediaPage).mock.calls.at(-1)?.[0]).toMatchObject({ kind: 'all', origin: 'all' })
+    expect(w.find('.gbadge').exists()).toBe(false)
   })
 })

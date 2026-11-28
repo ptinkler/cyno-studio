@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { ref, inject, onMounted } from 'vue'
+import { ref, computed, inject, onMounted, watch } from 'vue'
 import { showToastKey, noToast } from '../../injection'
+import { vTip } from '../../directives/tip'
 import { confirmDialog } from '../../composables/useDialog'
 import MediaGrid from '../media/MediaGrid.vue'
 import SelectionBar from './SelectionBar.vue'
+import GenerationFilters from './GenerationFilters.vue'
+import FilterRow from './FilterRow.vue'
 import type { LibraryEntry, MediaFilters } from '../../composables/mediaApi'
 import { fetchMediaPage, deleteMediaMany, downloadMediaMany } from '../../composables/useMedia'
 import { messageOf } from '../../utils/errors'
@@ -16,11 +19,6 @@ interface Choice {
   id: string
   label: string
 }
-const KINDS: readonly Choice[] = [
-  { id: 'all', label: 'All' },
-  { id: 'image', label: 'Images' },
-  { id: 'video', label: 'Videos' },
-]
 const SOURCES: readonly Choice[] = [
   { id: 'all', label: 'Any' },
   { id: 'generated', label: 'Generated' },
@@ -39,6 +37,7 @@ const total = ref(0)
 const kind = ref('all')
 const source = ref('all')
 const origin = ref('all')
+const extraActive = computed(() => (source.value !== 'all' ? 1 : 0) + (origin.value !== 'all' ? 1 : 0))
 const q = ref('')
 const loading = ref(false)
 const preview = ref<LibraryEntry | null>(null)
@@ -118,6 +117,12 @@ async function loadMore(): Promise<void> {
   const { items: page } = await fetchMediaPage(params(items.value.length))
   items.value = [...items.value, ...page]
 }
+function clearExtra(): void {
+  source.value = 'all'
+  origin.value = 'all'
+}
+// Any filter change asks the server again (a Clear changes several at once: one reload)
+watch([kind, source, origin], () => void load())
 onMounted(load)
 </script>
 
@@ -132,29 +137,25 @@ onMounted(load)
       </button>
     </div>
     <div class="mbar">
-      <label class="fsel">
-        <span>Type</span>
-        <select v-model="kind" @change="load">
-          <option v-for="k in KINDS" :key="k.id" :value="k.id">{{ k.label }}</option>
-        </select>
-      </label>
-      <label class="fsel">
-        <span>Source</span>
-        <select v-model="source" @change="load">
-          <option v-for="o in SOURCES" :key="o.id" :value="o.id">{{ o.label }}</option>
-        </select>
-      </label>
-      <label class="fsel">
-        <span>From</span>
-        <select v-model="origin" @change="load">
-          <option v-for="o in ORIGINS" :key="o.id" :value="o.id">{{ o.label }}</option>
-        </select>
-      </label>
-      <button v-if="items.length" class="btn btn-sm" @click="selectAll">Select all</button>
       <div class="sbox msearch">
         <svg class="ic"><use href="#s-search" /></svg>
         <input v-model="q" type="search" placeholder="Search prompts…" @keyup.enter="load" />
       </div>
+      <GenerationFilters v-model:kind="kind" :fav-filter="false" :extra-active="extraActive" @clear="clearExtra">
+        <FilterRow label="Source">
+          <select v-model="source">
+            <option v-for="o in SOURCES" :key="o.id" :value="o.id">{{ o.label }}</option>
+          </select>
+        </FilterRow>
+        <FilterRow label="From">
+          <select v-model="origin">
+            <option v-for="o in ORIGINS" :key="o.id" :value="o.id">{{ o.label }}</option>
+          </select>
+        </FilterRow>
+      </GenerationFilters>
+      <button v-if="items.length" v-tip="'Select all'" class="iconbtn boxed" aria-label="Select all" @click="selectAll">
+        <svg class="ic"><use href="#s-selectall" /></svg>
+      </button>
     </div>
 
     <div class="mbody">
@@ -219,47 +220,13 @@ h1 {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.5333rem 0.9333rem;
+  gap: 0.5333rem;
   padding: 0.6667rem 1.2rem;
-}
-.fsel {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.8rem;
-  color: var(--smuted);
-}
-.fsel select {
-  appearance: none;
-  padding: 0.3333rem 1.6rem 0.3333rem 0.6667rem;
-  border: 1px solid var(--sborder);
-  border-radius: var(--r);
-  background-color: var(--sbg2);
-  background-image:
-    linear-gradient(45deg, transparent 50%, var(--smuted) 50%),
-    linear-gradient(135deg, var(--smuted) 50%, transparent 50%);
-  background-size:
-    0.3333rem 0.3333rem,
-    0.3333rem 0.3333rem;
-  background-position:
-    calc(100% - 0.8rem) 55%,
-    calc(100% - 0.5rem) 55%;
-  background-repeat: no-repeat;
-  color: var(--sfg);
-  font: inherit;
-  font-size: 0.8667rem;
-  cursor: pointer;
-}
-.fsel select:hover,
-.fsel select:focus-visible {
-  border-color: var(--saccent);
-  outline: none;
 }
 .msearch {
   flex: 1;
   min-width: 12rem;
   max-width: 21.3333rem;
-  margin-left: auto;
 }
 .mbody {
   flex: 1;
