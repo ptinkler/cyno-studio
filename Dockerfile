@@ -14,7 +14,9 @@ FROM mirror.gcr.io/library/python:3.15-slim
 # Links the GHCR package to this repo (so it inherits the repo's visibility and access)
 LABEL org.opencontainers.image.source="https://github.com/ptinkler/cyno-studio"
 
-# Security updates for the base image's own packages (opencv-python-headless needs no system libraries)
+# Security updates for the base image's own packages (opencv-python-headless needs no system libraries).
+# UPGRADE_STAMP changes on every CI run so the build cache never reuses an old upgrade layer.
+ARG UPGRADE_STAMP=
 RUN apt-get update && \
     apt-get upgrade -y && \
     rm -rf /var/lib/apt/lists/*

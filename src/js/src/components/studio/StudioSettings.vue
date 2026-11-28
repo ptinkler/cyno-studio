@@ -11,7 +11,7 @@ import StudioSigninRequests from './StudioSigninRequests.vue'
 import StudioVpnCard from './StudioVpnCard.vue'
 
 withDefaults(defineProps<{ theme?: ThemeChoice | undefined }>(), { theme: 'system' })
-defineEmits<{ 'set-theme': [theme: ThemeChoice]; close: []; 'sign-out': [] }>()
+defineEmits<{ 'set-theme': [theme: ThemeChoice]; close: []; 'sign-out': []; 'keys-saved': [] }>()
 
 const { textSize, setTextSize } = useTextSize()
 
@@ -70,7 +70,7 @@ const THEMES: readonly { id: ThemeChoice; label: string }[] = [
 
       <StudioAccount @user="onUser" @sign-out="$emit('sign-out')" />
 
-      <StudioKeys />
+      <StudioKeys @saved="$emit('keys-saved')" />
 
       <StudioUploads />
 

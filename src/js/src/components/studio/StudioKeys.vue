@@ -3,6 +3,8 @@ import { vTip } from '../../directives/tip'
 import { ref, reactive, onMounted } from 'vue'
 import { fetchUserKeys, saveUserKeys, KEY_PROVIDERS } from '../../composables/useAccount'
 
+const emit = defineEmits<{ saved: [] }>()
+
 type KeyStatus = Awaited<ReturnType<typeof fetchUserKeys>>['keys']
 
 const keys = ref<KeyStatus>({}) // provider -> { set, hint }
@@ -34,6 +36,7 @@ async function save(): Promise<void> {
     keys.value = (await saveUserKeys(payload)).keys
     for (const k of Object.keys(drafts)) Reflect.deleteProperty(drafts, k)
     message.value = 'Saved'
+    emit('saved')
   } catch (e) {
     message.value = e instanceof Error ? e.message : String(e)
   } finally {
