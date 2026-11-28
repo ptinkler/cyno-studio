@@ -240,6 +240,12 @@ const {
   makeCharacterFromModal,
 } = useGalleryModal({ studio, genQueue, openThreadView })
 
+// A new key unlocks that provider's models and balance
+function onKeysSaved(): void {
+  void loadModels()
+  void loadStatus()
+}
+
 onMounted(() => {
   void loadLists()
   void loadModels()
@@ -285,6 +291,7 @@ onMounted(() => {
         @close="goThread"
         @navigate="onSettingsNavigate"
         @sign-out="onSignOut"
+        @keys-saved="onKeysSaved"
       />
 
       <StudioTools
