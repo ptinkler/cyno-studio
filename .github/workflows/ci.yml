@@ -224,6 +224,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
+          build-args: UPGRADE_STAMP=${{ github.run_id }}
           load: true
           tags: ${{ env.IMAGE_APP }}:scan
           cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max,scope=app' || '' }}
@@ -242,6 +243,7 @@ jobs:
         with:
           context: .
           file: nginx/Dockerfile
+          build-args: UPGRADE_STAMP=${{ github.run_id }}
           load: true
           tags: ${{ env.IMAGE_NGX }}:scan
           cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max,scope=nginx' || '' }}
@@ -310,6 +312,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
+          build-args: UPGRADE_STAMP=${{ github.run_id }}
           push: true
           cache-from: type=gha,scope=app
           tags: |
@@ -321,6 +324,7 @@ jobs:
         with:
           context: .
           file: nginx/Dockerfile
+          build-args: UPGRADE_STAMP=${{ github.run_id }}
           push: true
           cache-from: type=gha,scope=nginx
           tags: |
